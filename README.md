@@ -8,6 +8,7 @@ CountlyCpp is a portable SDK for Countly (http://count.ly) written in C++.
 
 
 **Dependencies:**
+
 CountlyCpp has been designed to work with very few deps in order to be portable on most platforms.
 This SDK will require :
 * pthread (which is available on most platforms)
@@ -21,7 +22,8 @@ That's all (sqlite, HTTP, etc. is embedded) !
 
 Typical use is :
 
-`#include "Countly.h"
+```C++
+#include "Countly.h"
 
 using namespace CountlyCpp;
 
@@ -39,4 +41,5 @@ int main(int argc, char * argv[])
   
   delete(ct);
   return 0;
-}`
+}
+```
