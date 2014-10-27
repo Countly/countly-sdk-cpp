@@ -326,7 +326,7 @@ namespace CountlyCpp
       }
     }
     pthread_mutex_unlock(&_lock);
-    cout << "Cleared evt " << evtId << ":" << req.str() << endl;
+    cout << "Cleared evt " << evtId << " : " << req.str() << endl;
 
   }
   

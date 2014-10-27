@@ -101,6 +101,7 @@ namespace CountlyCpp
       {
         URI = "/i?app_key=" + _appKey +"&device_id="+ _deviceId +"&session_duration=30";
         HTTPGET(URI);
+        cout << "KeepAlive sent" << endl;
       }
       return false;
     }
