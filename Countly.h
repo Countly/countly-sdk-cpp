@@ -42,6 +42,7 @@ namespace CountlyCpp
   {
     public:
       static Countly * GetInstance();
+      static void DeleteInstance();
       void SetPath(std::string path);  //Setup work directory (where Countly sqlite file will be written)
       void SetMetrics(std::string os, std::string os_version, std::string device, std::string resolution, std::string carrier, std::string app_version);
       void Start(std::string appKey, std::string host, int port);

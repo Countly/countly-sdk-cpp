@@ -77,7 +77,14 @@ namespace CountlyCpp
     if (!_instance) _instance = new Countly();
     return _instance;
   }
-
+  
+  void Countly::DeleteInstance()
+  {
+    if (!_instance) return;
+    delete(_instance);
+    _instance = NULL;
+  }
+  
   void Countly::SetMetrics(std::string os, std::string os_version, std::string device, std::string resolution, std::string carrier, std::string app_version)
   {
 
@@ -90,8 +97,8 @@ namespace CountlyCpp
   {
     if (!_threadRunning)
       return;
-    pthread_join(_thread, NULL);
     _threadRunning = false;
+    pthread_join(_thread, NULL);
   }
   
   void Countly::SetPath(std::string path)
