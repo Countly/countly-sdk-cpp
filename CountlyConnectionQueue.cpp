@@ -77,9 +77,80 @@ namespace CountlyCpp
 
   }
  
+  void CountlyConnectionQueue::SetMetrics(std::string os, std::string os_version, std::string device, std::string resolution, std::string carrier, std::string app_version)
+  {
+    _os           = os;
+    _os_version   = os_version;
+    _device       = device;
+    _resolution   = resolution;
+    _carrier      = carrier;
+    _app_version  = app_version;
+  }
+  
   void CountlyConnectionQueue::BeginSession()
   {
     string URI = "/i?app_key=" + _appKey +"&device_id="+ _deviceId +"&sdk_version="+_version+"&begin_session=1";
+    bool metricsOk = false;
+    std::string metrics = "metrics={\n";
+    
+    /*
+     metrics={ "_os": "Android", "_os_version": "4.1", "_device": "Samsung Galaxy", "_resolution": "1200x800", "_carrier": "Vodafone", "_app_version": "1.2", "_density": "200dpi" }
+     
+     http://your_domain/i?
+     app_key=AAA &
+     device_id=BBB &
+     sdk_version=CCC &
+     begin_session=1 &
+     metrics= {
+     "_os": "DDD",
+     "_os_version": "EEE",
+     "_device": "FFF",
+     "_resolution": "GGG",
+     "_carrier": "HHH",
+     "_app_version": "III"
+     }
+
+     */
+    
+    if (_os.size())
+    {
+      metrics += "\"_os\":\"" + _os + "\"";
+      metricsOk = true;
+    }
+    if (_os_version.size())
+    {
+      if (metricsOk) metrics += ",\n";
+      metrics += "\"_os_version\":\"" + _os_version + "\"";
+      metricsOk = true;
+    }
+    if (_device.size())
+    {
+      if (metricsOk) metrics += ",\n";
+      metrics += "\"_device\":\"" + _device + "\"";
+      metricsOk = true;
+    }
+    if (_resolution.size())
+    {
+      if (metricsOk) metrics += ",\n";
+      metrics += "\"_resolution\":\"" + _resolution + "\"";
+      metricsOk = true;
+    }
+    if (_carrier.size())
+    {
+      if (metricsOk) metrics += ",\n";
+      metrics += "\"_carrier\":\"" + _carrier + "\"";
+      metricsOk = true;
+    }
+    if (_app_version.size())
+    {
+      if (metricsOk) metrics += ",\n";
+      metrics += "\"_app_version\":\"" + _app_version + "\"";
+      metricsOk = true;
+    }
+    metrics += "\n}";
+    
+    if (metricsOk)
+      URI += "&" + URLEncode(metrics);
     if (HTTPGET(URI))
       _beginSessionSent = true;
   }
@@ -101,12 +172,12 @@ namespace CountlyCpp
       {
         URI = "/i?app_key=" + _appKey +"&device_id="+ _deviceId +"&session_duration=30";
         HTTPGET(URI);
+        _lastSend = Countly::GetTimestamp();
         cout << "KeepAlive sent" << endl;
       }
       return false;
     }
     
-    cout << "Update " << evtId << endl;
     _lastSend = Countly::GetTimestamp();
   
     /*
@@ -135,13 +206,15 @@ namespace CountlyCpp
      */
     json = "[" + json + "]";
     URI = "/i?app_key=" + _appKey + "&device_id=" + _deviceId + "&events=" + URLEncode(json);
-    cout << "URL : " << URI << endl;
     if (HTTPGET(URI))
     {
       queue->ClearEvent(evtId);
-      cout << "Processed event " << evtId << endl;
+      return true;
     }
-    return true;
+    else
+    {
+      return false;
+    }
   }
   
   string CountlyConnectionQueue::URLEncode(const string &value)
@@ -175,11 +248,14 @@ namespace CountlyCpp
     char buf[512];
     if (s < 0) return false;
     
+
     http << "GET " << URI << " HTTP/1.0\r\n";
     http << "Host: "<<_appHostName << ":" "" << dec << _appPort << "\r\n";
     http << "Connection: Close\r\n";
     http << "User-Agent: Countly\r\n\r\n";
     
+    cout << endl << "*********" << endl << "[SEND] " << http.str() << endl;
+
     ret = Send(s, (char *)http.str().c_str(), http.str().size());
     if (!ret)
     {
@@ -191,8 +267,9 @@ namespace CountlyCpp
     int readSize = recv(s, (char *)buf, 512, 0);
     if ((readSize >= 15) && (!memcmp(buf, "HTTP/1.1 200 OK", 15)))
       ret = true;
-
     close(s);
+    cout << endl << "[RCV] " << buf << endl << "*********" << endl;
+
     return ret;
   }
   

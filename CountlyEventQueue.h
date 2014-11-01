@@ -21,6 +21,9 @@ namespace CountlyCpp
     public:
       CountlyEventQueue();
       ~CountlyEventQueue();
+    
+      void SetPath(std::string path) {_path = path;}
+
       int Count();
       std::string PopEvent(int * evtId);
       void ClearEvent(int evtId);
@@ -35,10 +38,11 @@ namespace CountlyCpp
 
     private:
       void AddEvent(std::string json);
-      sqlite3 *     _sqlHandler;
-      pthread_mutex_t   _lock;
-
+      void LoadDb();
     
+      sqlite3 *          _sqlHandler;
+      pthread_mutex_t   _lock;
+      std::string       _path;
   };
   
 }

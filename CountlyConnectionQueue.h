@@ -22,6 +22,8 @@ namespace CountlyCpp
     
     void SetAppKey(std::string key);
     void SetAppHost(std::string host, int port);
+    void SetMetrics(std::string os, std::string os_version, std::string device, std::string resolution, std::string carrier, std::string app_version);
+
     bool UpdateSession(CountlyEventQueue * queue);
 
   private:
@@ -34,6 +36,14 @@ namespace CountlyCpp
     unsigned long long _lastSend;
     bool        _beginSessionSent;
     bool        _https;
+    
+    std::string _os;
+    std::string _os_version;
+    std::string _device;
+    std::string _resolution;
+    std::string _carrier;
+    std::string _app_version;
+
     
     void BeginSession();
     std::string URLEncode(const std::string &value);

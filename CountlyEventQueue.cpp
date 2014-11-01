@@ -41,11 +41,40 @@ namespace CountlyCpp
 {
   
   
-  CountlyEventQueue::CountlyEventQueue()
+  CountlyEventQueue::CountlyEventQueue() :
+  _sqlHandler(NULL)
   {
-    if (sqlite3_open("countly.sqlite", &_sqlHandler) != SQLITE_OK)
+    pthread_mutexattr_t mutAttr;
+    pthread_mutexattr_init(&mutAttr);
+    pthread_mutex_init(&_lock, &mutAttr);
+    _path = "./";
+  }
+  
+  CountlyEventQueue::~CountlyEventQueue()
+  {
+    if (_sqlHandler)
+      sqlite3_close(_sqlHandler);
+    pthread_mutex_destroy(&_lock);
+  }
+  
+  void CountlyEventQueue::LoadDb()
+  {
+    pthread_mutex_lock(&_lock);
+
+    if (_sqlHandler)
+    {
+      pthread_mutex_unlock(&_lock);
       return;
+    }
     
+    string fullpath = _path + string("countly.sqlite");
+    cout << "opening " << fullpath << endl;
+    if (sqlite3_open(fullpath.c_str(), &_sqlHandler) != SQLITE_OK)
+    {
+      cout << "Failed to setup sqlite" << endl;
+      pthread_mutex_unlock(&_lock);
+      return;
+    }
     if (!sqlite3_threadsafe())
     {
       assert(0);
@@ -61,6 +90,8 @@ namespace CountlyCpp
         cout << "Failed to setup sqlite" << endl;
         sqlite3_close(_sqlHandler);
         _sqlHandler = NULL;
+        pthread_mutex_unlock(&_lock);
+        return;
       }
     }
     
@@ -75,23 +106,9 @@ namespace CountlyCpp
         _sqlHandler = NULL;
       }
     }
+    pthread_mutex_unlock(&_lock);
 
-    
-    
-    pthread_mutexattr_t mutAttr;
-    pthread_mutexattr_init(&mutAttr);
-    pthread_mutex_init(&_lock, &mutAttr);
-    
   }
-  
-  CountlyEventQueue::~CountlyEventQueue()
-  {
-    if (_sqlHandler)
-      sqlite3_close(_sqlHandler);
-    pthread_mutex_destroy(&_lock);
-  }
-  
-
 
   void CountlyEventQueue::RecordEvent(std::string key, int count)
   {
@@ -164,7 +181,7 @@ namespace CountlyCpp
   void CountlyEventQueue::AddEvent(std::string json)
   {
     if (!_sqlHandler)
-      return;
+      LoadDb();
     
     pthread_mutex_lock(&_lock);
     
@@ -193,7 +210,7 @@ namespace CountlyCpp
     int rows, nbCols;
     
     if (!_sqlHandler)
-      return 0;
+      LoadDb();
     
       //Read deviceid from settings
     pthread_mutex_lock(&_lock);
@@ -243,7 +260,7 @@ namespace CountlyCpp
     int rows, nbCols;
     
     if (!_sqlHandler)
-      return 0;
+      LoadDb();
     
     pthread_mutex_lock(&_lock);
     string req = "SELECT COUNT(*) FROM events";
@@ -274,8 +291,11 @@ namespace CountlyCpp
     char **pazResult;
     int rows, nbCols;
     *evtId = -1;
-    pthread_mutex_lock(&_lock);
     
+    if (!_sqlHandler)
+      LoadDb();
+    
+    pthread_mutex_lock(&_lock);
     string req = "SELECT evtid, event FROM events LIMIT 1";
     unsigned int code = sqlite3_get_table(_sqlHandler, req.c_str(), &pazResult, &rows, &nbCols, &zErrMsg);
     if (code != SQLITE_OK)
@@ -314,6 +334,9 @@ namespace CountlyCpp
     pthread_mutex_lock(&_lock);
     char *zErrMsg = NULL;
 
+    if (!_sqlHandler)
+      LoadDb();
+    
     unsigned int code = sqlite3_exec(_sqlHandler, req.str().c_str(), NULL, 0, &zErrMsg);
     
     if (code != SQLITE_OK)
@@ -334,184 +357,3 @@ namespace CountlyCpp
   
 }
 
-
-#if 0
-
-@interface CountlyEventQueue : NSObject
-
-@end
-
-
-@implementation CountlyEventQueue
-
-- (void)dealloc
-{
-  [super dealloc];
-}
-
-- (NSUInteger)count
-{
-  @synchronized (self)
-  {
-    return [[CountlyDB sharedInstance] getEventCount];
-  }
-}
-
-
-- (NSString *)events
-{
-  NSMutableArray* result = [NSMutableArray array];
-  
-	@synchronized (self)
-  {
-		NSArray* events = [[[[CountlyDB sharedInstance] getEvents] copy] autorelease];
-		for (id managedEventObject in events)
-    {
-			CountlyEvent* event = [CountlyEvent objectWithManagedObject:managedEventObject];
-      
-			[result addObject:event.serializedData];
-      
-      [CountlyDB.sharedInstance deleteEvent:managedEventObject];
-    }
-  }
-  
-	return CountlyURLEscapedString(CountlyJSONFromObject(result));
-}
-
-- (void)recordEvent:(NSString *)key count:(int)count
-{
-  @synchronized (self)
-  {
-    NSArray* events = [[[[CountlyDB sharedInstance] getEvents] copy] autorelease];
-    for (NSManagedObject* obj in events)
-    {
-      CountlyEvent *event = [CountlyEvent objectWithManagedObject:obj];
-      if ([event.key isEqualToString:key])
-      {
-        event.count += count;
-        event.timestamp = (event.timestamp + time(NULL)) / 2;
-        
-        [obj setValue:@(event.count) forKey:@"count"];
-        [obj setValue:@(event.timestamp) forKey:@"timestamp"];
-        
-        [[CountlyDB sharedInstance] saveContext];
-        return;
-      }
-    }
-    
-    CountlyEvent *event = [[CountlyEvent new] autorelease];
-    event.key = key;
-    event.count = count;
-    event.timestamp = time(NULL);
-    
-    [[CountlyDB sharedInstance] createEvent:event.key count:event.count sum:event.sum segmentation:event.segmentation timestamp:event.timestamp];
-  }
-}
-
-- (void)recordEvent:(NSString *)key count:(int)count sum:(double)sum
-{
-  @synchronized (self)
-  {
-    NSArray* events = [[[[CountlyDB sharedInstance] getEvents] copy] autorelease];
-    for (NSManagedObject* obj in events)
-    {
-      CountlyEvent *event = [CountlyEvent objectWithManagedObject:obj];
-      if ([event.key isEqualToString:key])
-      {
-        event.count += count;
-        event.sum += sum;
-        event.timestamp = (event.timestamp + time(NULL)) / 2;
-        
-        [obj setValue:@(event.count) forKey:@"count"];
-        [obj setValue:@(event.sum) forKey:@"sum"];
-        [obj setValue:@(event.timestamp) forKey:@"timestamp"];
-        
-        [[CountlyDB sharedInstance] saveContext];
-        
-        return;
-      }
-    }
-    
-    CountlyEvent *event = [[CountlyEvent new] autorelease];
-    event.key = key;
-    event.count = count;
-    event.sum = sum;
-    event.timestamp = time(NULL);
-    
-    [[CountlyDB sharedInstance] createEvent:event.key count:event.count sum:event.sum segmentation:event.segmentation timestamp:event.timestamp];
-  }
-}
-
-- (void)recordEvent:(NSString *)key segmentation:(NSDictionary *)segmentation count:(int)count;
-{
-  @synchronized (self)
-  {
-    NSArray* events = [[[[CountlyDB sharedInstance] getEvents] copy] autorelease];
-    for (NSManagedObject* obj in events)
-    {
-      CountlyEvent *event = [CountlyEvent objectWithManagedObject:obj];
-      if ([event.key isEqualToString:key] &&
-          event.segmentation && [event.segmentation isEqualToDictionary:segmentation])
-      {
-        event.count += count;
-        event.timestamp = (event.timestamp + time(NULL)) / 2;
-        
-        [obj setValue:@(event.count) forKey:@"count"];
-        [obj setValue:@(event.timestamp) forKey:@"timestamp"];
-        
-        [[CountlyDB sharedInstance] saveContext];
-        
-        return;
-      }
-    }
-    
-    CountlyEvent *event = [[CountlyEvent new] autorelease];
-    event.key = key;
-    event.segmentation = segmentation;
-    event.count = count;
-    event.timestamp = time(NULL);
-    
-    [[CountlyDB sharedInstance] createEvent:event.key count:event.count sum:event.sum segmentation:event.segmentation timestamp:event.timestamp];
-  }
-}
-
-- (void)recordEvent:(NSString *)key segmentation:(NSDictionary *)segmentation count:(int)count sum:(double)sum;
-{
-  @synchronized (self)
-  {
-    NSArray* events = [[[[CountlyDB sharedInstance] getEvents] copy] autorelease];
-    for (NSManagedObject* obj in events)
-    {
-      CountlyEvent *event = [CountlyEvent objectWithManagedObject:obj];
-      if ([event.key isEqualToString:key] &&
-          event.segmentation && [event.segmentation isEqualToDictionary:segmentation])
-      {
-        event.count += count;
-        event.sum += sum;
-        event.timestamp = (event.timestamp + time(NULL)) / 2;
-        
-        [obj setValue:@(event.count) forKey:@"count"];
-        [obj setValue:@(event.sum) forKey:@"sum"];
-        [obj setValue:@(event.timestamp) forKey:@"timestamp"];
-        
-        [[CountlyDB sharedInstance] saveContext];
-        
-        return;
-      }
-    }
-    
-    CountlyEvent *event = [[CountlyEvent new] autorelease];
-    event.key = key;
-    event.segmentation = segmentation;
-    event.count = count;
-    event.sum = sum;
-    event.timestamp = time(NULL);
-    
-    [[CountlyDB sharedInstance] createEvent:event.key count:event.count sum:event.sum segmentation:event.segmentation timestamp:event.timestamp];
-  }
-}
-
-@end
-
-
-#endif

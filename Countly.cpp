@@ -51,12 +51,25 @@ namespace CountlyCpp
     Stop();
   }
   
+  void Countly::SetMetrics(std::string os, std::string os_version, std::string device, std::string resolution, std::string carrier, std::string app_version)
+  {
+
+    _connectionQueue->SetMetrics(os, os_version, device, resolution, carrier, app_version);
+
+  }
+  
+  
   void Countly::Stop()
   {
     if (!_threadRunning)
       return;
     pthread_join(_thread, NULL);
     _threadRunning = false;
+  }
+  
+  void Countly::SetPath(std::string path)
+  {
+    _eventQueue->SetPath(path);
   }
   
   void Countly::Start(std::string appKey, std::string host, int port)
