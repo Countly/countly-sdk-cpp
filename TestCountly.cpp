@@ -30,16 +30,23 @@
 #include "Countly.h"
 #include <unistd.h>
 using namespace CountlyCpp;
+using namespace std;
 
 int main(int argc, char * argv[])
 {
-  Countly * ct = Countly::GetInstance();
+  Countly * ct;
   
+  if (argc < 3)
+  {
+    cout << "Usage : " << argv[0] << " <host> <port>" << endl;
+    cout << "Example : " << argv[0] << " http://myserver.com 8080" << endl;
+    return -1;
+  }
+  ct = Countly::GetInstance();
   ct->SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Free", "1.0");
   
   
-  ct->Start("abf2034f975393fa994d1cf8adf9a93e4a29ac29", "http://submeet.net", 8030);
-  
+  ct->Start("abf2034f975393fa994d1cf8adf9a93e4a29ac29", argv[1], atoi(argv[2]));
   ct->RecordEvent("testk1", 123);
   ct->RecordEvent("testk1", 17);
   ct->RecordEvent("testk1", 34);
