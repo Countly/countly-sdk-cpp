@@ -1,5 +1,5 @@
 #include "Countly.h"
-
+#include <unistd.h>
 using namespace CountlyCpp;
 
 int main(int argc, char * argv[])
@@ -16,7 +16,10 @@ int main(int argc, char * argv[])
   ct->RecordEvent("testk1", 34);
   ct->RecordEvent("testk2", 644, 13.3);
  
+#ifndef WIN32
   sleep(4);
-  
+#else
+  Sleep(4000);
+#endif
   return 0;
 }

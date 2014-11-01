@@ -10,7 +10,7 @@
 #define __CountlyCpp__CountlyEventQueue__
 #include <iostream>
 #include <map>
-
+#include <pthread.h>
 #include "sqlite3.h"
 
 namespace CountlyCpp
@@ -22,7 +22,7 @@ namespace CountlyCpp
       CountlyEventQueue();
       ~CountlyEventQueue();
     
-      void SetPath(std::string path) {_path = path;}
+      void SetPath(std::string path);
 
       int Count();
       std::string PopEvent(int * evtId);

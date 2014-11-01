@@ -57,6 +57,12 @@ namespace CountlyCpp
     pthread_mutex_destroy(&_lock);
   }
   
+  void CountlyEventQueue::SetPath(std::string path)
+  {
+    _path = path;
+  }
+
+
   void CountlyEventQueue::LoadDb()
   {
     pthread_mutex_lock(&_lock);

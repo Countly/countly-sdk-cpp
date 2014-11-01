@@ -51,6 +51,12 @@ namespace CountlyCpp
     Stop();
   }
   
+  Countly * Countly::GetInstance()
+  {
+    if (!_instance) _instance = new Countly();
+    return _instance;
+  }
+
   void Countly::SetMetrics(std::string os, std::string os_version, std::string device, std::string resolution, std::string carrier, std::string app_version)
   {
 
@@ -127,7 +133,11 @@ namespace CountlyCpp
       }
       upd ++;
 
+#ifndef WIN32
       sleep(1); //don't block for COUNTLY_DEFAULT_UPDATE_INTERVAL, it's really too long a pthread_join
+#else
+      Sleep(1000);
+#endif
     }
   }
 
@@ -141,7 +151,7 @@ namespace CountlyCpp
 #ifdef WIN32
     FILETIME lp;
     GetSystemTimeAsFileTime(&lp);
-    GithUInt64 res;
+    unsigned long long res;
     res = lp.dwHighDateTime;
     res <<=32;
     res |= lp.dwLowDateTime;

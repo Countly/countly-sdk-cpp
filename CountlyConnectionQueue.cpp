@@ -13,16 +13,29 @@
 #include "Countly.h"
 #include <stdio.h>
 #include <string.h>
-#include <sys/socket.h>
+
+#ifdef WIN32
+  #include <winsock2.h>
+#else
+  #include <sys/socket.h>
+  #include <fcntl.h>
+  #include <netinet/tcp.h>
+  #include <netinet/in.h>
+  #include <arpa/inet.h>
+  #include <netdb.h>
+#endif
+
+
+
 #include <sys/types.h>
 #include <stdlib.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
+
 #include <stdbool.h>
 #include <unistd.h>
 #include <assert.h>
 #include <errno.h>
+
+
 
   //  https://count.ly/resources/reference/server-api
 #define KEEPALIVE 30 * 1000 // Send keepalive every 30s
@@ -36,12 +49,25 @@ namespace CountlyCpp
   _beginSessionSent(false)
   {
     _version = COUNTLY_VERSION;
+
+#ifdef WIN32
+    WSADATA winit;
+
+    if (WSAStartup(MAKEWORD(2,2),&winit) != 0)
+    {
+
+    }
+#endif
   }
   
   CountlyConnectionQueue::~CountlyConnectionQueue()
   {
     string URI = "/i?app_key=" + _appKey +"&device_id="+ _deviceId +"&end_session=1";
     HTTPGET(URI);
+
+#ifdef WIN32
+    WSACleanup();
+#endif
   }
   
   void CountlyConnectionQueue::SetAppKey(std::string key)
@@ -69,7 +95,7 @@ namespace CountlyCpp
       assert(0);
     }
       //Deal with http://bla.com/
-    char p = _appHostName.find("/");
+    unsigned char p = _appHostName.find("/");
     if (p != string::npos)
       _appHostName = _appHostName.substr(0, p);
       //Resolve
@@ -277,9 +303,6 @@ namespace CountlyCpp
   std::string CountlyConnectionQueue::ResolveHostname(std::string hostname)
   {
     char result[32];
-#ifdef WIN32
-    InitWinsock();
-#endif
     
     struct hostent * ent = gethostbyname(hostname.c_str());
     

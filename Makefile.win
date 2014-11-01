@@ -4,6 +4,7 @@ TARGET=$(OUTDIR)/libCountlyCpp.a
 OBJDIR=./obj/
 SRCDIR=.
 TESTMAIN=CountlyTest
+CFLAGS=-Wall -Wuninitialized -MMD -MP -DSQLITE_THREADSAFE=1 
 
 CPP_SRCS += \
 $(SRCDIR)/Countly.cpp \
@@ -25,14 +26,14 @@ all:  test
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
 	@echo 'Building file: $<'
 	@echo 'Invoking: GCC C++ Compiler'
-	g++ $(CFLAGS) $(INCLUDEDIR) -x objective-c++ -c  -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)"  -o "$@" "$<"
+	g++ $(CFLAGS) $(INCLUDEDIR) -c -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)"  -o "$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.c
 	@echo 'Building C file: $<'
 	@echo 'Invoking: GCC C Compiler'
-	gcc $(CFLAGS) $(INCLUDEDIR) -c  -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)"  -o "$@" "$<"
+	gcc $(CFLAGS) $(INCLUDEDIR) -c -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)"  -o "$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
 
@@ -44,7 +45,7 @@ $(TARGET): $(OBJS)
 	@echo ' '    
 	
 test: $(TARGET)
-	g++ TestCountly.cpp -o $(TESTMAIN) -L$(OUTDIR) -lCountlyCpp 
+	g++ TestCountly.cpp -o $(TESTMAIN) -L$(OUTDIR) -lCountlyCpp -lpthread -lwsock32 
 
 	
 clean:
