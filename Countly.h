@@ -30,14 +30,17 @@
 
 #ifndef __CountlyCpp__Countly__
 #define __CountlyCpp__Countly__
-#include "CountlyEventQueue.h"
-#include "CountlyConnectionQueue.h"
+
 #define COUNTLY_VERSION "0.6"
 
+#include <map>
+#include <iostream>
 
 namespace CountlyCpp
 {
-
+  class CountlyEventQueue;
+  class CountlyConnectionQueue;
+  
   class Countly
   {
     public:

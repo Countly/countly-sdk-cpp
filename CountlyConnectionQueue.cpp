@@ -138,7 +138,7 @@ namespace CountlyCpp
   {
     string URI = "/i?app_key=" + _appKey +"&device_id="+ _deviceId +"&sdk_version="+_version+"&begin_session=1";
     bool metricsOk = false;
-    std::string metrics = "metrics={\n";
+    std::string metrics = "{\n";
     
     /*
      metrics={ "_os": "Android", "_os_version": "4.1", "_device": "Samsung Galaxy", "_resolution": "1200x800", "_carrier": "Vodafone", "_app_version": "1.2", "_density": "200dpi" }
@@ -197,7 +197,7 @@ namespace CountlyCpp
     metrics += "\n}";
     
     if (metricsOk)
-      URI += "&" + URLEncode(metrics);
+      URI += "&metrics=" + URLEncode(metrics);
     if (HTTPGET(URI))
       _beginSessionSent = true;
   }

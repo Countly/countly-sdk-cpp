@@ -48,6 +48,8 @@
 #define COUNTLY_EVENT_SEND_THRESHOLD 10
 #define COUNTLY_DEFAULT_UPDATE_INTERVAL 60.0
 
+#include "CountlyEventQueue.h"
+#include "CountlyConnectionQueue.h"
 using namespace std;
 
 namespace CountlyCpp
