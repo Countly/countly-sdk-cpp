@@ -35,6 +35,7 @@
 
 #include <map>
 #include <iostream>
+#include <pthread.h>
 
 namespace CountlyCpp
 {
