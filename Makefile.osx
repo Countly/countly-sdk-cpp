@@ -3,7 +3,7 @@ OUTDIR=./lib/
 TARGET=$(OUTDIR)/libCountlyCpp.a
 OBJDIR=./obj/
 SRCDIR=.
-TESTMAIN=CountlyTest
+TESTMAIN=./bin/CountlyTest
 CFLAGS=-Wall -Wuninitialized -MMD -MP -DSQLITE_THREADSAFE=1 
 
 CPP_SRCS += \

@@ -68,7 +68,7 @@ namespace CountlyCpp
     pthread_mutexattr_t mutAttr;
     pthread_mutexattr_init(&mutAttr);
     pthread_mutex_init(&_lock, &mutAttr);
-    _path = "./";
+    _path = "";
   }
   
   CountlyEventQueue::~CountlyEventQueue()
@@ -86,8 +86,9 @@ namespace CountlyCpp
 
   void CountlyEventQueue::LoadDb()
   {
+    assert(_path.size());
+    
     pthread_mutex_lock(&_lock);
-
     if (_sqlHandler)
     {
       pthread_mutex_unlock(&_lock);

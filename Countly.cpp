@@ -78,7 +78,7 @@ namespace CountlyCpp
   {
     if (!_instance) _instance = new Countly();
     return _instance;
-  }
+  } 
   
   void Countly::DeleteInstance()
   {
