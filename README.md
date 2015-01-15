@@ -44,3 +44,7 @@ int main(int argc, char * argv[])
   return 0;
 }
 ```
+
+**Versions**
+1.0 :  First release
+1.1 :  SetPath is now mandatory before use

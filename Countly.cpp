@@ -87,6 +87,11 @@ namespace CountlyCpp
     _instance = NULL;
   }
   
+  std::string Countly::GetVersion()
+  {
+    return "1.1";
+  }
+ 
   void Countly::SetMetrics(std::string os, std::string os_version, std::string device, std::string resolution, std::string carrier, std::string app_version)
   {
 
