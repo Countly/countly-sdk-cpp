@@ -30,6 +30,7 @@
 #include "CountlyEventQueue.h"
 #include <sstream>
 #include <iomanip>
+#include <stdlib.h>
 
 #include "Countly.h"
 #include "assert.h"

@@ -29,6 +29,8 @@
 
 #include "Countly.h"
 #include <unistd.h>
+#include <stdlib.h>
+
 using namespace CountlyCpp;
 using namespace std;
 
@@ -46,7 +48,7 @@ int main(int argc, char * argv[])
   ct->SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Free", "1.0");
   
   
-  ct->Start("abf2034f975393fa994d1cf8adf9a93e4a29ac29", argv[1], atoi(argv[2]));
+  ct->Start("ce894ea797762a11560217117abea9b1e354398c", argv[1], atoi(argv[2]));
   ct->RecordEvent("testk1", 123);
   ct->RecordEvent("testk1", 17);
   ct->RecordEvent("testk1", 34);

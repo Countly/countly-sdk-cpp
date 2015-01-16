@@ -199,7 +199,7 @@ namespace CountlyCpp
     if (clock_gettime(CLOCK_REALTIME,&tms))
       return -1;
     /* seconds, multiplied with 1 million */
-    GithUInt64 t = tms.tv_sec;
+    unsigned long long t = tms.tv_sec;
     t *= 1000;
 	  /* Add full microseconds */
 	  t += tms.tv_nsec/1000000;
@@ -215,7 +215,7 @@ namespace CountlyCpp
     ts.tv_sec = mts.tv_sec;
     ts.tv_nsec = mts.tv_nsec;
     /* seconds, multiplied with 1 million */
-    GithUInt64 t = ts.tv_sec;
+    unsigned long long t = ts.tv_sec;
     t *= 1000;
 	  /* Add full microseconds */
 	  t += ts.tv_nsec/1000000;
