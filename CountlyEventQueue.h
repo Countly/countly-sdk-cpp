@@ -49,17 +49,17 @@ namespace CountlyCpp
       std::string PopEvent(int * evtId);
       void ClearEvent(int evtId);
     
-      void RecordEvent(std::string key, int count);
-      void RecordEvent(std::string key, int count, double sum);
-      void RecordEvent(std::string key, std::map<std::string, std::string> segmentation, int count);
-      void RecordEvent(std::string key, std::map<std::string, std::string> segmentation, int count, double sum);
+      bool RecordEvent(std::string key, int count);
+      bool RecordEvent(std::string key, int count, double sum);
+      bool RecordEvent(std::string key, std::map<std::string, std::string> segmentation, int count);
+      bool RecordEvent(std::string key, std::map<std::string, std::string> segmentation, int count, double sum);
    
       std::string GetDeviceId();
 
 
     private:
-      void AddEvent(std::string json);
-      void LoadDb();
+      bool AddEvent(std::string json);
+      bool LoadDb();
     
       sqlite3 *          _sqlHandler;
       pthread_mutex_t   _lock;

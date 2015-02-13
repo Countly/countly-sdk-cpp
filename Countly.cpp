@@ -72,6 +72,10 @@ namespace CountlyCpp
   Countly::~Countly()
   {
     Stop();
+    delete(_eventQueue);
+    delete(_connectionQueue);
+    _eventQueue = NULL;
+    _connectionQueue = NULL;
   }
   
   Countly * Countly::GetInstance()
@@ -89,7 +93,7 @@ namespace CountlyCpp
   
   std::string Countly::GetVersion()
   {
-    return "1.1";
+    return COUNTLY_VERSION;
   }
  
   void Countly::SetMetrics(std::string os, std::string os_version, std::string device, std::string resolution, std::string carrier, std::string app_version)

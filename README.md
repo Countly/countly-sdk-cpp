@@ -48,3 +48,5 @@ int main(int argc, char * argv[])
 **Versions**
 1.0 :  First release
 1.1 :  SetPath is now mandatory before use
+1.2 : Linux compatibility
+1.3 : Cleaning up things (was really too Quick and too Dirty.)

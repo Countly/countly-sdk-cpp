@@ -67,6 +67,7 @@ namespace CountlyCpp
 {
   
   CountlyConnectionQueue::CountlyConnectionQueue():
+  _lastSend(0),
   _beginSessionSent(false)
   {
     _version = COUNTLY_VERSION;
@@ -116,7 +117,7 @@ namespace CountlyCpp
       assert(0);
     }
       //Deal with http://bla.com/
-    unsigned char p = _appHostName.find("/");
+    size_t p = _appHostName.find("/");
     if (p != string::npos)
       _appHostName = _appHostName.substr(0, p);
       //Resolve
@@ -220,7 +221,6 @@ namespace CountlyCpp
         URI = "/i?app_key=" + _appKey +"&device_id="+ _deviceId +"&session_duration=30";
         HTTPGET(URI);
         _lastSend = Countly::GetTimestamp();
-        cout << "KeepAlive sent" << endl;
       }
       return false;
     }
@@ -299,10 +299,8 @@ namespace CountlyCpp
     http << "GET " << URI << " HTTP/1.0\r\n";
     http << "Host: "<<_appHostName << ":" "" << dec << _appPort << "\r\n";
     http << "Connection: Close\r\n";
-    http << "User-Agent: Countly\r\n\r\n";
+    http << "User-Agent: Countly " << Countly::GetVersion() << "\r\n\r\n";
     
-    cout << endl << "*********" << endl << "[SEND] " << http.str() << endl;
-
     ret = Send(s, (char *)http.str().c_str(), http.str().size());
     if (!ret)
     {
@@ -315,8 +313,6 @@ namespace CountlyCpp
     if ((readSize >= 15) && (!memcmp(buf, "HTTP/1.1 200 OK", 15)))
       ret = true;
     close(s);
-    cout << endl << "[RCV] " << buf << endl << "*********" << endl;
-
     return ret;
   }
   

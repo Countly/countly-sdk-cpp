@@ -85,7 +85,7 @@ namespace CountlyCpp
   }
 
 
-  void CountlyEventQueue::LoadDb()
+  bool CountlyEventQueue::LoadDb()
   {
     assert(_path.size());
     
@@ -93,21 +93,16 @@ namespace CountlyCpp
     if (_sqlHandler)
     {
       pthread_mutex_unlock(&_lock);
-      return;
+      return false;
     }
     
     string fullpath = _path + string("countly.sqlite");
-    cout << "opening " << fullpath << endl;
     if (sqlite3_open(fullpath.c_str(), &_sqlHandler) != SQLITE_OK)
     {
-      cout << "Failed to setup sqlite" << endl;
       pthread_mutex_unlock(&_lock);
-      return;
+      return false;
     }
-    if (!sqlite3_threadsafe())
-    {
-      assert(0);
-    }
+    assert(sqlite3_threadsafe());
     
     char *zErrMsg = NULL;
     string req = "CREATE TABLE IF NOT EXISTS events (evtid INTEGER PRIMARY KEY, event TEXT)";
@@ -116,11 +111,10 @@ namespace CountlyCpp
     {
       if ((code == SQLITE_CORRUPT) || (code == SQLITE_IOERR_SHORT_READ) || (code == SQLITE_IOERR_WRITE) || (code == SQLITE_IOERR))
       {
-        cout << "Failed to setup sqlite" << endl;
         sqlite3_close(_sqlHandler);
         _sqlHandler = NULL;
         pthread_mutex_unlock(&_lock);
-        return;
+        return false;
       }
     }
     
@@ -130,16 +124,17 @@ namespace CountlyCpp
     {
       if ((code == SQLITE_CORRUPT) || (code == SQLITE_IOERR_SHORT_READ) || (code == SQLITE_IOERR_WRITE) || (code == SQLITE_IOERR))
       {
-        cout << "Failed to setup sqlite" << endl;
         sqlite3_close(_sqlHandler);
         _sqlHandler = NULL;
+        pthread_mutex_unlock(&_lock);
+        return false;
       }
     }
     pthread_mutex_unlock(&_lock);
-
+    return true;
   }
 
-  void CountlyEventQueue::RecordEvent(std::string key, int count)
+  bool CountlyEventQueue::RecordEvent(std::string key, int count)
   {
     stringstream json;
     json << "{\n";
@@ -147,10 +142,10 @@ namespace CountlyCpp
     json << "  \"key\": \"" << key << "\",\n";
     json << "  \"count\": " << dec << count << "\n";
     json << "}";
-    AddEvent(json.str());
+    return AddEvent(json.str());
   }
   
-  void CountlyEventQueue::RecordEvent(std::string key, int count, double sum)
+  bool CountlyEventQueue::RecordEvent(std::string key, int count, double sum)
   {
     stringstream json;
     json << "{\n";
@@ -159,10 +154,10 @@ namespace CountlyCpp
     json << "  \"count\": " << dec << count << ",\n";
     json << "  \"sum\": \"" << dec << sum << "\"\n";
     json << "}";
-    AddEvent(json.str());
+    return AddEvent(json.str());
   }
   
-  void CountlyEventQueue::RecordEvent(std::string key, std::map<std::string, std::string> segmentation, int count)
+  bool CountlyEventQueue::RecordEvent(std::string key, std::map<std::string, std::string> segmentation, int count)
   {
     stringstream json;
     std::map<std::string, std::string>::iterator it;
@@ -181,10 +176,10 @@ namespace CountlyCpp
     }
     json << "  }\n";
     json << "}";
-    AddEvent(json.str());
+    return AddEvent(json.str());
   }
   
-  void CountlyEventQueue::RecordEvent(std::string key, std::map<std::string, std::string> segmentation, int count, double sum)
+  bool CountlyEventQueue::RecordEvent(std::string key, std::map<std::string, std::string> segmentation, int count, double sum)
   {
     stringstream json;
     std::map<std::string, std::string>::iterator it;
@@ -204,13 +199,13 @@ namespace CountlyCpp
     }
     json << "  }\n";
     json << "}";
-    AddEvent(json.str());
+    return AddEvent(json.str());
   }
 
-  void CountlyEventQueue::AddEvent(std::string json)
+  bool CountlyEventQueue::AddEvent(std::string json)
   {
-    if (!_sqlHandler)
-      LoadDb();
+    if (!_sqlHandler && !LoadDb())
+      return false;
     
     pthread_mutex_lock(&_lock);
     
@@ -220,15 +215,16 @@ namespace CountlyCpp
     
     if (code != SQLITE_OK)
     {
-      cout << "Failed to exec " << req << " :" << zErrMsg<< endl;
       if ((code == SQLITE_CORRUPT) || (code == SQLITE_IOERR_SHORT_READ) || (code == SQLITE_IOERR_WRITE) || (code == SQLITE_IOERR))
       {
         sqlite3_close(_sqlHandler);
         _sqlHandler = NULL;
+        pthread_mutex_unlock(&_lock);
+        return false;
       }
     }
     pthread_mutex_unlock(&_lock);
-
+    return true;
   }
   
   std::string CountlyEventQueue::GetDeviceId()
@@ -250,7 +246,6 @@ namespace CountlyCpp
       deviceid = pazResult[1];
       sqlite3_free_table(pazResult);
       pthread_mutex_unlock(&_lock);
-      cout << "Loaded UDID " << deviceid << endl;
       return deviceid;
     }
     sqlite3_free_table(pazResult);
@@ -263,13 +258,11 @@ namespace CountlyCpp
     for (int i = 0; i < 20 / sizeof(int); i++)
       UDID << setfill ('0') << setw(8) << hex << rand();
     deviceid = UDID.str();
-    cout << "Created UDID " << deviceid << endl;
     req = "INSERT INTO settings (deviceid) VALUES('" + deviceid + "')";
     pthread_mutex_lock(&_lock);
     code = sqlite3_exec(_sqlHandler, req.c_str(), NULL, 0, &zErrMsg);
     if (code != SQLITE_OK)
     {
-      cout << "Failed to exec " << req << " :" << zErrMsg<< endl;
       if ((code == SQLITE_CORRUPT) || (code == SQLITE_IOERR_SHORT_READ) || (code == SQLITE_IOERR_WRITE) || (code == SQLITE_IOERR))
       {
         sqlite3_close(_sqlHandler);
@@ -352,7 +345,6 @@ namespace CountlyCpp
     sqlite3_free_table(pazResult);
     pthread_mutex_unlock(&_lock);
     
-    cout << "Loaded evt " << *evtId << " : " << ret << endl;
     return ret;
   }
   
@@ -372,14 +364,11 @@ namespace CountlyCpp
     {
       if ((code == SQLITE_CORRUPT) || (code == SQLITE_IOERR_SHORT_READ) || (code == SQLITE_IOERR_WRITE) || (code == SQLITE_IOERR))
       {
-        cout << "Failed to clear event" << endl;
         sqlite3_close(_sqlHandler);
         _sqlHandler = NULL;
       }
     }
     pthread_mutex_unlock(&_lock);
-    cout << "Cleared evt " << evtId << " : " << req.str() << endl;
-
   }
   
   

@@ -31,7 +31,7 @@
 #ifndef __CountlyCpp__Countly__
 #define __CountlyCpp__Countly__
 
-#define COUNTLY_VERSION "0.6"
+#define COUNTLY_VERSION "1.3"
 
 #include <map>
 #include <iostream>
@@ -47,7 +47,7 @@ namespace CountlyCpp
     public:
       static Countly * GetInstance();
       static void DeleteInstance();
-      std::string GetVersion();
+      static std::string GetVersion();
 
       void SetPath(std::string path);  //Setup work directory (where Countly sqlite file will be written)
       void SetMetrics(std::string os, std::string os_version, std::string device, std::string resolution, std::string carrier, std::string app_version);
