@@ -45,6 +45,7 @@ int main(int argc, char * argv[])
     return -1;
   }
   ct = Countly::GetInstance();
+  ct->SetPath("./");
   ct->SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Free", "1.0");
   
   
