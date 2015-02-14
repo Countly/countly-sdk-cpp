@@ -45,7 +45,7 @@ $(TARGET): $(OBJS)
 	@echo ' '    
 	
 test: $(TARGET)
-	g++ TestCountly.cpp -o $(TESTMAIN) -L$(OUTDIR) -lCountlyCpp -lpthread 
+	g++ TestCountly.cpp -o $(TESTMAIN) -L$(OUTDIR) -lCountlyCpp -lpthread -lssl -lcrypto
 
 	
 clean:

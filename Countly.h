@@ -6,7 +6,7 @@
  
  The MIT License (MIT)
  
- Copyright (c) 2014 Gith Security Systems
+ Copyright (c) 2015 Kontrol SAS (tanker.io)
  
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -31,7 +31,7 @@
 #ifndef __CountlyCpp__Countly__
 #define __CountlyCpp__Countly__
 
-#define COUNTLY_VERSION "1.3"
+#define COUNTLY_VERSION "1.4"
 
 #include <map>
 #include <iostream>

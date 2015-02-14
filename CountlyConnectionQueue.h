@@ -6,7 +6,7 @@
  
  The MIT License (MIT)
  
- Copyright (c) 2014 Gith Security Systems
+ Copyright (c) 2015 Kontrol SAS (tanker.io)
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -31,6 +31,10 @@
 #define __CountlyCpp__CountlyConnectionQueue__
 #include <iostream>
 #include "CountlyEventQueue.h"
+
+#ifndef NOSSL
+  #include <openssl/ssl.h>
+#endif
 
 namespace CountlyCpp
 {
@@ -66,12 +70,20 @@ namespace CountlyCpp
     std::string _app_version;
 
     
-    void BeginSession();
+    void  BeginSession();
     std::string URLEncode(const std::string &value);
-    bool HTTPGET(std::string URI);
+    bool  HTTPGET(std::string URI);
     std::string ResolveHostname(std::string hostname);
-    int Connect();
-    bool Send(int s, char * buffer, int size);
+    int   Connect();
+    void  Close(int s);
+
+    bool  Send(int s, char * buffer, int size);
+    
+#ifndef NOSSL
+    int   ConnectSSL();
+    void  CloseSSL(int s);
+    SSL * _sslHandler;
+#endif
   };
 }
 #endif /* defined(__CountlyCpp__CountlyConnectionQueue__) */

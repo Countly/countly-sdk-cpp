@@ -6,7 +6,7 @@
  
  The MIT License (MIT)
  
- Copyright (c) 2014 Gith Security Systems
+ Copyright (c) 2015 Kontrol SAS (tanker.io)
  
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -46,6 +46,13 @@
   #include <netdb.h>
 #endif
 
+#ifndef NOSSL
+  #include <openssl/bio.h>
+  #include <openssl/err.h>
+  #include <openssl/pem.h>
+  #include <openssl/x509.h>
+  #include <openssl/x509_vfy.h>
+#endif
 
 
 #include <sys/types.h>
@@ -80,6 +87,11 @@ namespace CountlyCpp
 
     }
 #endif
+#ifndef NOSSL
+    SSL_load_error_strings();
+    SSL_library_init();
+    OpenSSL_add_all_algorithms();
+#endif
   }
   
   CountlyConnectionQueue::~CountlyConnectionQueue()
@@ -89,6 +101,10 @@ namespace CountlyCpp
 
 #ifdef WIN32
     WSACleanup();
+#endif
+#ifndef NOSSL
+    ERR_free_strings();
+    EVP_cleanup();
 #endif
   }
   
@@ -109,7 +125,10 @@ namespace CountlyCpp
     }
     else if (_appHost.find("https://") == 0)
     {
-      host = true;
+#ifdef NOSSL
+      assert(0);
+#endif
+      _https = true;
       _appHostName = host.substr(8);
     }
     else
@@ -291,9 +310,16 @@ namespace CountlyCpp
   {
     stringstream http;
     bool ret;
-    int s = Connect();
+    int s;
     char buf[512];
-    if (s < 0) return false;
+    int readSize;
+
+    if (_https)
+      s = ConnectSSL();
+    else
+      s = Connect();
+    if (s < 0)
+      return false;
     
 
     http << "GET " << URI << " HTTP/1.0\r\n";
@@ -309,7 +335,11 @@ namespace CountlyCpp
     }
 
     memset(buf, 0x00, 512);
-    int readSize = recv(s, (char *)buf, 512, 0);
+    if(_https)
+      readSize = SSL_read(_sslHandler, (char *)buf, 512);
+    else
+      readSize = recv(s, (char *)buf, 512, 0);
+    
     if ((readSize >= 15) && (!memcmp(buf, "HTTP/1.1 200 OK", 15)))
       ret = true;
     close(s);
@@ -408,11 +438,77 @@ namespace CountlyCpp
 #endif
     return s;
   }
-
+  
+  void CountlyConnectionQueue::Close(int s)
+  {
+    close(s);
+  }
+  
+#ifndef NOSSL
+  int CountlyConnectionQueue::ConnectSSL()
+  {
+    int s;
+    SSL_CTX * sslContext;
+    int err;
+    
+    s = Connect();
+    if (s < 0)
+      return s;
+    
+    sslContext = SSL_CTX_new( SSLv23_client_method());
+    _sslHandler = SSL_new(sslContext);
+    SSL_set_fd(_sslHandler, s);
+    
+    err = SSL_connect(_sslHandler);
+    if (err <= 0)
+    {
+      switch (SSL_get_error(_sslHandler, err))
+      {
+        case SSL_ERROR_NONE:
+          break;
+        case SSL_ERROR_ZERO_RETURN:
+          break;
+        case SSL_ERROR_WANT_READ:
+          break;
+        case SSL_ERROR_WANT_WRITE:
+          break;
+        case SSL_ERROR_WANT_CONNECT:
+          break;
+        case SSL_ERROR_WANT_ACCEPT:
+          break;
+        case SSL_ERROR_WANT_X509_LOOKUP:
+          break;
+        case SSL_ERROR_SYSCALL:
+          break;
+        case SSL_ERROR_SSL:
+          break;
+      }
+      SSL_shutdown(_sslHandler);
+      SSL_free(_sslHandler);
+      return -1;
+    }
+    return s;
+  }
+  
+  void CountlyConnectionQueue::CloseSSL(int s)
+  {
+    SSL_shutdown(_sslHandler);
+    SSL_free(_sslHandler);
+    Close(s);
+  }
+#endif
+  
+  
+  
   bool CountlyConnectionQueue::Send(int s, char * buffer, int size)
   {
-    
-    int ret = send(s, buffer, size, 0x00); //Send data
+    int ret;
+
+    if (_https)
+      ret = SSL_write(_sslHandler, buffer, size);
+    else
+      ret = send(s, buffer, size, 0x00); //Send data
+
 #ifndef WIN32
     if (ret < 0)
     {

@@ -15,8 +15,15 @@ This SDK will require :
 That's all (sqlite, HTTP, JSON, etc. are embedded) !
 
 **Limitations :**
-* Only support http mode (no https yet)
 * Dirty HTTP implementation. Will only deal with typical cases.
+
+**Building**
+Build SDK using provided Makefiles : make -f Makefile.xxx
+Include CountlyCpp.h in your project.
+
+Link with -lCountlyCpp -lssl -lcrypto
+If you dont plan to use HTTPS, link with -lCountlyCpp -DNOSSL
+
 
 **Usage :**
 
@@ -50,3 +57,4 @@ int main(int argc, char * argv[])
 1.1 :  SetPath is now mandatory before use
 1.2 : Linux compatibility
 1.3 : Cleaning up things (was really too Quick and too Dirty.)
+1.4 : Added HTTPS support
