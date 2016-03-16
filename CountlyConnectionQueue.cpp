@@ -60,11 +60,12 @@
 #include <stdlib.h>
 
 #include <stdbool.h>
-#include <unistd.h>
 #include <assert.h>
 #include <errno.h>
 
-
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
   //  https://count.ly/resources/reference/server-api
 #define KEEPALIVE 30 * 1000 // Send keepalive every 30s

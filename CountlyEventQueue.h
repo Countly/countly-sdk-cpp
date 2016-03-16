@@ -31,8 +31,11 @@
 #define __CountlyCpp__CountlyEventQueue__
 #include <iostream>
 #include <map>
-#include <pthread.h>
 #include "sqlite3.h"
+
+#ifndef _WIN32
+#include <pthread.h>
+#endif
 
 namespace CountlyCpp
 {

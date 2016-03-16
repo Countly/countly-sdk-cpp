@@ -35,7 +35,10 @@
 
 #include <map>
 #include <iostream>
+
+#ifndef _WIN32
 #include <pthread.h>
+#endif
 
 namespace CountlyCpp
 {
