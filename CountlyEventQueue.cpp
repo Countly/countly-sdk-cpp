@@ -71,7 +71,7 @@ namespace CountlyCpp
     #ifndef _WIN32
       pthread_mutexattr_t mutAttr;
       pthread_mutexattr_init(&mutAttr);
-      pthread_mutex_init(&_guard, &mutAttr);
+      pthread_mutex_init(&_lock, &mutAttr);
     #else
       _lock = CreateMutex(NULL, false, NULL);
     #endif
@@ -82,7 +82,7 @@ namespace CountlyCpp
     if (_sqlHandler)
       sqlite3_close(_sqlHandler);
     #ifndef _WIN32
-      pthread_mutex_destroy(&_guard);
+      pthread_mutex_destroy(&_lock);
     #else
       CloseHandle(_lock);
     #endif
@@ -96,7 +96,7 @@ namespace CountlyCpp
   void CountlyEventQueue::Lock()
   {
     #ifndef _WIN32
-      pthread_mutex_lock(&_guard);
+      pthread_mutex_lock(&_lock);
     #else
       WaitForSingleObject(_lock, INFINITE);
     #endif
@@ -105,7 +105,7 @@ namespace CountlyCpp
   void CountlyEventQueue::Unlock()
   {
     #ifndef _WIN32
-      pthread_mutex_unlock(&_guard);
+      pthread_mutex_unlock(&_lock);
     #else
       ReleaseMutex(_lock);
     #endif
