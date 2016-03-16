@@ -85,22 +85,31 @@ namespace CountlyCpp
     _path = path;
   }
 
+  void CountlyEventQueue::Lock()
+  {
+    pthread_mutex_lock(&_lock);
+  }
+
+  void CountlyEventQueue::Unlock()
+  {
+    pthread_mutex_unlock(&_lock);
+  }
 
   bool CountlyEventQueue::LoadDb()
   {
     assert(_path.size());
     
-    pthread_mutex_lock(&_lock);
+    Lock();
     if (_sqlHandler)
     {
-      pthread_mutex_unlock(&_lock);
+      Unlock();
       return false;
     }
     
     string fullpath = _path + string("countly.sqlite");
     if (sqlite3_open(fullpath.c_str(), &_sqlHandler) != SQLITE_OK)
     {
-      pthread_mutex_unlock(&_lock);
+      Unlock();
       return false;
     }
     assert(sqlite3_threadsafe());
@@ -114,7 +123,7 @@ namespace CountlyCpp
       {
         sqlite3_close(_sqlHandler);
         _sqlHandler = NULL;
-        pthread_mutex_unlock(&_lock);
+        Unlock();
         return false;
       }
     }
@@ -127,11 +136,11 @@ namespace CountlyCpp
       {
         sqlite3_close(_sqlHandler);
         _sqlHandler = NULL;
-        pthread_mutex_unlock(&_lock);
+        Unlock();
         return false;
       }
     }
-    pthread_mutex_unlock(&_lock);
+    Unlock();
     return true;
   }
 
@@ -208,7 +217,7 @@ namespace CountlyCpp
     if (!_sqlHandler && !LoadDb())
       return false;
     
-    pthread_mutex_lock(&_lock);
+    Lock();
     
     char *zErrMsg = NULL;
     string req = "INSERT INTO events (event) VALUES('" + json +"')";
@@ -220,11 +229,11 @@ namespace CountlyCpp
       {
         sqlite3_close(_sqlHandler);
         _sqlHandler = NULL;
-        pthread_mutex_unlock(&_lock);
+        Unlock();
         return false;
       }
     }
-    pthread_mutex_unlock(&_lock);
+    Unlock();
     return true;
   }
   
@@ -239,18 +248,18 @@ namespace CountlyCpp
       LoadDb();
     
       //Read deviceid from settings
-    pthread_mutex_lock(&_lock);
+    Lock();
     string req = "SELECT deviceid FROM settings";
     unsigned int code = sqlite3_get_table(_sqlHandler, req.c_str(), &pazResult, &rows, &nbCols, &zErrMsg);
     if ((code == SQLITE_OK) && (rows))
     {
       deviceid = pazResult[1];
       sqlite3_free_table(pazResult);
-      pthread_mutex_unlock(&_lock);
+      Unlock();
       return deviceid;
     }
     sqlite3_free_table(pazResult);
-    pthread_mutex_unlock(&_lock);
+    Unlock();
     
       //Failed, create new one
     stringstream UDID;
@@ -260,7 +269,7 @@ namespace CountlyCpp
       UDID << setfill ('0') << setw(8) << hex << rand();
     deviceid = UDID.str();
     req = "INSERT INTO settings (deviceid) VALUES('" + deviceid + "')";
-    pthread_mutex_lock(&_lock);
+    Lock();
     code = sqlite3_exec(_sqlHandler, req.c_str(), NULL, 0, &zErrMsg);
     if (code != SQLITE_OK)
     {
@@ -270,7 +279,7 @@ namespace CountlyCpp
         _sqlHandler = NULL;
       }
     }
-    pthread_mutex_unlock(&_lock);
+    Unlock();
 
     return deviceid;
   }
@@ -285,7 +294,7 @@ namespace CountlyCpp
     if (!_sqlHandler)
       LoadDb();
     
-    pthread_mutex_lock(&_lock);
+    Lock();
     string req = "SELECT COUNT(*) FROM events";
     unsigned int code = sqlite3_get_table(_sqlHandler, req.c_str(), &pazResult, &rows, &nbCols, &zErrMsg);
     if (code != SQLITE_OK)
@@ -295,14 +304,14 @@ namespace CountlyCpp
         sqlite3_close(_sqlHandler);
         _sqlHandler = NULL;
       }
-      pthread_mutex_unlock(&_lock);
+      Unlock();
       return 0;
     }
 
     if (rows != 0)
       ret = atoi(pazResult[1]);
     sqlite3_free_table(pazResult);
-    pthread_mutex_unlock(&_lock);
+    Unlock();
 
     return ret;
   }
@@ -318,7 +327,7 @@ namespace CountlyCpp
     if (!_sqlHandler)
       LoadDb();
     
-    pthread_mutex_lock(&_lock);
+    Lock();
     char req[64];
     sprintf(req, "SELECT evtid, event FROM events LIMIT 1 OFFSET %d", offset);
     unsigned int code = sqlite3_get_table(_sqlHandler, req, &pazResult, &rows, &nbCols, &zErrMsg);
@@ -329,14 +338,14 @@ namespace CountlyCpp
         sqlite3_close(_sqlHandler);
         _sqlHandler = NULL;
       }
-      pthread_mutex_unlock(&_lock);
+      Unlock();
       
       return "";
     }
     
     if (!rows)
     {
-      pthread_mutex_unlock(&_lock);
+      Unlock();
       return "";
     }
 
@@ -345,7 +354,7 @@ namespace CountlyCpp
     *evtId = atoi(pazResult[2]);
     ret = pazResult[3];
     sqlite3_free_table(pazResult);
-    pthread_mutex_unlock(&_lock);
+    Unlock();
     
     return ret;
   }
@@ -354,7 +363,7 @@ namespace CountlyCpp
   {
     stringstream req;
     req  << "DELETE FROM events WHERE evtid=" << dec << evtId;
-    pthread_mutex_lock(&_lock);
+    Lock();
     char *zErrMsg = NULL;
 
     if (!_sqlHandler)
@@ -370,7 +379,7 @@ namespace CountlyCpp
         _sqlHandler = NULL;
       }
     }
-    pthread_mutex_unlock(&_lock);
+    Unlock();
   }
   
   

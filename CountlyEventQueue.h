@@ -60,6 +60,8 @@ namespace CountlyCpp
     private:
       bool AddEvent(std::string json);
       bool LoadDb();
+      void Lock();
+      void Unlock();
     
       sqlite3 *          _sqlHandler;
       pthread_mutex_t   _lock;
