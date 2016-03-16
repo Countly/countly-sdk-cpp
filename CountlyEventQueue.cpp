@@ -30,6 +30,7 @@
 #include "CountlyEventQueue.h"
 #include <sstream>
 #include <iomanip>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "Countly.h"
@@ -306,7 +307,7 @@ namespace CountlyCpp
     return ret;
   }
   
-  std::string CountlyEventQueue::PopEvent(int * evtId)
+  std::string CountlyEventQueue::PopEvent(int * evtId, int offset)
   {
     string ret;
     char *zErrMsg = NULL;
@@ -318,8 +319,9 @@ namespace CountlyCpp
       LoadDb();
     
     pthread_mutex_lock(&_lock);
-    string req = "SELECT evtid, event FROM events LIMIT 1";
-    unsigned int code = sqlite3_get_table(_sqlHandler, req.c_str(), &pazResult, &rows, &nbCols, &zErrMsg);
+    char req[64];
+    sprintf(req, "SELECT evtid, event FROM events LIMIT 1 OFFSET %d", offset);
+    unsigned int code = sqlite3_get_table(_sqlHandler, req, &pazResult, &rows, &nbCols, &zErrMsg);
     if (code != SQLITE_OK)
     {
       if ((code == SQLITE_CORRUPT) || (code == SQLITE_IOERR_SHORT_READ) || (code == SQLITE_IOERR_WRITE) || (code == SQLITE_IOERR))

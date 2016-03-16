@@ -232,7 +232,7 @@ namespace CountlyCpp
     if (!_beginSessionSent)
       BeginSession();
     
-    std::string json = queue->PopEvent(&evtId);
+    std::string json = queue->PopEvent(&evtId, 0);
     if (evtId == -1)
     {
       if (Countly::GetTimestamp() - _lastSend > KEEPALIVE)

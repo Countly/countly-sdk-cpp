@@ -46,7 +46,7 @@ namespace CountlyCpp
       void SetPath(std::string path);
 
       int Count();
-      std::string PopEvent(int * evtId);
+      std::string PopEvent(int * evtId, int offset);
       void ClearEvent(int evtId);
     
       bool RecordEvent(std::string key, int count);
