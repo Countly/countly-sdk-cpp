@@ -69,7 +69,7 @@ namespace CountlyCpp
   {
     pthread_mutexattr_t mutAttr;
     pthread_mutexattr_init(&mutAttr);
-    pthread_mutex_init(&_guard, &mutAttr);
+    pthread_mutex_init(&_lock, &mutAttr);
     _path = "";
   }
   
@@ -77,7 +77,7 @@ namespace CountlyCpp
   {
     if (_sqlHandler)
       sqlite3_close(_sqlHandler);
-    pthread_mutex_destroy(&_guard);
+    pthread_mutex_destroy(&_lock);
   }
   
   void CountlyEventQueue::SetPath(std::string path)
@@ -87,12 +87,12 @@ namespace CountlyCpp
 
   void CountlyEventQueue::Lock()
   {
-    pthread_mutex_lock(&_guard);
+    pthread_mutex_lock(&_lock);
   }
 
   void CountlyEventQueue::Unlock()
   {
-    pthread_mutex_unlock(&_guard);
+    pthread_mutex_unlock(&_lock);
   }
 
   bool CountlyEventQueue::LoadDb()
