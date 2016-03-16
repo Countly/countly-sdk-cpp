@@ -38,6 +38,8 @@
 
 #ifndef _WIN32
 #include <pthread.h>
+#else
+#include <windows.h>
 #endif
 
 namespace CountlyCpp
@@ -73,7 +75,12 @@ namespace CountlyCpp
       CountlyEventQueue   * _eventQueue;
       CountlyConnectionQueue   * _connectionQueue;
 
-      pthread_t             _thread;
+      #ifndef _WIN32
+        pthread_t           _thread;
+      #else
+        HANDLE              _thread;
+      #endif
+
       bool                  _threadRunning;
 
     

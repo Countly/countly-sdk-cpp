@@ -35,6 +35,8 @@
 
 #ifndef _WIN32
 #include <pthread.h>
+#else
+#include <windows.h>
 #endif
 
 namespace CountlyCpp
@@ -67,8 +69,14 @@ namespace CountlyCpp
       void Unlock();
     
       sqlite3 *          _sqlHandler;
-      pthread_mutex_t   _lock;
       std::string       _path;
+
+      #ifndef _WIN32
+        pthread_mutex_t   _lock;
+      #else
+        HANDLE            _lock;
+      #endif
+
   };
   
 }

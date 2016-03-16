@@ -28,8 +28,11 @@
  */
 
 #include "Countly.h"
-#include <unistd.h>
 #include <stdlib.h>
+
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 using namespace CountlyCpp;
 using namespace std;

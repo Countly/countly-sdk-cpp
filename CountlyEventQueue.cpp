@@ -67,17 +67,25 @@ namespace CountlyCpp
   CountlyEventQueue::CountlyEventQueue() :
   _sqlHandler(NULL)
   {
-    pthread_mutexattr_t mutAttr;
-    pthread_mutexattr_init(&mutAttr);
-    pthread_mutex_init(&_lock, &mutAttr);
     _path = "";
+    #ifndef _WIN32
+      pthread_mutexattr_t mutAttr;
+      pthread_mutexattr_init(&mutAttr);
+      pthread_mutex_init(&_guard, &mutAttr);
+    #else
+      _lock = CreateMutex(NULL, false, NULL);
+    #endif
   }
   
   CountlyEventQueue::~CountlyEventQueue()
   {
     if (_sqlHandler)
       sqlite3_close(_sqlHandler);
-    pthread_mutex_destroy(&_lock);
+    #ifndef _WIN32
+      pthread_mutex_destroy(&_guard);
+    #else
+      CloseHandle(_lock);
+    #endif
   }
   
   void CountlyEventQueue::SetPath(std::string path)
@@ -87,12 +95,20 @@ namespace CountlyCpp
 
   void CountlyEventQueue::Lock()
   {
-    pthread_mutex_lock(&_lock);
+    #ifndef _WIN32
+      pthread_mutex_lock(&_guard);
+    #else
+      WaitForSingleObject(_lock, INFINITE);
+    #endif
   }
 
   void CountlyEventQueue::Unlock()
   {
-    pthread_mutex_unlock(&_lock);
+    #ifndef _WIN32
+      pthread_mutex_unlock(&_guard);
+    #else
+      ReleaseMutex(_lock);
+    #endif
   }
 
   bool CountlyEventQueue::LoadDb()

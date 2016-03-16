@@ -351,7 +351,11 @@ namespace CountlyCpp
     ret = Send(s, (char *)http.str().c_str(), http.str().size());
     if (!ret)
     {
-      close(s);
+      #ifndef _WIN32
+        close(s);
+      #else
+        closesocket(s);
+      #endif
       return false;
     }
 
@@ -367,7 +371,13 @@ namespace CountlyCpp
     
     if ((readSize >= 15) && (!memcmp(buf, "HTTP/1.1 200 OK", 15)))
       ret = true;
-    close(s);
+
+    #ifndef _WIN32
+      close(s);
+    #else
+      closesocket(s);
+    #endif
+
     return ret;
   }
   
@@ -466,7 +476,11 @@ namespace CountlyCpp
   
   void CountlyConnectionQueue::Close(int s)
   {
-    close(s);
+    #ifndef _WIN32
+      close(s);
+    #else
+      closesocket(s);
+    #endif
   }
   
 #ifndef NOSSL
