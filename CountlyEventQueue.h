@@ -67,7 +67,7 @@ namespace CountlyCpp
       void Unlock();
     
       sqlite3 *          _sqlHandler;
-      pthread_mutex_t   _lock;
+      pthread_mutex_t   _guard;
       std::string       _path;
   };
   
