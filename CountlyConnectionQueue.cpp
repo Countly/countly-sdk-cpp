@@ -34,6 +34,7 @@
 #include "Countly.h"
 #include <stdio.h>
 #include <string.h>
+#include <vector>
 
 #ifdef WIN32
   #include <winsock2.h>
@@ -225,6 +226,8 @@ namespace CountlyCpp
   bool CountlyConnectionQueue::UpdateSession(CountlyEventQueue * queue)
   {
     int evtId;
+    std::vector<int> evtIds;
+    std::string all;
     string URI;
     if (!_deviceId.size())
       _deviceId = queue->GetDeviceId();
@@ -244,6 +247,9 @@ namespace CountlyCpp
       return false;
     }
     
+    evtIds.push_back(evtId);
+    all = json;
+
     _lastSend = Countly::GetTimestamp();
   
     /*
@@ -270,11 +276,21 @@ namespace CountlyCpp
       }
      ]
      */
-    json = "[" + json + "]";
-    URI = "/i?app_key=" + _appKey + "&device_id=" + _deviceId + "&events=" + URLEncode(json);
+
+    for (int i = 1; i < 50; i++) {
+      json = queue->PopEvent(&evtId, i);
+      if (evtId == -1) break;
+      evtIds.push_back(evtId);
+      all = all + "," + json;
+    }
+
+    all = "[" + all + "]";
+    URI = "/i?app_key=" + _appKey + "&device_id=" + _deviceId + "&events=" + URLEncode(all);
     if (HTTPGET(URI))
     {
-      queue->ClearEvent(evtId);
+      for (size_t i = 0; i < evtIds.size(); i++) {
+        queue->ClearEvent(evtIds[i]);
+      }
       return true;
     }
     else
