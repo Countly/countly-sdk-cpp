@@ -28,7 +28,7 @@
  */
 
 #include "Countly.h"
-#ifndef WIN32
+#ifndef _WIN32
 #include <sys/time.h>
 #include <sys/times.h>
 #include <time.h>
@@ -172,7 +172,7 @@ namespace CountlyCpp
       }
       upd ++;
 
-#ifndef WIN32
+#ifndef _WIN32
       sleep(1); //don't block for COUNTLY_DEFAULT_UPDATE_INTERVAL, it's really too long a pthread_join
 #else
       Sleep(1000);
@@ -187,7 +187,7 @@ namespace CountlyCpp
     
       //times returns seconds from 1970 * CLK_TCK (nb of units per second)
       // *1000/CLK_TCK --> ms
-#ifdef WIN32
+#ifdef _WIN32
     FILETIME lp;
     GetSystemTimeAsFileTime(&lp);
     unsigned long long res;

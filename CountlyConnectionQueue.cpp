@@ -36,7 +36,7 @@
 #include <string.h>
 #include <vector>
 
-#ifdef WIN32
+#ifdef _WIN32
   #include <winsock2.h>
 #else
   #include <sys/socket.h>
@@ -80,7 +80,7 @@ namespace CountlyCpp
   {
     _version = COUNTLY_VERSION;
 
-#ifdef WIN32
+#ifdef _WIN32
     WSADATA winit;
 
     if (WSAStartup(MAKEWORD(2,2),&winit) != 0)
@@ -100,7 +100,7 @@ namespace CountlyCpp
     string URI = "/i?app_key=" + _appKey +"&device_id="+ _deviceId +"&end_session=1";
     HTTPGET(URI);
 
-#ifdef WIN32
+#ifdef _WIN32
     WSACleanup();
 #endif
 #ifndef NOSSL
@@ -417,7 +417,7 @@ namespace CountlyCpp
     remoteAddr.sin_port        = htons(_appPort);
     
     int  ret = connect(s,(struct sockaddr*)&remoteAddr,sizeof(remoteAddr));
-#ifndef WIN32
+#ifndef _WIN32
     if (ret < 0)
     {
       switch (errno)
@@ -525,7 +525,7 @@ namespace CountlyCpp
     else
       ret = send(s, buffer, size, 0x00); //Send data
 
-#ifndef WIN32
+#ifndef _WIN32
     if (ret < 0)
     {
       switch (errno)
