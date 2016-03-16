@@ -1,5 +1,5 @@
 /*
- TestCountly.cpp
+ CountlyTest.cpp
  CountlyCpp
  
  Created by Benoit Girard on 26/10/14.
