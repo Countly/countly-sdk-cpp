@@ -64,10 +64,12 @@ namespace CountlyCpp
 {
   
   
-  CountlyEventQueue::CountlyEventQueue() :
-  _sqlHandler(NULL)
+  CountlyEventQueue::CountlyEventQueue()
   {
     _path = "";
+#ifndef NOSQLITE
+    _sqlHandler = NULL;
+#endif
 #ifndef _WIN32
     pthread_mutexattr_t mutAttr;
     pthread_mutexattr_init(&mutAttr);
@@ -79,8 +81,10 @@ namespace CountlyCpp
   
   CountlyEventQueue::~CountlyEventQueue()
   {
+#ifndef NOSQLITE
     if (_sqlHandler)
       sqlite3_close(_sqlHandler);
+#endif
 #ifndef _WIN32
     pthread_mutex_destroy(&_lock);
 #else
@@ -115,6 +119,7 @@ namespace CountlyCpp
   {
     assert(_path.size());
     
+#ifndef NOSQLITE
     Lock();
     if (_sqlHandler)
     {
@@ -157,6 +162,8 @@ namespace CountlyCpp
       }
     }
     Unlock();
+#endif
+
     return true;
   }
 
@@ -230,6 +237,7 @@ namespace CountlyCpp
 
   bool CountlyEventQueue::AddEvent(std::string json)
   {
+#ifndef NOSQLITE
     if (!_sqlHandler && !LoadDb())
       return false;
     
@@ -250,12 +258,17 @@ namespace CountlyCpp
       }
     }
     Unlock();
+#else
+#endif
+
     return true;
   }
   
   std::string CountlyEventQueue::GetDeviceId()
   {
     string deviceid;
+
+#ifndef NOSQLITE
     char *zErrMsg = NULL;
     char **pazResult;
     int rows, nbCols;
@@ -296,6 +309,8 @@ namespace CountlyCpp
       }
     }
     Unlock();
+#else
+#endif
 
     return deviceid;
   }
@@ -303,6 +318,8 @@ namespace CountlyCpp
   int CountlyEventQueue::Count()
   {
     int ret = 0;
+
+#ifndef NOSQLITE
     char *zErrMsg = NULL;
     char **pazResult;
     int rows, nbCols;
@@ -328,6 +345,8 @@ namespace CountlyCpp
       ret = atoi(pazResult[1]);
     sqlite3_free_table(pazResult);
     Unlock();
+#else
+#endif
 
     return ret;
   }
@@ -335,6 +354,8 @@ namespace CountlyCpp
   std::string CountlyEventQueue::PopEvent(int * evtId, int offset)
   {
     string ret;
+
+#ifndef NOSQLITE
     char *zErrMsg = NULL;
     char **pazResult;
     int rows, nbCols;
@@ -371,12 +392,15 @@ namespace CountlyCpp
     ret = pazResult[3];
     sqlite3_free_table(pazResult);
     Unlock();
-    
+#else
+#endif
+
     return ret;
   }
   
   void CountlyEventQueue::ClearEvent(int evtId)
   {
+#ifndef NOSQLITE
     stringstream req;
     req  << "DELETE FROM events WHERE evtid=" << dec << evtId;
     Lock();
@@ -396,6 +420,8 @@ namespace CountlyCpp
       }
     }
     Unlock();
+#else
+#endif
   }
   
   

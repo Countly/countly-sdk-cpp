@@ -31,12 +31,15 @@
 #define __CountlyCpp__CountlyEventQueue__
 #include <iostream>
 #include <map>
-#include "sqlite3.h"
 
 #ifndef _WIN32
 #include <pthread.h>
 #else
 #include <windows.h>
+#endif
+
+#ifndef NOSQLITE
+#include "sqlite3.h"
 #endif
 
 namespace CountlyCpp
@@ -67,10 +70,12 @@ namespace CountlyCpp
       bool LoadDb();
       void Lock();
       void Unlock();
-    
-      sqlite3 *          _sqlHandler;
-      std::string       _path;
 
+      std::string       _path;
+    
+#ifndef NOSQLITE
+      sqlite3 *          _sqlHandler;
+#endif
 #ifndef _WIN32
       pthread_mutex_t   _lock;
 #else
