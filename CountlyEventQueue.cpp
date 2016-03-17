@@ -403,12 +403,12 @@ namespace CountlyCpp
 #ifndef NOSQLITE
     stringstream req;
     req  << "DELETE FROM events WHERE evtid=" << dec << evtId;
-    Lock();
-    char *zErrMsg = NULL;
 
     if (!_sqlHandler)
       LoadDb();
     
+    Lock();
+    char *zErrMsg = NULL;
     unsigned int code = sqlite3_exec(_sqlHandler, req.str().c_str(), NULL, 0, &zErrMsg);
     
     if (code != SQLITE_OK)
