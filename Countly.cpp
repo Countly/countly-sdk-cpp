@@ -109,11 +109,11 @@ namespace CountlyCpp
     if (!_threadRunning)
       return;
     _threadRunning = false;
-    #ifndef _WIN32
-      pthread_join(_thread, NULL);
-    #else
-      WaitForSingleObject(_thread, INFINITE);
-    #endif
+#ifndef _WIN32
+    pthread_join(_thread, NULL);
+#else
+    WaitForSingleObject(_thread, INFINITE);
+#endif
   }
   
   void Countly::SetPath(std::string path)
@@ -126,19 +126,19 @@ namespace CountlyCpp
     _connectionQueue->SetAppKey(appKey);
     _connectionQueue->SetAppHost(host, port);
 
-    #ifndef _WIN32
-      pthread_attr_t attr;
-      pthread_attr_init(&attr);
-      pthread_create(&_thread,
-                     &attr,
-                     _startThreadTimer,
-                     (void *)this);
-    #else
-      _thread = CreateThread(NULL, 0,
-                             (LPTHREAD_START_ROUTINE)_startThreadTimer,
-                             (void *)this,
-                             0, NULL);
-    #endif
+#ifndef _WIN32
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_create(&_thread,
+                   &attr,
+                   _startThreadTimer,
+                   (void *)this);
+#else
+    _thread = CreateThread(NULL, 0,
+                           (LPTHREAD_START_ROUTINE)_startThreadTimer,
+                           (void *)this,
+                           0, NULL);
+#endif
   }
   
   void Countly::StartOnCloud(std::string appKey)

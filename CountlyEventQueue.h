@@ -71,11 +71,11 @@ namespace CountlyCpp
       sqlite3 *          _sqlHandler;
       std::string       _path;
 
-      #ifndef _WIN32
-        pthread_mutex_t   _lock;
-      #else
-        HANDLE            _lock;
-      #endif
+#ifndef _WIN32
+      pthread_mutex_t   _lock;
+#else
+      HANDLE            _lock;
+#endif
 
   };
   

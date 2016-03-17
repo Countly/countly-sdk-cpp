@@ -75,11 +75,11 @@ namespace CountlyCpp
       CountlyEventQueue   * _eventQueue;
       CountlyConnectionQueue   * _connectionQueue;
 
-      #ifndef _WIN32
-        pthread_t           _thread;
-      #else
-        HANDLE              _thread;
-      #endif
+#ifndef _WIN32
+      pthread_t             _thread;
+#else
+      HANDLE                _thread;
+#endif
 
       bool                  _threadRunning;
 
