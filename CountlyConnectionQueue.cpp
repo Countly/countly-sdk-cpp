@@ -278,7 +278,8 @@ namespace CountlyCpp
      ]
      */
 
-    for (int i = 1; i < 50; i++) {
+    for (int i = 1; i < 50; i++)
+    {
       json = queue->PopEvent(&evtId, i);
       if (evtId == -1) break;
       evtIds.push_back(evtId);
@@ -289,7 +290,8 @@ namespace CountlyCpp
     URI = "/i?app_key=" + _appKey + "&device_id=" + _deviceId + "&events=" + URLEncode(all);
     if (HTTPGET(URI))
     {
-      for (size_t i = 0; i < evtIds.size(); i++) {
+      for (size_t i = 0; i < evtIds.size(); i++)
+      {
         queue->ClearEvent(evtIds[i]);
       }
       return true;

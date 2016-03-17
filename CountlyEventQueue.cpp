@@ -124,7 +124,7 @@ namespace CountlyCpp
     if (_sqlHandler)
     {
       Unlock();
-      return false;
+      return true;
     }
     
     string fullpath = _path + string("countly.sqlite");
@@ -238,7 +238,7 @@ namespace CountlyCpp
   bool CountlyEventQueue::AddEvent(std::string json)
   {
 #ifndef NOSQLITE
-    if (!_sqlHandler && !LoadDb())
+    if (!LoadDb())
       return false;
     
     Lock();
@@ -273,8 +273,7 @@ namespace CountlyCpp
     char **pazResult;
     int rows, nbCols;
     
-    if (!_sqlHandler)
-      LoadDb();
+    LoadDb();
     
       //Read deviceid from settings
     Lock();
@@ -324,8 +323,7 @@ namespace CountlyCpp
     char **pazResult;
     int rows, nbCols;
     
-    if (!_sqlHandler)
-      LoadDb();
+    LoadDb();
     
     Lock();
     string req = "SELECT COUNT(*) FROM events";
@@ -361,8 +359,7 @@ namespace CountlyCpp
     int rows, nbCols;
     *evtId = -1;
     
-    if (!_sqlHandler)
-      LoadDb();
+    LoadDb();
     
     Lock();
     char req[64];
@@ -404,9 +401,8 @@ namespace CountlyCpp
     stringstream req;
     req  << "DELETE FROM events WHERE evtid=" << dec << evtId;
 
-    if (!_sqlHandler)
-      LoadDb();
-    
+    LoadDb();
+
     Lock();
     char *zErrMsg = NULL;
     unsigned int code = sqlite3_exec(_sqlHandler, req.str().c_str(), NULL, 0, &zErrMsg);
