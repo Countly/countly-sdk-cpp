@@ -120,9 +120,9 @@ namespace CountlyCpp
   bool CountlyEventQueue::LoadDb()
   {
     assert(_path.size());
+    Lock();
     
 #ifndef NOSQLITE
-    Lock();
     if (_sqlHandler)
     {
       Unlock();
@@ -163,9 +163,9 @@ namespace CountlyCpp
         return false;
       }
     }
-    Unlock();
 #endif
 
+    Unlock();
     return true;
   }
 
@@ -239,12 +239,11 @@ namespace CountlyCpp
 
   bool CountlyEventQueue::AddEvent(std::string json)
   {
-#ifndef NOSQLITE
     if (!LoadDb())
       return false;
-    
     Lock();
-    
+
+#ifndef NOSQLITE
     char *zErrMsg = NULL;
     string req = "INSERT INTO events (event) VALUES('" + json +"')";
     unsigned int code = sqlite3_exec(_sqlHandler, req.c_str(), NULL, 0, &zErrMsg);
@@ -259,17 +258,16 @@ namespace CountlyCpp
         return false;
       }
     }
-    Unlock();
 #else
     _events.push_back({ _evtIdCounter++, json });
 #endif
 
+    Unlock();
     return true;
   }
   
   std::string CountlyEventQueue::MakeDeviceId()
   {
-      //Failed, create new one
     stringstream UDID;
     unsigned long long seed = Countly::GetTimestamp();
     srand(seed);
@@ -281,16 +279,15 @@ namespace CountlyCpp
   std::string CountlyEventQueue::GetDeviceId()
   {
     string deviceid;
+    LoadDb();
+    Lock();
 
 #ifndef NOSQLITE
     char *zErrMsg = NULL;
     char **pazResult;
     int rows, nbCols;
     
-    LoadDb();
-    
-      //Read deviceid from settings
-    Lock();
+    // Read deviceid from settings
     string req = "SELECT deviceid FROM settings";
     unsigned int code = sqlite3_get_table(_sqlHandler, req.c_str(), &pazResult, &rows, &nbCols, &zErrMsg);
     if ((code == SQLITE_OK) && (rows))
@@ -315,26 +312,25 @@ namespace CountlyCpp
         _sqlHandler = NULL;
       }
     }
-    Unlock();
 #else
     deviceid = "TODO";
 #endif
 
+    Unlock();
     return deviceid;
   }
   
   int CountlyEventQueue::Count()
   {
     int ret = 0;
+    LoadDb();
+    Lock();
 
 #ifndef NOSQLITE
     char *zErrMsg = NULL;
     char **pazResult;
     int rows, nbCols;
     
-    LoadDb();
-    
-    Lock();
     string req = "SELECT COUNT(*) FROM events";
     unsigned int code = sqlite3_get_table(_sqlHandler, req.c_str(), &pazResult, &rows, &nbCols, &zErrMsg);
     if (code != SQLITE_OK)
@@ -351,17 +347,19 @@ namespace CountlyCpp
     if (rows != 0)
       ret = atoi(pazResult[1]);
     sqlite3_free_table(pazResult);
-    Unlock();
 #else
     ret = _events.size();
 #endif
 
+    Unlock();
     return ret;
   }
   
   std::string CountlyEventQueue::PopEvent(int * evtId, int offset)
   {
     string ret;
+    LoadDb();
+    Lock();
 
 #ifndef NOSQLITE
     char *zErrMsg = NULL;
@@ -369,9 +367,6 @@ namespace CountlyCpp
     int rows, nbCols;
     *evtId = -1;
     
-    LoadDb();
-    
-    Lock();
     char req[64];
     sprintf(req, "SELECT evtid, event FROM events LIMIT 1 OFFSET %d", offset);
     unsigned int code = sqlite3_get_table(_sqlHandler, req, &pazResult, &rows, &nbCols, &zErrMsg);
@@ -393,12 +388,11 @@ namespace CountlyCpp
       return "";
     }
 
-      //pasResult[0] : "evtid"
-      //pasResult[1] : "event"
+    // pasResult[0] : "evtid"
+    // pasResult[1] : "event"
     *evtId = atoi(pazResult[2]);
     ret = pazResult[3];
     sqlite3_free_table(pazResult);
-    Unlock();
 #else
     *evtId = -1;
     if (offset >= _events.size()) return "";
@@ -406,18 +400,19 @@ namespace CountlyCpp
     ret = _events[offset].json;
 #endif
 
+    Unlock();
     return ret;
   }
   
   void CountlyEventQueue::ClearEvent(int evtId)
   {
+    LoadDb();
+    Lock();
+
 #ifndef NOSQLITE
     stringstream req;
     req  << "DELETE FROM events WHERE evtid=" << dec << evtId;
 
-    LoadDb();
-
-    Lock();
     char *zErrMsg = NULL;
     unsigned int code = sqlite3_exec(_sqlHandler, req.str().c_str(), NULL, 0, &zErrMsg);
     
@@ -429,12 +424,13 @@ namespace CountlyCpp
         _sqlHandler = NULL;
       }
     }
-    Unlock();
 #else
     assert(_events.size() > 0);
     assert(_events.front().evtId == evtId);
     _events.pop_front();
 #endif
+
+    Unlock();
   }
   
   
