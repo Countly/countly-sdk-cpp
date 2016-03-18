@@ -31,6 +31,7 @@
 #define __CountlyCpp__CountlyEventQueue__
 #include <iostream>
 #include <map>
+#include <deque>
 
 #ifndef _WIN32
 #include <pthread.h>
@@ -75,7 +76,15 @@ namespace CountlyCpp
     
 #ifndef NOSQLITE
       sqlite3 *          _sqlHandler;
+#else
+      struct EventsItem {
+        int                     evtId;
+        std::string             json;
+      };
+      std::deque<EventsItem>    _events;
+      int                       _evtIdCounter;
 #endif
+
 #ifndef _WIN32
       pthread_mutex_t   _lock;
 #else

@@ -69,6 +69,8 @@ namespace CountlyCpp
     _path = "";
 #ifndef NOSQLITE
     _sqlHandler = NULL;
+#else
+    _evtIdCounter = 0;
 #endif
 #ifndef _WIN32
     pthread_mutexattr_t mutAttr;
@@ -259,6 +261,7 @@ namespace CountlyCpp
     }
     Unlock();
 #else
+    _events.push_back({ _evtIdCounter++, json });
 #endif
 
     return true;
@@ -309,6 +312,7 @@ namespace CountlyCpp
     }
     Unlock();
 #else
+    deviceid = "TODO";
 #endif
 
     return deviceid;
@@ -344,6 +348,7 @@ namespace CountlyCpp
     sqlite3_free_table(pazResult);
     Unlock();
 #else
+    ret = _events.size();
 #endif
 
     return ret;
@@ -390,6 +395,10 @@ namespace CountlyCpp
     sqlite3_free_table(pazResult);
     Unlock();
 #else
+    *evtId = -1;
+    if (offset >= _events.size()) return "";
+    *evtId = _events[offset].evtId;
+    ret = _events[offset].json;
 #endif
 
     return ret;
@@ -417,6 +426,9 @@ namespace CountlyCpp
     }
     Unlock();
 #else
+    assert(_events.size() > 0);
+    assert(_events.front().evtId == evtId);
+    _events.pop_front();
 #endif
   }
   
