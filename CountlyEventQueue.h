@@ -84,6 +84,7 @@ namespace CountlyCpp
       };
       std::deque<EventsItem>    _events;
       int                       _evtIdCounter;
+      std::string               _deviceid;
 #endif
 
 #ifndef _WIN32

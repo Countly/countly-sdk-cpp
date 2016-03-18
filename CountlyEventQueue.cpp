@@ -29,6 +29,7 @@
 
 #include "CountlyEventQueue.h"
 #include <sstream>
+#include <fstream>
 #include <iomanip>
 #include <stdio.h>
 #include <stdlib.h>
@@ -163,6 +164,27 @@ namespace CountlyCpp
         return false;
       }
     }
+#else
+    if (_deviceid.length() > 0)
+    {
+      Unlock();
+      return true;
+    }
+
+    string deviceid;
+    string fullpath = _path + string("countly.deviceid");
+    std::fstream fs;
+    fs.open(fullpath, std::fstream::in);
+    getline(fs, deviceid);
+    fs.close();
+    if (deviceid.length() == 0)
+    {
+      fs.open(fullpath, std::fstream::out);
+      deviceid = MakeDeviceId();
+      fs << deviceid << std::endl;
+      fs.close();
+    }
+    _deviceid = deviceid;
 #endif
 
     Unlock();
@@ -313,7 +335,7 @@ namespace CountlyCpp
       }
     }
 #else
-    deviceid = "TODO";
+    deviceid = _deviceid;
 #endif
 
     Unlock();
