@@ -4,7 +4,7 @@ TARGET=$(OUTDIR)/libCountlyCpp.a
 OBJDIR=./obj/
 SRCDIR=.
 TESTMAIN=./bin/CountlyTest
-CFLAGS=-Wall -Wuninitialized -MMD -MP -DSQLITE_THREADSAFE=1 -DWIN32_LEAN_AND_MEAN
+CFLAGS=-Wall -Wuninitialized -MMD -MP -DSQLITE_THREADSAFE=1 -DWIN32_LEAN_AND_MEAN -DNOSQLITE
 
 CPP_SRCS += \
 $(SRCDIR)/Countly.cpp \
