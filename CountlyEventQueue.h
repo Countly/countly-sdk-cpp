@@ -71,6 +71,7 @@ namespace CountlyCpp
       bool LoadDb();
       void Lock();
       void Unlock();
+      std::string MakeDeviceId();
 
       std::string       _path;
     

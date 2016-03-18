@@ -267,6 +267,17 @@ namespace CountlyCpp
     return true;
   }
   
+  std::string CountlyEventQueue::MakeDeviceId()
+  {
+      //Failed, create new one
+    stringstream UDID;
+    unsigned long long seed = Countly::GetTimestamp();
+    srand(seed);
+    for (int i = 0; i < 20 / sizeof(int); i++)
+      UDID << setfill ('0') << setw(8) << hex << rand();
+    return UDID.str();
+  }
+
   std::string CountlyEventQueue::GetDeviceId()
   {
     string deviceid;
@@ -292,13 +303,7 @@ namespace CountlyCpp
     sqlite3_free_table(pazResult);
     Unlock();
     
-      //Failed, create new one
-    stringstream UDID;
-    unsigned long long seed = Countly::GetTimestamp();
-    srand(seed);
-    for (int i = 0; i < 20 / sizeof(int); i++)
-      UDID << setfill ('0') << setw(8) << hex << rand();
-    deviceid = UDID.str();
+    deviceid = MakeDeviceId();
     req = "INSERT INTO settings (deviceid) VALUES('" + deviceid + "')";
     Lock();
     code = sqlite3_exec(_sqlHandler, req.c_str(), NULL, 0, &zErrMsg);
