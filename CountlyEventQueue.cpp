@@ -174,12 +174,12 @@ namespace CountlyCpp
     string deviceid;
     string fullpath = _path + string("countly.deviceid");
     std::fstream fs;
-    fs.open(fullpath, std::fstream::in);
+    fs.open(fullpath.c_str(), std::fstream::in);
     getline(fs, deviceid);
     fs.close();
     if (deviceid.length() == 0)
     {
-      fs.open(fullpath, std::fstream::out);
+      fs.open(fullpath.c_str(), std::fstream::out);
       deviceid = MakeDeviceId();
       fs << deviceid << std::endl;
       fs.close();
