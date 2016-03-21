@@ -223,6 +223,7 @@ namespace CountlyCpp
     return HTTPGET(URI);
   }
   
+  // returns true only if no more events to send
   bool CountlyConnectionQueue::UpdateSession(CountlyEventQueue * queue)
   {
     int evtId;
@@ -248,7 +249,7 @@ namespace CountlyCpp
         if (!HTTPGET(URI)) return false;
         _lastSend = Countly::GetTimestamp();
       }
-      return false;
+      return true;
     }
     
     evtIds.push_back(evtId);
@@ -297,12 +298,8 @@ namespace CountlyCpp
       {
         queue->ClearEvent(evtIds[i]);
       }
-      return true;
     }
-    else
-    {
-      return false;
-    }
+    return false;
   }
   
   string CountlyConnectionQueue::URLEncode(const string &value)
