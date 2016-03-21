@@ -67,7 +67,6 @@ int main(int argc, char * argv[])
         break;
     }
     if (c == 'q') {
-      Countly::DeleteInstance();
       break;
     }
   }
