@@ -244,7 +244,7 @@ namespace CountlyCpp
       if (Countly::GetTimestamp() - _lastSend > KEEPALIVE)
       {
         URI = "/i?app_key=" + _appKey +"&device_id="+ _deviceId +"&session_duration=30";
-        HTTPGET(URI);
+        if (!HTTPGET(URI)) return false;
         _lastSend = Countly::GetTimestamp();
       }
       return false;
