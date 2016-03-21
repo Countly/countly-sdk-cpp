@@ -45,7 +45,6 @@
 #include <mach/mach.h>
 #endif
 #include <iostream>
-#define COUNTLY_DEFAULT_UPDATE_INTERVAL 60.0
 
 #include "CountlyEventQueue.h"
 #include "CountlyConnectionQueue.h"
@@ -168,22 +167,12 @@ namespace CountlyCpp
   
   void Countly::StartThreadTimer()
   {
-    int upd = 0;
-    
     _threadRunning = true;
-    bool lastUpd = false;
     while (_threadRunning)
     {
-        //If not checked for too long or somehting was pending on last update
-      if ((!upd) || (upd >= COUNTLY_DEFAULT_UPDATE_INTERVAL) || lastUpd)
-      {
-        lastUpd = _connectionQueue->UpdateSession(_eventQueue);
-        upd = 0;
-      }
-      upd ++;
-
+      _connectionQueue->UpdateSession(_eventQueue);
 #ifndef _WIN32
-      usleep(1000 * 1000); //don't block for COUNTLY_DEFAULT_UPDATE_INTERVAL, it's really too long a pthread_join
+      usleep(1000 * 1000);
 #else
       Sleep(1000);
 #endif
