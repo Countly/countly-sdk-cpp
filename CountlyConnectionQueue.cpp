@@ -68,7 +68,7 @@
 #endif
 
   //  https://count.ly/resources/reference/server-api
-#define KEEPALIVE 30 * 1000 // Send keepalive every 30s
+#define KEEPALIVE 30 // Send keepalive every 30s
 #define BUFFSIZE 512
 
 using namespace std;
@@ -241,7 +241,7 @@ namespace CountlyCpp
     std::string json = queue->PopEvent(&evtId, 0);
     if (evtId == -1)
     {
-      if (Countly::GetTimestamp() - _lastSend > KEEPALIVE)
+      if (Countly::GetTimestamp() - _lastSend > KEEPALIVE * 1000)
       {
         URI = "/i?app_key=" + _appKey +"&device_id="+ _deviceId +"&session_duration=30";
         if (!HTTPGET(URI)) return false;
