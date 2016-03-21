@@ -50,20 +50,28 @@ int main(int argc, char * argv[])
   ct = Countly::GetInstance();
   ct->SetPath("./");
   ct->SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Free", "1.0");
-  
-  
   ct->Start("ce894ea797762a11560217117abea9b1e354398c", argv[1], atoi(argv[2]));
-  ct->RecordEvent("testk1", 123);
-  ct->RecordEvent("testk1", 17);
-  ct->RecordEvent("testk1", 34);
-  ct->RecordEvent("testk2", 644, 13.3);
+
+  int c;
+  while (true) {
+    c = getchar();
+    switch (c) {
+      case '0':
+        ct->RecordEvent("test0", 15);
+        break;
+      case '1':
+        ct->RecordEvent("test1", 140, 12.5);
+        break;
+      case '2':
+        ct->RecordEvent("test2", 600, 17);
+        break;
+    }
+    if (c == 'q') {
+      Countly::DeleteInstance();
+      break;
+    }
+  }
  
-#ifndef _WIN32
-  sleep(4);
-#else
-  Sleep(4000);
-#endif
-  
   Countly::DeleteInstance();
   
   return 0;
