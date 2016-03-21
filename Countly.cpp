@@ -184,7 +184,7 @@ namespace CountlyCpp
       upd ++;
 
 #ifndef _WIN32
-      sleep(1); //don't block for COUNTLY_DEFAULT_UPDATE_INTERVAL, it's really too long a pthread_join
+      usleep(1000 * 1000); //don't block for COUNTLY_DEFAULT_UPDATE_INTERVAL, it's really too long a pthread_join
 #else
       Sleep(1000);
 #endif
