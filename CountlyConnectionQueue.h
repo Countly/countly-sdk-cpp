@@ -70,7 +70,7 @@ namespace CountlyCpp
     std::string _app_version;
 
     
-    void  BeginSession();
+    bool  BeginSession();
     std::string URLEncode(const std::string &value);
     bool  HTTPGET(std::string URI);
     std::string ResolveHostname(std::string hostname);

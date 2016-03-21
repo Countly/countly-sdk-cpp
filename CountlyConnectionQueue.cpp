@@ -156,7 +156,7 @@ namespace CountlyCpp
     _app_version  = app_version;
   }
   
-  void CountlyConnectionQueue::BeginSession()
+  bool CountlyConnectionQueue::BeginSession()
   {
     string URI = "/i?app_key=" + _appKey +"&device_id="+ _deviceId +"&sdk_version="+_version+"&begin_session=1";
     bool metricsOk = false;
@@ -220,8 +220,7 @@ namespace CountlyCpp
     
     if (metricsOk)
       URI += "&metrics=" + URLEncode(metrics);
-    if (HTTPGET(URI))
-      _beginSessionSent = true;
+    return HTTPGET(URI);
   }
   
   bool CountlyConnectionQueue::UpdateSession(CountlyEventQueue * queue)
@@ -234,7 +233,10 @@ namespace CountlyCpp
       _deviceId = queue->GetDeviceId();
     
     if (!_beginSessionSent)
-      BeginSession();
+    {
+      if (!BeginSession()) return false;
+      _beginSessionSent = true;
+    }
     
     std::string json = queue->PopEvent(&evtId, 0);
     if (evtId == -1)
