@@ -417,7 +417,10 @@ namespace CountlyCpp
     sqlite3_free_table(pazResult);
 #else
     *evtId = -1;
-    if (offset >= _events.size()) return "";
+    if (offset >= _events.size()) {
+      Unlock();
+      return "";
+    }
     *evtId = _events[offset].evtId;
     ret = _events[offset].json;
 #endif
