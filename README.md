@@ -17,6 +17,7 @@ CountlyCpp has been designed to work with very few deps in order to be portable 
 * launch `generate.cmd`
 
 Windows: `MSBuild.exe CountlyCpp.sln` or run MSVS against CountlyCpp.sln
+
 Linux: `make`
 
 **Usage :**

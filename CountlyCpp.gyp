@@ -67,9 +67,31 @@
     "conditions": [
       ["OS=='win'", {
         "libraries": [
-          "-lDebug/lib/libCountlyCpp.lib",
+          "-llibCountlyCpp.lib",
           "-lws2_32",
         ],
+        "configurations": {
+          "Debug": {
+            "msvs_settings": {
+              "VCLinkerTool": {
+                "AdditionalLibraryDirectories": [
+                  "Debug/lib",
+                ],
+              },
+            },
+          },
+          "Release": {
+            "msvs_settings": {
+              "VCLinkerTool": {
+                "AdditionalLibraryDirectories": [
+                  "Release/lib",
+                ],
+              },
+            },
+          },
+        },
+      }],
+      ["OS=='linux'", {
       }],
     ],
   },
