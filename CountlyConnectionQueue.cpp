@@ -244,9 +244,10 @@ namespace CountlyCpp
     {
       if (Countly::GetTimestamp() - _lastSend > KEEPALIVE * 1000)
       {
-        std::string sessionDuration = std::to_string(KEEPALIVE);
-        URI = "/i?app_key=" + _appKey +"&device_id="+ _deviceId +"&session_duration=" + sessionDuration;
-        if (!HTTPGET(URI)) return false;
+        std::ostringstream URI;
+        URI << "/i?app_key=" + _appKey +"&device_id="+ _deviceId +"&session_duration=";
+        URI << KEEPALIVE;
+        if (!HTTPGET(URI.str())) return false;
         _lastSend = Countly::GetTimestamp();
       }
       return true;

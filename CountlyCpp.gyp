@@ -43,8 +43,6 @@
           "-lws2_32",
         ],
       }],
-      ["OS=='linux'", {
-      }],
     ],
     "defines": [
       "WIN32_LEAN_AND_MEAN",
@@ -72,8 +70,6 @@
           "-lDebug/lib/libCountlyCpp.lib",
           "-lws2_32",
         ],
-      }],
-      ["OS=='linux'", {
       }],
     ],
   },

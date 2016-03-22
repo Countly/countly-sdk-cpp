@@ -7,3 +7,7 @@ node_modules
 *.v12.suo
 /Debug
 /Release
+/out
+/Makefile
+/*.Makefile
+/*.target.mk
