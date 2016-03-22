@@ -8,15 +8,11 @@ var mocha = require("mocha");
 var describe = mocha.describe;
 var it = mocha.it;
 
-var common = require("./common.js");
+var binary = require("./binary.js");
 var server = require("./server.js");
 var child;
 
 describe(path.basename(__filename), function() {
-
-  it("binaryPath should exist", function(done) {
-    fs.access(common.binaryPath, done);
-  });
 
   it("server should have no requests", function(done) {
     assert.equal(server.shift(), undefined);
@@ -25,7 +21,7 @@ describe(path.basename(__filename), function() {
 
   it("binary should start", function(done) {
     child = cp.spawn(
-      common.binaryPath,
+      binary,
       ["http://" + server.ip, server.port]
     );
     setTimeout(function() {

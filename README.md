@@ -5,7 +5,7 @@ C++ SDK for Countly (count.ly)
 
 CountlyCpp is a portable SDK for Countly (http://count.ly) written in C++.
 
-**Dependencies:**
+**Dependencies**
 
 CountlyCpp has been designed to work with very few deps in order to be portable on most platforms.
 
@@ -20,9 +20,9 @@ Windows: `MSBuild.exe CountlyCpp.sln` or run MSVS against CountlyCpp.sln
 
 Linux: `make`
 
-**Usage :**
+**Usage**
 
-Typical use is :
+Typical use is:
 
 ```C++
 #include "Countly.h"
@@ -46,3 +46,8 @@ int main(int argc, char * argv[])
   return 0;
 }
 ```
+
+**Testing**
+
+`npm install --ignore-scripts`
+`npm test`
