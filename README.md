@@ -3,27 +3,21 @@ CountlyCpp
 
 C++ SDK for Countly (count.ly)
 
-
 CountlyCpp is a portable SDK for Countly (http://count.ly) written in C++.
 
 **Dependencies:**
 
 CountlyCpp has been designed to work with very few deps in order to be portable on most platforms.
-This SDK will require :
-* pthread (which is available on most platforms)
-
-That's all (sqlite, HTTP, JSON, etc. are embedded) !
-
-**Limitations :**
-* Dirty HTTP implementation. Will only deal with typical cases.
 
 **Building**
-Build SDK using provided Makefiles : make -f Makefile.xxx
-Include CountlyCpp.h in your project.
 
-Link with -lCountlyCpp -lssl -lcrypto
-If you dont plan to use HTTPS, link with -lCountlyCpp -DNOSSL
+* clone this repository
+* `git submodule init`
+* `git submodule update`
+* launch `generate.cmd`
 
+Windows: `MSBuild.exe CountlyCpp.sln` or run MSVS against CountlyCpp.sln
+Linux: `make`
 
 **Usage :**
 
@@ -51,10 +45,3 @@ int main(int argc, char * argv[])
   return 0;
 }
 ```
-
-**Versions**
-1.0 :  First release
-1.1 :  SetPath is now mandatory before use
-1.2 : Linux compatibility
-1.3 : Cleaning up things (was really too Quick and too Dirty.)
-1.4 : Added HTTPS support
