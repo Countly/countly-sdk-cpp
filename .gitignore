@@ -1,1 +1,9 @@
 node_modules
+*.sln
+*.vcxproj
+*.vcxproj.user
+*.sdf
+*.opensdf
+*.v12.suo
+/Debug
+/Release
