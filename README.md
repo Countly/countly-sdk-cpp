@@ -12,8 +12,7 @@ CountlyCpp has been designed to work with very few deps in order to be portable 
 **Building**
 
 * clone this repository
-* `git submodule init`
-* `git submodule update`
+* `git submodule update --init --recursive'
 * launch `generate.cmd`
 
 Windows: `MSBuild.exe CountlyCpp.sln` or run MSVS against CountlyCpp.sln
