@@ -2,6 +2,7 @@
 
 var fs = require("fs");
 var path = require("path");
+var cp = require("child_process");
 var binary;
 
 [ "../Debug/CountlyCppTest.exe",
@@ -20,7 +21,13 @@ var binary;
   }
 });
 
-module.exports = binary;
+module.exports.spawn = function(server) {
+  return cp.spawn(
+    binary,
+    ["http://" + server.ip, server.port],
+    { stdio: "pipe" }
+  );
+}
 
 if (!module.parent) {
   console.log(binary);

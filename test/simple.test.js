@@ -9,16 +9,12 @@ var it = mocha.it;
 
 var binary = require("./binary.js");
 var server = require("./server.js");
+var events = require("./events.js");
 
 describe(path.basename(__filename), function() {
 
   it("start correct server", function(done) {
     server.start("correct");
-    done();
-  });
-
-  it("server should have no requests", function(done) {
-    assert.equal(server.shift(), undefined);
     done();
   });
 
@@ -33,6 +29,28 @@ describe(path.basename(__filename), function() {
     setTimeout(function() {
       done();
     }, 500);
+  });
+
+  it("make 3 events", function(done) {
+    child.stdin.write("0");
+    child.stdin.write("1");
+    child.stdin.write("2");
+    done();
+  });
+
+  it("wait 2 seconds", function(done) {
+    this.timeout(3 * 1000);
+    setTimeout(function() {
+      done();
+    }, 2 * 1000);
+  });
+
+  it("binary should exit", function(done) {
+    child.stdin.write("q");
+    setTimeout(function() {
+      assert.equal(binary_exited, true);
+      done();
+    }, 1500);
   });
 
   var app_key = "ce894ea797762a11560217117abea9b1e354398c";
@@ -58,56 +76,15 @@ describe(path.basename(__filename), function() {
     done();
   });
 
-  it("server should have no requests", function(done) {
-    assert.equal(server.shift(), undefined);
-    assert.equal(binary_exited, false);
-    done();
-  });
-
-  it("next test will take much time...", function(done) {
-    done();
-  });
-
-  it("wait 29 seconds", function(done) {
-    this.timeout(30 * 1000);
-    setTimeout(function() {
-      done();
-    }, 25 * 1000);
-  });
-
-  it("server should have no requests", function(done) {
-    assert.equal(server.shift(), undefined);
-    assert.equal(binary_exited, false);
-    done();
-  });
-
-  it("wait 5 seconds", function(done) {
-    this.timeout(6 * 1000);
-    setTimeout(function() {
-      done();
-    }, 5 * 1000);
-  });
-
-  it("check keepalive", function(done) {
+  it("check events pack", function(done) {
     var json = server.shift();
     assert.equal(json.app_key, app_key);
     assert.equal(json.device_id, device_id);
-    assert.equal(json.session_duration, "30");
+    assert.equal(json.events.length, 3);
+    events.test(json.events[0], 0);
+    events.test(json.events[1], 1);
+    events.test(json.events[2], 2);
     done();
-  });
-
-  it("server should have no requests", function(done) {
-    assert.equal(server.shift(), undefined);
-    assert.equal(binary_exited, false);
-    done();
-  });
-
-  it("binary should exit", function(done) {
-    child.stdin.write("q");
-    setTimeout(function() {
-      assert.equal(binary_exited, true);
-      done();
-    }, 1500);
   });
 
   it("check end_session", function(done) {
@@ -115,6 +92,12 @@ describe(path.basename(__filename), function() {
     assert.equal(json.app_key, app_key);
     assert.equal(json.device_id, device_id);
     assert.equal(json.end_session, "1");
+    var json = server.shift();
+    done();
+  });
+
+  it("server should have no requests", function(done) {
+    assert.equal(server.shift(), undefined);
     done();
   });
 
