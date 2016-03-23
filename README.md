@@ -11,11 +11,13 @@ CountlyCpp has been designed to work with very few deps in order to be portable 
 
 **Building**
 
+Python 2.7 is required for GYP.
+
 * clone this repository
 * `git submodule update --init --recursive'
 * launch `generate.cmd`
 
-Windows: `MSBuild.exe CountlyCpp.sln` or run MSVS against CountlyCpp.sln
+Windows: `MSBuild.exe CountlyCpp.sln` or open CountlyCpp.sln in MSVS
 
 Linux: `make`
 
