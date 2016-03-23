@@ -7,9 +7,9 @@ var mocha = require("mocha");
 var describe = mocha.describe;
 var it = mocha.it;
 
-var binary = require("./binary.js");
-var server = require("./server.js");
-var events = require("./events.js");
+var binary = require("./util.binary.js");
+var server = require("./util.server.js");
+var events = require("./util.events.js");
 
 describe(path.basename(__filename), function() {
 
