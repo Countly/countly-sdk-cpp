@@ -19,9 +19,7 @@ describe(path.basename(__filename), function() {
 
   it("wait 5 seconds", function(done) {
     this.timeout(6 * 1000);
-    setTimeout(function() {
-      done();
-    }, 5 * 1000);
+    setTimeout(done, 5 * 1000);
   });
 
   it("start correct server", function(done) {
@@ -31,9 +29,7 @@ describe(path.basename(__filename), function() {
 
   it("wait 5 seconds", function(done) {
     this.timeout(6 * 1000);
-    setTimeout(function() {
-      done();
-    }, 5 * 1000);
+    setTimeout(done, 5 * 1000);
   });
 
   it("binary should exit", function(done) {

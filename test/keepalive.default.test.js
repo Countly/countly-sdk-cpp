@@ -52,9 +52,7 @@ describe(path.basename(__filename), function() {
 
   it("wait 29 seconds", function(done) {
     this.timeout(30 * 1000);
-    setTimeout(function() {
-      done();
-    }, 25 * 1000);
+    setTimeout(done, 25 * 1000);
   });
 
   it("server should have no requests", function(done) {
@@ -64,9 +62,7 @@ describe(path.basename(__filename), function() {
 
   it("wait 5 seconds", function(done) {
     this.timeout(6 * 1000);
-    setTimeout(function() {
-      done();
-    }, 5 * 1000);
+    setTimeout(done, 5 * 1000);
   });
 
   it("check keepalive", function(done) {

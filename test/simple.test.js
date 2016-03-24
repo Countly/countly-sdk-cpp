@@ -31,9 +31,7 @@ describe(path.basename(__filename), function() {
 
   it("wait 2 seconds", function(done) {
     this.timeout(3 * 1000);
-    setTimeout(function() {
-      done();
-    }, 2 * 1000);
+    setTimeout(done, 2 * 1000);
   });
 
   it("binary should exit", function(done) {
