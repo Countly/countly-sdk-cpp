@@ -210,8 +210,6 @@ namespace CountlyCpp
     evtIds.push_back(evtId);
     all = json;
 
-    _lastSend = Countly::GetTimestamp();
-  
     /*
      http://your_domain/i?
      app_key=AAA &
@@ -247,14 +245,11 @@ namespace CountlyCpp
 
     all = "[" + all + "]";
     URI = "/i?app_key=" + _appKey + "&device_id=" + _deviceId + "&events=" + URLEncode(all);
-    if (HTTPGET(URI))
-    {
-      for (size_t i = 0; i < evtIds.size(); i++)
-      {
-        queue->ClearEvent(evtIds[i]);
-      }
-    }
-    return false;
+    if (!HTTPGET(URI)) return false;
+    _lastSend = Countly::GetTimestamp();
+    for (size_t i = 0; i < evtIds.size(); i++)
+      queue->ClearEvent(evtIds[i]);
+    return false; // false! see above
   }
   
   string CountlyConnectionQueue::URLEncode(const string &value)
