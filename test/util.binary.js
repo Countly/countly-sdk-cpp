@@ -33,7 +33,7 @@ module.exports.start = function(server, cb) {
   binary = cp.spawn(
     filename,
     ["http://" + server.ip, server.port],
-    { stdio: "pipe" }
+    { stdio: [ "pipe", "inherit", "inherit" ] }
   );
 
   binary.on("exit", function() {
