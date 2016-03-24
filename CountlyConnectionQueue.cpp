@@ -239,7 +239,7 @@ namespace CountlyCpp
   
   bool CountlyConnectionQueue::HTTPGET(std::string URI)
   {
-    bool sent = false;
+    bool ok = false;
 
 #ifndef _WIN32
     CURL* curl;
@@ -255,12 +255,12 @@ namespace CountlyCpp
       if (code == CURLE_OK)
       {
         code = curl_easy_perform(curl);
-        sent = (code == CURLE_OK);
+        ok = (code == CURLE_OK);
       }
       curl_easy_cleanup(curl);
     }
 
-    return sent;
+    return ok;
 #else
     HINTERNET hSession = WinHttpOpen(NULL, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
       WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
@@ -281,8 +281,18 @@ namespace CountlyCpp
           headers << "User-Agent: Countly " << Countly::GetVersion();
           wchar_t wideHeaders[256];
           MultiByteToWideChar(0, 0, headers.str().c_str(), -1, wideHeaders, 256);
-          sent = !!WinHttpSendRequest(hRequest, wideHeaders, headers.str().size(),
-            WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
+          ok = WinHttpSendRequest(hRequest, wideHeaders, headers.str().size(),
+            WINHTTP_NO_REQUEST_DATA, 0, 0, 0) != 0;
+          if (ok) {
+            ok = WinHttpReceiveResponse(hRequest, NULL) != 0;
+            if (ok) {
+              DWORD dwStatusCode = 0;
+              DWORD dwSize = sizeof(dwStatusCode);
+              WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                WINHTTP_HEADER_NAME_BY_INDEX, &dwStatusCode, &dwSize, WINHTTP_NO_HEADER_INDEX);
+              ok = dwStatusCode == 200;
+            }
+          }
           WinHttpCloseHandle(hRequest);
         }
         WinHttpCloseHandle(hConnect);
@@ -291,7 +301,7 @@ namespace CountlyCpp
     }
 #endif
 
-    return sent;
+    return ok;
   }
 
 }

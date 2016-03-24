@@ -32,6 +32,35 @@ module.exports.start = function(correct) {
       res.end("Success\n");
     }).listen(port, ip);
 
+  } else
+  if (correct === "502") { // 502 Bad Gateway after "countly stop"
+
+    var counter = 0;
+
+    server = http.createServer(function(req, res) {
+      if (counter === 0) {
+        counter++;
+        res.writeHead(502, { "Content-Type": "text/html" });
+        res.end("<html>\n" +
+                "<head><title>502 Bad Gateway</title></head>\n" +
+                "<body bgcolor=\"white\">\n" +
+                "<center><h1>502 Bad Gateway</h1></center>\n" +
+                "<hr><center>nginx/1.4.6 (Ubuntu)</center>\n" +
+                "</body>\n" +
+                "</html>\n" +
+                "<!-- a padding to disable MSIE and Chrome friendly error page -->\n" +
+                "<!-- a padding to disable MSIE and Chrome friendly error page -->\n" +
+                "<!-- a padding to disable MSIE and Chrome friendly error page -->\n" +
+                "<!-- a padding to disable MSIE and Chrome friendly error page -->\n" +
+                "<!-- a padding to disable MSIE and Chrome friendly error page -->\n" +
+                "<!-- a padding to disable MSIE and Chrome friendly error page -->\n");
+      } else {
+        queue.push(req);
+        res.writeHead(200, { "Content-Type": "text/html" });
+        res.end("Success\n");
+      }
+    }).listen(port, ip);
+
   } else {
     assert(false);
   }
@@ -45,4 +74,8 @@ module.exports.stop = function() {
   server.close();
   server = null;
 
+}
+
+if (!module.parent) {
+  module.exports.start("502");
 }
