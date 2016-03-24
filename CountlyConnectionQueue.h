@@ -43,6 +43,7 @@ namespace CountlyCpp
     
     void SetAppKey(std::string key);
     void SetAppHost(std::string host, int port);
+    void SetMaxEventsPerMessage(int maxEvents);
     void SetMetrics(std::string os, std::string os_version, std::string device, std::string resolution, std::string carrier, std::string app_version);
 
     bool UpdateSession(CountlyEventQueue * queue);
@@ -52,6 +53,7 @@ namespace CountlyCpp
     std::string _appHost;
     std::string _appHostName;
     int         _appPort;
+    int         _maxEvents;
     std::string _deviceId;
     std::string _version;
     unsigned long long _lastSend;

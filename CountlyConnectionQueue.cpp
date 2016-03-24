@@ -51,6 +51,7 @@ namespace CountlyCpp
 {
   
   CountlyConnectionQueue::CountlyConnectionQueue():
+  _maxEvents(50),
   _lastSend(0),
   _beginSessionSent(false)
   {
@@ -95,6 +96,11 @@ namespace CountlyCpp
     size_t p = _appHostName.find("/");
     if (p != string::npos)
       _appHostName = _appHostName.substr(0, p);
+  }
+
+  void CountlyConnectionQueue::SetMaxEventsPerMessage(int maxEvents)
+  {
+    _maxEvents = maxEvents;
   }
 
   void CountlyConnectionQueue::SetMetrics(std::string os, std::string os_version, std::string device, std::string resolution, std::string carrier, std::string app_version)
@@ -204,7 +210,7 @@ namespace CountlyCpp
         if (!HTTPGET(URI.str())) return false;
         _lastSend = Countly::GetTimestamp();
       }
-      return true;
+      return true; // true is only here. no events and successful keepalive (if needed)
     }
     
     evtIds.push_back(evtId);
@@ -235,7 +241,7 @@ namespace CountlyCpp
      ]
      */
 
-    for (int i = 1; i < 50; i++)
+    for (int i = 1; i < _maxEvents; i++)
     {
       json = queue->PopEvent(&evtId, i);
       if (evtId == -1) break;

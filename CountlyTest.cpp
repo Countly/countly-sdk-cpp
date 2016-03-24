@@ -53,6 +53,9 @@ int main(int argc, char * argv[])
   while (true) {
     c = getchar();
     switch (c) {
+      case 'm':
+        ct->SetMaxEventsPerMessage(40);
+        break;
       case '0':
         ct->RecordEvent("test0", 15);
         break;

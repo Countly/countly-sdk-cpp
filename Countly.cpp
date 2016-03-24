@@ -86,11 +86,14 @@ namespace CountlyCpp
     return COUNTLY_VERSION;
   }
  
+  void Countly::SetMaxEventsPerMessage(int maxEvents)
+  {
+    _connectionQueue->SetMaxEventsPerMessage(maxEvents);
+  }
+
   void Countly::SetMetrics(std::string os, std::string os_version, std::string device, std::string resolution, std::string carrier, std::string app_version)
   {
-
     _connectionQueue->SetMetrics(os, os_version, device, resolution, carrier, app_version);
-
   }
   
   
