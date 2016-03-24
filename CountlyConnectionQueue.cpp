@@ -27,13 +27,9 @@
  SOFTWARE.
  */
 
-#include "CountlyConnectionQueue.h"
-#include <stdio.h>
-#include <sstream>
+#include <assert.h>
 #include <iomanip>
-#include "Countly.h"
-#include <stdio.h>
-#include <string.h>
+#include <sstream>
 #include <vector>
 
 #ifdef _WIN32
@@ -42,16 +38,8 @@
 #include <curl/curl.h>
 #endif
 
-#include <sys/types.h>
-#include <stdlib.h>
-
-#include <stdbool.h>
-#include <assert.h>
-#include <errno.h>
-
-#ifndef _WIN32
-#include <unistd.h>
-#endif
+#include "Countly.h"
+#include "CountlyConnectionQueue.h"
 
 //  https://count.ly/resources/reference/server-api
 #define KEEPALIVE 30 // Send keepalive every 30s
@@ -297,12 +285,14 @@ namespace CountlyCpp
     CURLcode code;
     curl = curl_easy_init();
 
-    if (curl) {
+    if (curl)
+    {
       stringstream fullURI;
       fullURI << (_https ? "https://" : "http://");
       fullURI << _appHostName << ":" << _appPort << URI;
       code = curl_easy_setopt(curl, CURLOPT_URL, fullURI.str().c_str());
-      if (code == CURLE_OK) {
+      if (code == CURLE_OK)
+      {
         code = curl_easy_perform(curl);
         sent = (code == CURLE_OK);
       }
@@ -313,20 +303,19 @@ namespace CountlyCpp
 #else
     HINTERNET hSession = WinHttpOpen(NULL, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
       WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-
-    if (hSession) {
-
+    if (hSession)
+    {
       wchar_t wideHostName[256];
       MultiByteToWideChar(0, 0, _appHostName.c_str(), -1, wideHostName, 256);
       HINTERNET hConnect = WinHttpConnect(hSession, wideHostName, _appPort, 0);
-      if (hConnect) {
-
+      if (hConnect)
+      {
         wchar_t wideURI[65536];
         MultiByteToWideChar(0, 0, URI.c_str(), -1, wideURI, 65536);
         HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", wideURI, NULL,
           WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, _https ? WINHTTP_FLAG_SECURE : 0);
-        if (hRequest) {
-
+        if (hRequest)
+        {
           stringstream headers;
           headers << "User-Agent: Countly " << Countly::GetVersion();
           wchar_t wideHeaders[256];
@@ -334,13 +323,10 @@ namespace CountlyCpp
           sent = !!WinHttpSendRequest(hRequest, wideHeaders, headers.str().size(),
             WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
           WinHttpCloseHandle(hRequest);
-
         }
         WinHttpCloseHandle(hConnect);
-
       }
       WinHttpCloseHandle(hSession);
-
     }
 #endif
 

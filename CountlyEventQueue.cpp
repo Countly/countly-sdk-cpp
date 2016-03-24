@@ -27,15 +27,14 @@
  SOFTWARE.
  */
 
-#include "CountlyEventQueue.h"
+#include "assert.h"
+#include <cstdlib>
+#include <iomanip>
 #include <sstream>
 #include <fstream>
-#include <iomanip>
-#include <stdio.h>
-#include <stdlib.h>
 
 #include "Countly.h"
-#include "assert.h"
+#include "CountlyEventQueue.h"
 
 using namespace std;
 /*
@@ -281,7 +280,10 @@ namespace CountlyCpp
       }
     }
 #else
-    _events.push_back({ _evtIdCounter++, json });
+    EventsItem item;
+    item.evtId = _evtIdCounter++;
+    item.json = json;
+    _events.push_back(item);
 #endif
 
     Unlock();
@@ -293,8 +295,8 @@ namespace CountlyCpp
     stringstream UDID;
     unsigned long long seed = Countly::GetTimestamp();
     srand((unsigned int) seed);
-    for (int i = 0; i < 20 / sizeof(int); i++)
-      UDID << setfill ('0') << setw(8) << hex << rand();
+    for (int i = 0; i < 5; i++) // 5 * 8 = 40
+      UDID << setfill('0') << setw(8) << hex << rand();
     return UDID.str();
   }
 

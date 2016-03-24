@@ -27,13 +27,9 @@
  SOFTWARE.
  */
 
+#include <cstdio>
+#include <cstdlib>
 #include "Countly.h"
-#include <stdio.h>
-#include <stdlib.h>
-
-#ifndef _WIN32
-#include <unistd.h>
-#endif
 
 using namespace CountlyCpp;
 using namespace std;

@@ -27,27 +27,23 @@
  SOFTWARE.
  */
 
-#include "Countly.h"
 #ifndef _WIN32
-#include <sys/time.h>
-#include <sys/times.h>
-#include <time.h>
 #include <unistd.h>
-#include <string.h>
 #else
-#include <time.h>
-#include <Windows.h>
-#include <cstdio>
+//#include <time.h>
+//#include <Windows.h>
+//#include <cstdio>
 #endif
 
 #if TARGET_OS_IPHONE
 #include <mach/clock.h>
 #include <mach/mach.h>
 #endif
-#include <iostream>
 
+#include "Countly.h"
 #include "CountlyEventQueue.h"
 #include "CountlyConnectionQueue.h"
+
 using namespace std;
 
 namespace CountlyCpp
