@@ -32,10 +32,6 @@
 #include <iostream>
 #include "CountlyEventQueue.h"
 
-#ifndef NOSSL
-  #include <openssl/ssl.h>
-#endif
-
 namespace CountlyCpp
 {
   
@@ -69,21 +65,9 @@ namespace CountlyCpp
     std::string _carrier;
     std::string _app_version;
 
-    
     bool  BeginSession();
     std::string URLEncode(const std::string &value);
     bool  HTTPGET(std::string URI);
-    std::string ResolveHostname(std::string hostname);
-    int   Connect();
-    void  Close(int s);
-
-    bool  Send(int s, char * buffer, int size);
-    
-#ifndef NOSSL
-    int   ConnectSSL();
-    void  CloseSSL(int s);
-    SSL * _sslHandler;
-#endif
   };
 }
 #endif /* defined(__CountlyCpp__CountlyConnectionQueue__) */

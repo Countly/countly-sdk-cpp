@@ -37,24 +37,8 @@
 #include <vector>
 
 #ifdef _WIN32
-  #include <winsock2.h>
 #else
-  #include <sys/socket.h>
-  #include <fcntl.h>
-  #include <netinet/tcp.h>
-  #include <netinet/in.h>
-  #include <arpa/inet.h>
-  #include <netdb.h>
 #endif
-
-#ifndef NOSSL
-  #include <openssl/bio.h>
-  #include <openssl/err.h>
-  #include <openssl/pem.h>
-  #include <openssl/x509.h>
-  #include <openssl/x509_vfy.h>
-#endif
-
 
 #include <sys/types.h>
 #include <stdlib.h>
@@ -67,7 +51,7 @@
 #include <unistd.h>
 #endif
 
-  //  https://count.ly/resources/reference/server-api
+//  https://count.ly/resources/reference/server-api
 #define KEEPALIVE 30 // Send keepalive every 30s
 #define BUFFSIZE 512
 
@@ -80,34 +64,12 @@ namespace CountlyCpp
   _beginSessionSent(false)
   {
     _version = COUNTLY_VERSION;
-
-#ifdef _WIN32
-    WSADATA winit;
-
-    if (WSAStartup(MAKEWORD(2,2),&winit) != 0)
-    {
-
-    }
-#endif
-#ifndef NOSSL
-    SSL_load_error_strings();
-    SSL_library_init();
-    OpenSSL_add_all_algorithms();
-#endif
   }
   
   CountlyConnectionQueue::~CountlyConnectionQueue()
   {
     string URI = "/i?app_key=" + _appKey +"&device_id="+ _deviceId +"&end_session=1";
     HTTPGET(URI);
-
-#ifdef _WIN32
-    WSACleanup();
-#endif
-#ifndef NOSSL
-    ERR_free_strings();
-    EVP_cleanup();
-#endif
   }
   
   void CountlyConnectionQueue::SetAppKey(std::string key)
@@ -127,9 +89,6 @@ namespace CountlyCpp
     }
     else if (_appHost.find("https://") == 0)
     {
-#ifdef NOSSL
-      assert(0);
-#endif
       _https = true;
       _appHostName = host.substr(8);
     }
@@ -137,15 +96,13 @@ namespace CountlyCpp
     {
       assert(0);
     }
-      //Deal with http://bla.com/
+
+    // deal with http://bla.com/
     size_t p = _appHostName.find("/");
     if (p != string::npos)
       _appHostName = _appHostName.substr(0, p);
-      //Resolve
-    _appHost = ResolveHostname(_appHostName);
-
   }
- 
+
   void CountlyConnectionQueue::SetMetrics(std::string os, std::string os_version, std::string device, std::string resolution, std::string carrier, std::string app_version)
   {
     _os           = os;
@@ -313,13 +270,13 @@ namespace CountlyCpp
     {
       string::value_type c = (*i);
       
-        // Keep alphanumeric and other accepted characters intact
+      // Keep alphanumeric and other accepted characters intact
       if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
         escaped << c;
         continue;
       }
       
-        // Any other characters are percent-encoded
+      // Any other characters are percent-encoded
       escaped << '%' << setw(2) << int((unsigned char) c);
     }
     
@@ -328,297 +285,7 @@ namespace CountlyCpp
   
   bool CountlyConnectionQueue::HTTPGET(std::string URI)
   {
-    stringstream http;
-    bool ret;
-    int s;
-    char buf[512];
-    int readSize;
-
-    if (_https) {
-#ifndef NOSSL
-      s = ConnectSSL();
-#else
-      assert(false);
-#endif
-    } else
-      s = Connect();
-    if (s < 0)
-      return false;
-    
-
-    http << "GET " << URI << " HTTP/1.0\r\n";
-    http << "Host: "<<_appHostName << ":" "" << dec << _appPort << "\r\n";
-    http << "Connection: Close\r\n";
-    http << "User-Agent: Countly " << Countly::GetVersion() << "\r\n\r\n";
-    
-    ret = Send(s, (char *)http.str().c_str(), http.str().size());
-    if (!ret)
-    {
-#ifndef _WIN32
-      close(s);
-#else
-      closesocket(s);
-#endif
-      return false;
-    }
-
-    memset(buf, 0x00, 512);
-    if(_https) {
-#ifndef NOSSL
-      readSize = SSL_read(_sslHandler, (char *)buf, 512);
-#else
-      assert(false);
-#endif
-    } else
-      readSize = recv(s, (char *)buf, 512, 0);
-    
-    if ((readSize >= 15) && (!memcmp(buf, "HTTP/1.1 200 OK", 15)))
-      ret = true;
-
-#ifndef _WIN32
-    close(s);
-#else
-    closesocket(s);
-#endif
-
-    return ret;
-  }
-  
-  
-  std::string CountlyConnectionQueue::ResolveHostname(std::string hostname)
-  {
-    char result[32];
-    
-    struct hostent * ent = gethostbyname(hostname.c_str());
-    
-    if (!ent)
-      return "";
-    
-    if (!ent->h_addr_list || !ent->h_addr_list[0])
-      return "";
-    if (ent->h_length == 4)
-    {
-      unsigned char a, b, c, d;
-      a = ent->h_addr_list[0][0];
-      b = ent->h_addr_list[0][1];
-      c = ent->h_addr_list[0][2];
-      d = ent->h_addr_list[0][3];
-      sprintf(result, "%u.%u.%u.%u",  (unsigned int) (a),
-              (unsigned int) (b),
-              (unsigned int) (c),
-              (unsigned int) (d));
-    }
-    else if (ent->h_length == 8)
-    {
-      sprintf(result, "%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x",
-              ent->h_addr_list[0][0],
-              ent->h_addr_list[0][1],
-              ent->h_addr_list[0][2],
-              ent->h_addr_list[0][3],
-              ent->h_addr_list[0][4],
-              ent->h_addr_list[0][5],
-              ent->h_addr_list[0][6],
-              ent->h_addr_list[0][7]);
-    }
-    else
-    {
-      return "";
-    }
-    
-    return std::string(result);
-  }
-  
-  int CountlyConnectionQueue::Connect()
-  {
-    struct sockaddr_in remoteAddr;
-    string host = ResolveHostname(_appHost);
-    int s = socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
-    memset((char *) &remoteAddr, 0x00, sizeof(remoteAddr));
-    remoteAddr.sin_family      = AF_INET;
-    remoteAddr.sin_addr.s_addr = inet_addr((char *)host.c_str());
-    remoteAddr.sin_port        = htons(_appPort);
-    
-    int  ret = connect(s,(struct sockaddr*)&remoteAddr,sizeof(remoteAddr));
-#ifndef _WIN32
-    if (ret < 0)
-    {
-      switch (errno)
-      {
-        case EALREADY:
-        case EINPROGRESS:
-          return -1;
-          break;
-        case EISCONN: // Error status : "Is connected" ..
-          break;
-        default:
-          return -1;
-          break;
-      }
-    }
-#else
-    if (ret == SOCKET_ERROR)
-    {
-      switch (WSAGetLastError())
-      {
-        case WSAEALREADY:
-        case WSAEINPROGRESS:
-        case WSAEWOULDBLOCK:
-        case WSAEINVAL: //according to Windock docs
-          return -1;
-        break;
-        case WSAEISCONN:
-        break;
-        default:
-          return -1;
-        break;
-      }
-    }
-#endif
-    return s;
-  }
-  
-  void CountlyConnectionQueue::Close(int s)
-  {
-#ifndef _WIN32
-    close(s);
-#else
-    closesocket(s);
-#endif
-  }
-  
-#ifndef NOSSL
-  int CountlyConnectionQueue::ConnectSSL()
-  {
-    int s;
-    SSL_CTX * sslContext;
-    int err;
-    
-    s = Connect();
-    if (s < 0)
-      return s;
-    
-    sslContext = SSL_CTX_new( SSLv23_client_method());
-    _sslHandler = SSL_new(sslContext);
-    SSL_set_fd(_sslHandler, s);
-    
-    err = SSL_connect(_sslHandler);
-    if (err <= 0)
-    {
-      switch (SSL_get_error(_sslHandler, err))
-      {
-        case SSL_ERROR_NONE:
-          break;
-        case SSL_ERROR_ZERO_RETURN:
-          break;
-        case SSL_ERROR_WANT_READ:
-          break;
-        case SSL_ERROR_WANT_WRITE:
-          break;
-        case SSL_ERROR_WANT_CONNECT:
-          break;
-        case SSL_ERROR_WANT_ACCEPT:
-          break;
-        case SSL_ERROR_WANT_X509_LOOKUP:
-          break;
-        case SSL_ERROR_SYSCALL:
-          break;
-        case SSL_ERROR_SSL:
-          break;
-      }
-      SSL_shutdown(_sslHandler);
-      SSL_free(_sslHandler);
-      return -1;
-    }
-    return s;
-  }
-  
-  void CountlyConnectionQueue::CloseSSL(int s)
-  {
-    SSL_shutdown(_sslHandler);
-    SSL_free(_sslHandler);
-    Close(s);
-  }
-#endif
-  
-  
-  
-  bool CountlyConnectionQueue::Send(int s, char * buffer, int size)
-  {
-    int ret;
-
-    if (_https) {
-#ifndef NOSSL
-      ret = SSL_write(_sslHandler, buffer, size);
-#else
-      assert(false);
-#endif
-    } else
-      ret = send(s, buffer, size, 0x00); //Send data
-
-#ifndef _WIN32
-    if (ret < 0)
-    {
-      switch (errno)
-      {
-        case ENETDOWN:
-        case ENETUNREACH:
-          return false;
-        break;
-        case EINTR:
-          return false;
-        break;
-        case ECONNRESET :
-        case EHOSTUNREACH:
-        case EPIPE:
-        case ENOTCONN:
-          return false;
-        break;
-        case EAGAIN: //Resource temporarily unavailable (retry later)
-          return false; //FIXME
-        break;
-        case EACCES:
-        case EBADF:
-        case EFAULT:
-        case EMSGSIZE:
-        case ENOBUFS:
-        case ENOTSOCK:
-        default:
-          return false;
-        break;
-      }
-    }
-#else
-    if (ret == SOCKET_ERROR)
-    {
-      switch (WSAGetLastError())
-      {
-        case WSAEWOULDBLOCK: //not ready to write //Try again until timeout
-          return false; //FIXME
-        break;
-        case WSAENETDOWN:
-        case WSAENETUNREACH:
-          return false;
-        break;
-        case WSAEINTR:
-          return false;
-        break;
-        case WSAECONNRESET :
-        case WSAEHOSTUNREACH:
-        case WSAENOTCONN:
-          return false;
-        break;
-        case WSAEACCES: //Broadcast addr
-        case WSAEBADF: //
-        case WSAEFAULT:
-        case WSAEMSGSIZE: //Message too large
-        case WSAENOBUFS:  //No buffer space
-        case WSAENOTSOCK: //Not a socket
-        default:
-          return false;
-        break;
-      }
-    }
-#endif
     return true;
   }
+
 }

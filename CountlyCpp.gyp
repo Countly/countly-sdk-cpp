@@ -18,7 +18,6 @@
     ],
     "defines": [
       "WIN32_LEAN_AND_MEAN",
-      "NOSSL",
       "NOSQLITE",
     ],
   },
@@ -46,7 +45,6 @@
     ],
     "defines": [
       "WIN32_LEAN_AND_MEAN",
-      "NOSSL",
       "NOSQLITE",
     ],
   },
