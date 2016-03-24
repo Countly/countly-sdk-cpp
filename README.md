@@ -12,11 +12,11 @@ CountlyCpp has been designed to work with very few deps in order to be portable 
 **Building**
 
 Python 2.7 is required for GYP.
-`sudo apt-get install libcurl4-openssl-dev` is also required in Linux.
+Package `libcurl4-openssl-dev` is also required in Linux.
 
 * clone this repository
 * `git submodule update --init --recursive'
-* launch `generate.cmd`
+* launch `generate` or `generate.cmd`
 
 Windows: `MSBuild.exe CountlyCpp.sln` or open CountlyCpp.sln in MSVS
 
@@ -51,5 +51,5 @@ int main(int argc, char * argv[])
 
 **Testing**
 
-`npm install --ignore-scripts`
-`npm test`
+* `npm install --ignore-scripts`
+* `npm test`
