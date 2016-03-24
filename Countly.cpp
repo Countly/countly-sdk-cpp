@@ -29,10 +29,6 @@
 
 #ifndef _WIN32
 #include <unistd.h>
-#else
-//#include <time.h>
-//#include <Windows.h>
-//#include <cstdio>
 #endif
 
 #if TARGET_OS_IPHONE

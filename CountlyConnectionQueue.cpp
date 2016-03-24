@@ -33,6 +33,7 @@
 #include <vector>
 
 #ifdef _WIN32
+#include <Windows.h>
 #include <WinHTTP.h>
 #else
 #include <curl/curl.h>
