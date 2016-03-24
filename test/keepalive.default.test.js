@@ -9,6 +9,7 @@ var it = mocha.it;
 
 var binary = require("./util.binary.js");
 var server = require("./util.server.js");
+var compare = require("./util.compare.js");
 
 describe(path.basename(__filename), function() {
 
@@ -26,25 +27,17 @@ describe(path.basename(__filename), function() {
     binary.start(server, done);
   });
 
-  var app_key = "ce894ea797762a11560217117abea9b1e354398c";
   var device_id;
 
   it("check begin_session", function(done) {
     var json = server.shift();
-    assert.equal(json.app_key, app_key);
-    assert.ok(json.device_id.length > 4);
-    device_id = json.device_id;
-    assert.equal(json.sdk_version, "1.4");
-    assert.equal(json.begin_session, "1");
-    // TODO // metrics.test(json.metrics);
+    device_id = compare(json, "begin_session");
     done();
   });
 
   it("check keepalive", function(done) {
     var json = server.shift();
-    assert.equal(json.app_key, app_key);
-    assert.equal(json.device_id, device_id);
-    assert.equal(json.session_duration, "30");
+    compare(json, "keepalive", device_id);
     done();
   });
 
@@ -78,9 +71,7 @@ describe(path.basename(__filename), function() {
 
   it("check keepalive", function(done) {
     var json = server.shift();
-    assert.equal(json.app_key, app_key);
-    assert.equal(json.device_id, device_id);
-    assert.equal(json.session_duration, "30");
+    compare(json, "keepalive", device_id);
     done();
   });
 
@@ -95,9 +86,7 @@ describe(path.basename(__filename), function() {
 
   it("check end_session", function(done) {
     var json = server.shift();
-    assert.equal(json.app_key, app_key);
-    assert.equal(json.device_id, device_id);
-    assert.equal(json.end_session, "1");
+    compare(json, "end_session", device_id);
     done();
   });
 

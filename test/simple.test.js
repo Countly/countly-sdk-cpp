@@ -40,32 +40,23 @@ describe(path.basename(__filename), function() {
     binary.stop(done);
   });
 
-  var app_key = "ce894ea797762a11560217117abea9b1e354398c";
   var device_id;
 
   it("check begin_session", function(done) {
     var json = server.shift();
-    assert.equal(json.app_key, app_key);
-    assert.ok(json.device_id.length > 4);
-    device_id = json.device_id;
-    assert.equal(json.sdk_version, "1.4");
-    assert.equal(json.begin_session, "1");
-    // TODO // metrics.test(json.metrics);
+    device_id = compare(json, "begin_session");
     done();
   });
 
   it("check keepalive", function(done) {
     var json = server.shift();
-    assert.equal(json.app_key, app_key);
-    assert.equal(json.device_id, device_id);
-    assert.equal(json.session_duration, "30");
+    compare(json, "keepalive", device_id);
     done();
   });
 
   it("check events pack", function(done) {
     var json = server.shift();
-    assert.equal(json.app_key, app_key);
-    assert.equal(json.device_id, device_id);
+    compare(json, "event", device_id);
     assert.equal(json.events.length, 3);
     compare(json.events[0], "0");
     compare(json.events[1], "1");
@@ -75,10 +66,7 @@ describe(path.basename(__filename), function() {
 
   it("check end_session", function(done) {
     var json = server.shift();
-    assert.equal(json.app_key, app_key);
-    assert.equal(json.device_id, device_id);
-    assert.equal(json.end_session, "1");
-    var json = server.shift();
+    compare(json, "end_session", device_id);
     done();
   });
 
