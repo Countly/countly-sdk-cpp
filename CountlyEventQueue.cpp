@@ -292,7 +292,7 @@ namespace CountlyCpp
   {
     stringstream UDID;
     unsigned long long seed = Countly::GetTimestamp();
-    srand(seed);
+    srand((unsigned int) seed);
     for (int i = 0; i < 20 / sizeof(int); i++)
       UDID << setfill ('0') << setw(8) << hex << rand();
     return UDID.str();
@@ -377,7 +377,7 @@ namespace CountlyCpp
     return ret;
   }
   
-  std::string CountlyEventQueue::PopEvent(int * evtId, int offset)
+  std::string CountlyEventQueue::PopEvent(int * evtId, size_t offset)
   {
     string ret;
     LoadDb();

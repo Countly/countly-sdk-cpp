@@ -288,7 +288,8 @@ namespace CountlyCpp
   {
 
     bool sent = false;
-    HINTERNET hSession = WinHttpOpen(NULL, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    HINTERNET hSession = WinHttpOpen(NULL, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+      WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
 
     if (hSession) {
 
@@ -304,10 +305,11 @@ namespace CountlyCpp
         if (hRequest) {
 
           stringstream headers;
-          headers << "User-Agent: Countly " << Countly::GetVersion() << "\r\n\r\n";
+          headers << "User-Agent: Countly " << Countly::GetVersion();
           wchar_t wideHeaders[256];
           MultiByteToWideChar(0, 0, headers.str().c_str(), -1, wideHeaders, 256);
-          sent = !!WinHttpSendRequest(hRequest, wideHeaders, headers.str().size(), WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
+          sent = !!WinHttpSendRequest(hRequest, wideHeaders, headers.str().size(),
+            WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
           WinHttpCloseHandle(hRequest);
 
         }
