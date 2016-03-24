@@ -9,8 +9,7 @@ var it = mocha.it;
 
 var binary = require("./util.binary.js");
 var server = require("./util.server.js");
-var events = require("./util.events.js");
-var metrics = require("./util.metrics.js");
+var compare = require("./util.compare.js");
 
 describe(path.basename(__filename), function() {
 
@@ -51,7 +50,7 @@ describe(path.basename(__filename), function() {
     device_id = json.device_id;
     assert.equal(json.sdk_version, "1.4");
     assert.equal(json.begin_session, "1");
-    metrics.test(json.metrics);
+    // TODO // metrics.test(json.metrics);
     done();
   });
 
@@ -68,9 +67,9 @@ describe(path.basename(__filename), function() {
     assert.equal(json.app_key, app_key);
     assert.equal(json.device_id, device_id);
     assert.equal(json.events.length, 3);
-    events.test(json.events[0], 0);
-    events.test(json.events[1], 1);
-    events.test(json.events[2], 2);
+    compare(json.events[0], "0");
+    compare(json.events[1], "1");
+    compare(json.events[2], "2");
     done();
   });
 
