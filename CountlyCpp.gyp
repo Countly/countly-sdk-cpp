@@ -17,7 +17,6 @@
       # you may add "sqlite3.c" here
     ],
     "defines": [
-      "WIN32_LEAN_AND_MEAN",
       "NOSQLITE",
     ],
   },
@@ -39,12 +38,11 @@
     "conditions": [
       ["OS=='win'", {
         "libraries": [
-          "-lws2_32",
+          "-lwinhttp",
         ],
       }],
     ],
     "defines": [
-      "WIN32_LEAN_AND_MEAN",
       "NOSQLITE",
     ],
   },
@@ -66,7 +64,7 @@
       ["OS=='win'", {
         "libraries": [
           "-llibCountlyCpp.lib",
-          "-lws2_32",
+          "-lwinhttp",
         ],
         "configurations": {
           "Debug": {

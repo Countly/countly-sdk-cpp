@@ -37,6 +37,7 @@
 #include <vector>
 
 #ifdef _WIN32
+#include <WinHTTP.h>
 #else
 #endif
 
@@ -285,7 +286,39 @@ namespace CountlyCpp
   
   bool CountlyConnectionQueue::HTTPGET(std::string URI)
   {
-    return true;
+
+    bool sent = false;
+    HINTERNET hSession = WinHttpOpen(NULL, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+
+    if (hSession) {
+
+      wchar_t wideHostName[256];
+      MultiByteToWideChar(0, 0, _appHostName.c_str(), -1, wideHostName, 256);
+      HINTERNET hConnect = WinHttpConnect(hSession, wideHostName, _appPort, 0);
+      if (hConnect) {
+
+        wchar_t wideURI[65536];
+        MultiByteToWideChar(0, 0, URI.c_str(), -1, wideURI, 65536);
+        HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", wideURI, NULL,
+          WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, _https ? WINHTTP_FLAG_SECURE : 0);
+        if (hRequest) {
+
+          stringstream headers;
+          headers << "User-Agent: Countly " << Countly::GetVersion() << "\r\n\r\n";
+          wchar_t wideHeaders[256];
+          MultiByteToWideChar(0, 0, headers.str().c_str(), -1, wideHeaders, 256);
+          sent = !!WinHttpSendRequest(hRequest, wideHeaders, headers.str().size(), WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
+          WinHttpCloseHandle(hRequest);
+
+        }
+        WinHttpCloseHandle(hConnect);
+
+      }
+      WinHttpCloseHandle(hSession);
+
+    }
+
+    return sent;
   }
 
 }
