@@ -49,12 +49,6 @@ describe(path.basename(__filename), function() {
     done();
   });
 
-  it("check keepalive", function(done) {
-    var json = server.shift();
-    compare(json, "keepalive", device_id);
-    done();
-  });
-
   it("check end_session", function(done) {
     var json = server.shift();
     compare(json, "end_session", device_id);

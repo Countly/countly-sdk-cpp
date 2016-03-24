@@ -51,12 +51,6 @@ describe(path.basename(__filename), function() {
     done();
   });
 
-  it("check keepalive", function(done) {
-    var json = server.shift();
-    compare(json, "keepalive", device_id);
-    done();
-  });
-
   it("check events pack", function(done) {
     var json = server.shift();
     compare(json, "event", device_id);

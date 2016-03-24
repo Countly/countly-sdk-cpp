@@ -35,12 +35,6 @@ describe(path.basename(__filename), function() {
     done();
   });
 
-  it("check keepalive", function(done) {
-    var json = server.shift();
-    compare(json, "keepalive", device_id);
-    done();
-  });
-
   it("server should have no requests", function(done) {
     assert.equal(server.shift(), undefined);
     done();

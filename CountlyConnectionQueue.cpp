@@ -171,7 +171,10 @@ namespace CountlyCpp
     
     if (metricsOk)
       URI += "&metrics=" + URLEncode(metrics);
-    return HTTPGET(URI);
+
+    if (!HTTPGET(URI)) return false;
+    _lastSend = Countly::GetTimestamp();
+    return true;
   }
   
   // returns true only if no more events to send
