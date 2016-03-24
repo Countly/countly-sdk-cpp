@@ -41,6 +41,11 @@
           "-lwinhttp",
         ],
       }],
+      ["OS=='linux'", {
+        "libraries": [
+          "-lcurl",
+        ],
+      }],
     ],
     "defines": [
       "NOSQLITE",
@@ -88,6 +93,9 @@
         },
       }],
       ["OS=='linux'", {
+        "libraries": [
+          "-lcurl",
+        ],
       }],
     ],
   },

@@ -39,6 +39,7 @@
 #ifdef _WIN32
 #include <WinHTTP.h>
 #else
+#include <curl/curl.h>
 #endif
 
 #include <sys/types.h>
@@ -65,6 +66,9 @@ namespace CountlyCpp
   _beginSessionSent(false)
   {
     _version = COUNTLY_VERSION;
+#ifndef _WIN32
+    curl_global_init(CURL_GLOBAL_ALL);
+#endif
   }
   
   CountlyConnectionQueue::~CountlyConnectionQueue()
@@ -286,8 +290,27 @@ namespace CountlyCpp
   
   bool CountlyConnectionQueue::HTTPGET(std::string URI)
   {
-
     bool sent = false;
+
+#ifndef _WIN32
+    CURL* curl;
+    CURLcode code;
+    curl = curl_easy_init();
+
+    if (curl) {
+      stringstream fullURI;
+      fullURI << (_https ? "https://" : "http://");
+      fullURI << _appHostName << ":" << _appPort << URI;
+      code = curl_easy_setopt(curl, CURLOPT_URL, fullURI.str().c_str());
+      if (code == CURLE_OK) {
+        code = curl_easy_perform(curl);
+        sent = (code == CURLE_OK);
+      }
+      curl_easy_cleanup(curl);
+    }
+
+    return sent;
+#else
     HINTERNET hSession = WinHttpOpen(NULL, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
       WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
 
@@ -319,6 +342,7 @@ namespace CountlyCpp
       WinHttpCloseHandle(hSession);
 
     }
+#endif
 
     return sent;
   }
