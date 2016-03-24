@@ -3,7 +3,7 @@
 var fs = require("fs");
 var path = require("path");
 var cp = require("child_process");
-var binary;
+var filename;
 
 [ "../Debug/CountlyCppTest.exe",
   "../Debug/CountlyCppTestStatic.exe",
@@ -16,19 +16,19 @@ var binary;
 ].some(function(candidate) {
   var full = path.join(__dirname, candidate);
   if (fs.existsSync(full)) {
-    binary = full;
+    filename = full;
     return true;
   }
 });
 
 module.exports.spawn = function(server) {
   return cp.spawn(
-    binary,
+    filename,
     ["http://" + server.ip, server.port],
     { stdio: "pipe" }
   );
 }
 
 if (!module.parent) {
-  console.log(binary);
+  console.log(filename);
 }
