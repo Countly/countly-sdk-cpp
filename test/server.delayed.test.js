@@ -13,17 +13,8 @@ var metrics = require("./util.metrics.js");
 
 describe(path.basename(__filename), function() {
 
-  var child;
-  var binary_exited = false;
-
   it("binary should start", function(done) {
-    child = binary.spawn(server);
-    child.on("exit", function() {
-      binary_exited = true;
-    });
-    setTimeout(function() {
-      done();
-    }, 500);
+    binary.start(server, done);
   });
 
   it("wait 5 seconds", function(done) {
@@ -46,11 +37,7 @@ describe(path.basename(__filename), function() {
   });
 
   it("binary should exit", function(done) {
-    child.stdin.write("q");
-    setTimeout(function() {
-      assert.equal(binary_exited, true);
-      done();
-    }, 1500);
+    binary.stop(done);
   });
 
   var app_key = "ce894ea797762a11560217117abea9b1e354398c";

@@ -19,23 +19,14 @@ describe(path.basename(__filename), function() {
     done();
   });
 
-  var child;
-  var binary_exited = false;
-
   it("binary should start", function(done) {
-    child = binary.spawn(server);
-    child.on("exit", function() {
-      binary_exited = true;
-    });
-    setTimeout(function() {
-      done();
-    }, 500);
+    binary.start(server, done);
   });
 
   it("make 3 events", function(done) {
-    child.stdin.write("0");
-    child.stdin.write("1");
-    child.stdin.write("2");
+    binary.command("0");
+    binary.command("1");
+    binary.command("2");
     done();
   });
 
@@ -47,11 +38,7 @@ describe(path.basename(__filename), function() {
   });
 
   it("binary should exit", function(done) {
-    child.stdin.write("q");
-    setTimeout(function() {
-      assert.equal(binary_exited, true);
-      done();
-    }, 1500);
+    binary.stop(done);
   });
 
   var app_key = "ce894ea797762a11560217117abea9b1e354398c";

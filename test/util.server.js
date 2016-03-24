@@ -39,7 +39,10 @@ module.exports.start = function(correct) {
 };
 
 module.exports.stop = function() {
+
   assert(server);
+
   server.close();
   server = null;
+
 }

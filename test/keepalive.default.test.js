@@ -23,17 +23,8 @@ describe(path.basename(__filename), function() {
     done();
   });
 
-  var child;
-  var binary_exited = false;
-
   it("binary should start", function(done) {
-    child = binary.spawn(server);
-    child.on("exit", function() {
-      binary_exited = true;
-    });
-    setTimeout(function() {
-      done();
-    }, 500);
+    binary.start(server, done);
   });
 
   var app_key = "ce894ea797762a11560217117abea9b1e354398c";
@@ -60,7 +51,6 @@ describe(path.basename(__filename), function() {
 
   it("server should have no requests", function(done) {
     assert.equal(server.shift(), undefined);
-    assert.equal(binary_exited, false);
     done();
   });
 
@@ -77,7 +67,6 @@ describe(path.basename(__filename), function() {
 
   it("server should have no requests", function(done) {
     assert.equal(server.shift(), undefined);
-    assert.equal(binary_exited, false);
     done();
   });
 
@@ -98,16 +87,11 @@ describe(path.basename(__filename), function() {
 
   it("server should have no requests", function(done) {
     assert.equal(server.shift(), undefined);
-    assert.equal(binary_exited, false);
     done();
   });
 
   it("binary should exit", function(done) {
-    child.stdin.write("q");
-    setTimeout(function() {
-      assert.equal(binary_exited, true);
-      done();
-    }, 1500);
+    binary.stop(done);
   });
 
   it("check end_session", function(done) {

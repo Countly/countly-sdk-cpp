@@ -2,6 +2,7 @@
 
 var fs = require("fs");
 var path = require("path");
+var assert = require("assert");
 var cp = require("child_process");
 var filename;
 
@@ -21,12 +22,53 @@ var filename;
   }
 });
 
-module.exports.spawn = function(server) {
-  return cp.spawn(
+var binary;
+var exited = false;
+
+module.exports.start = function(server, cb) {
+
+  assert(!binary);
+  assert(!exited);
+
+  binary = cp.spawn(
     filename,
     ["http://" + server.ip, server.port],
     { stdio: "pipe" }
   );
+
+  binary.on("exit", function() {
+    exited = true;
+  });
+
+  setTimeout(function() {
+    cb();
+  }, 500);
+
+}
+
+module.exports.stop = function(cb) {
+
+  assert(binary);
+  assert(!exited);
+
+  binary.stdin.write("q");
+
+  setTimeout(function() {
+    assert(exited);
+    binary = null;
+    exited = false;
+    cb();
+  }, 1500);
+
+}
+
+module.exports.command = function(c) {
+
+  assert(binary);
+  assert(!exited);
+
+  binary.stdin.write(c);
+
 }
 
 if (!module.parent) {
