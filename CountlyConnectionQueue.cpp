@@ -119,25 +119,6 @@ namespace CountlyCpp
     bool metricsOk = false;
     std::string metrics = "{\n";
     
-    /*
-     metrics={ "_os": "Android", "_os_version": "4.1", "_device": "Samsung Galaxy", "_resolution": "1200x800", "_carrier": "Vodafone", "_app_version": "1.2", "_density": "200dpi" }
-     
-     http://your_domain/i?
-     app_key=AAA &
-     device_id=BBB &
-     sdk_version=CCC &
-     begin_session=1 &
-     metrics= {
-     "_os": "DDD",
-     "_os_version": "EEE",
-     "_device": "FFF",
-     "_resolution": "GGG",
-     "_carrier": "HHH",
-     "_app_version": "III"
-     }
-
-     */
-    
     if (_os.size())
     {
       metrics += "\"_os\":\"" + _os + "\"";
@@ -190,6 +171,7 @@ namespace CountlyCpp
     std::vector<int> evtIds;
     std::string all;
     string URI;
+
     if (!_deviceId.size())
       _deviceId = queue->GetDeviceId();
     
@@ -199,8 +181,18 @@ namespace CountlyCpp
       _beginSessionSent = true;
     }
     
-    std::string json = queue->PopEvent(&evtId, 0);
-    if (evtId == -1)
+    std::string json;
+
+    for (int i = 0; i < _maxEvents; i++)
+    {
+      json = queue->PopEvent(&evtId, i);
+      if (evtId == -1) break;
+      evtIds.push_back(evtId);
+      if (i > 0) all = all + ",";
+      all = all + json;
+    }
+
+    if (evtIds.size() == 0)
     {
       if (Countly::GetTimestamp() - _lastSend > KEEPALIVE * 1000)
       {
@@ -213,42 +205,6 @@ namespace CountlyCpp
       return true; // true is only here. no events and successful keepalive (if needed)
     }
     
-    evtIds.push_back(evtId);
-    all = json;
-
-    /*
-     http://your_domain/i?
-     app_key=AAA &
-     device_id=BBB &
-     events= [
-      {
-        "key": "level_success",
-        "count": 4
-      },
-      {
-        "key": "level_fail",
-        "count": 2
-      },
-      {
-        "key": "in_app_purchase",
-        "count": 3,
-        "sum": 2.97,
-        "segmentation": {
-          "app_version": "1.0",
-          "country": "Turkey"
-        }
-      }
-     ]
-     */
-
-    for (int i = 1; i < _maxEvents; i++)
-    {
-      json = queue->PopEvent(&evtId, i);
-      if (evtId == -1) break;
-      evtIds.push_back(evtId);
-      all = all + "," + json;
-    }
-
     all = "[" + all + "]";
     URI = "/i?app_key=" + _appKey + "&device_id=" + _deviceId + "&events=" + URLEncode(all);
     if (!HTTPGET(URI)) return false;
