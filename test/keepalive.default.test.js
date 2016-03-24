@@ -80,14 +80,19 @@ describe(path.basename(__filename), function() {
     binary.stop(done);
   });
 
+  it("stop server", function(done) {
+    server.stop();
+    done();
+  });
+
   it("check end_session", function(done) {
     var json = server.shift();
     compare(json, "end_session", device_id);
     done();
   });
 
-  it("stop server", function(done) {
-    server.stop();
+  it("server should have no requests", function(done) {
+    assert.equal(server.shift(), undefined);
     done();
   });
 

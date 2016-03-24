@@ -38,6 +38,11 @@ describe(path.basename(__filename), function() {
     binary.stop(done);
   });
 
+  it("stop server", function(done) {
+    server.stop();
+    done();
+  });
+
   var device_id;
 
   it("check begin_session", function(done) {
@@ -70,11 +75,6 @@ describe(path.basename(__filename), function() {
 
   it("server should have no requests", function(done) {
     assert.equal(server.shift(), undefined);
-    done();
-  });
-
-  it("stop server", function(done) {
-    server.stop();
     done();
   });
 
