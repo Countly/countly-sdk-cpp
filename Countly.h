@@ -51,7 +51,7 @@ class CountlyConnectionQueue;
 
 class Countly {
  public:
-    static Countly * GetInstance();
+    static Countly* GetInstance();
     static void DeleteInstance();
     static std::string GetVersion();
 

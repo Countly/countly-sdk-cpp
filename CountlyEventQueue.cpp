@@ -27,6 +27,9 @@
  SOFTWARE.
  */
 
+
+#include "CountlyEventQueue.h"
+
 #include "assert.h"
 #include <cstdlib>
 #include <iomanip>
@@ -34,7 +37,6 @@
 #include <fstream>
 
 #include "Countly.h"
-#include "CountlyEventQueue.h"
 
 using namespace std;
 /*

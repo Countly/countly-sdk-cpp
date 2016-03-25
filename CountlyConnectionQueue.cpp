@@ -27,6 +27,9 @@
  SOFTWARE.
  */
 
+
+#include "CountlyConnectionQueue.h"
+
 #include <assert.h>
 #include <iomanip>
 #include <sstream>
@@ -40,7 +43,6 @@
 #endif
 
 #include "Countly.h"
-#include "CountlyConnectionQueue.h"
 
 //  https://count.ly/resources/reference/server-api
 #define KEEPALIVE 30 // Send keepalive every 30s

@@ -27,6 +27,7 @@
  SOFTWARE.
  */
 
+
 #include <cstdio>
 #include <cstdlib>
 #include "Countly.h"
@@ -36,7 +37,7 @@ using namespace std;
 
 int main(int argc, char * argv[])
 {
-  Countly * ct;
+  Countly* ct;
   
   if (argc < 3)
   {

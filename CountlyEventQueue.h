@@ -27,6 +27,7 @@
  SOFTWARE.
  */
 
+
 #ifndef __CountlyCpp__CountlyEventQueue__
 #define __CountlyCpp__CountlyEventQueue__
 #include <iostream>

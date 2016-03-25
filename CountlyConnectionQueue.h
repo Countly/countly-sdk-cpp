@@ -27,6 +27,7 @@
   SOFTWARE.
  */
 
+
 #ifndef __CountlyCpp__CountlyConnectionQueue__
 #define __CountlyCpp__CountlyConnectionQueue__
 #include <iostream>
