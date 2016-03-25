@@ -28,11 +28,13 @@
  */
 
 
-#ifndef __CountlyCpp__CountlyEventQueue__
-#define __CountlyCpp__CountlyEventQueue__
+#ifndef COUNTLYEVENTQUEUE_H_
+#define COUNTLYEVENTQUEUE_H_
+
+#include <deque>
 #include <iostream>
 #include <map>
-#include <deque>
+#include <string>
 
 #ifndef _WIN32
 #include <pthread.h>
@@ -41,60 +43,59 @@
 #endif
 
 #ifndef NOSQLITE
-#include "sqlite3.h"
+#include "./sqlite3.h"
 #endif
 
-namespace CountlyCpp
-{
-  
-  class CountlyEventQueue
-  {
-    public:
-      CountlyEventQueue();
-      ~CountlyEventQueue();
-    
-      void SetPath(std::string path);
+namespace CountlyCpp {
 
-      int Count();
-      std::string PopEvent(int * evtId, size_t offset);
-      void ClearEvent(int evtId);
-    
-      bool RecordEvent(std::string key, int count);
-      bool RecordEvent(std::string key, int count, double sum);
-      bool RecordEvent(std::string key, std::map<std::string, std::string> segmentation, int count);
-      bool RecordEvent(std::string key, std::map<std::string, std::string> segmentation, int count, double sum);
-   
-      std::string GetDeviceId();
+class CountlyEventQueue {
+ public:
+    CountlyEventQueue();
+    ~CountlyEventQueue();
 
+    void SetPath(std::string path);
 
-    private:
-      bool AddEvent(std::string json);
-      bool LoadDb();
-      void Lock();
-      void Unlock();
-      std::string MakeDeviceId();
+    int Count();
+    std::string PopEvent(int * evtId, size_t offset);
+    void ClearEvent(int evtId);
 
-      std::string       _path;
-    
+    bool RecordEvent(std::string key, int count);
+    bool RecordEvent(std::string key, int count, double sum);
+    bool RecordEvent(std::string key,
+      std::map<std::string, std::string> segmentation, int count);
+    bool RecordEvent(std::string key,
+      std::map<std::string, std::string> segmentation, int count, double sum);
+
+    std::string GetDeviceId();
+
+ private:
+    bool AddEvent(std::string json);
+    bool LoadDb();
+    void Lock();
+    void Unlock();
+    std::string MakeDeviceId();
+
+    std::string      _path;
+
 #ifndef NOSQLITE
-      sqlite3 *          _sqlHandler;
+    sqlite3*         _sqlHandler;
 #else
-      struct EventsItem {
-        int                     evtId;
-        std::string             json;
-      };
-      std::deque<EventsItem>    _events;
-      int                       _evtIdCounter;
-      std::string               _deviceid;
+    struct EventsItem {
+      int                   evtId;
+      std::string           json;
+    };
+    std::deque<EventsItem>  _events;
+    int              _evtIdCounter;
+    std::string      _deviceid;
 #endif
 
 #ifndef _WIN32
-      pthread_mutex_t   _lock;
+    pthread_mutex_t  _lock;
 #else
-      HANDLE            _lock;
+    HANDLE           _lock;
 #endif
+};
 
-  };
-  
-}
-#endif /* defined(__CountlyCpp__CountlyEventQueue__) */
+}  // namespace CountlyCpp
+
+#endif  // COUNTLYEVENTQUEUE_H_

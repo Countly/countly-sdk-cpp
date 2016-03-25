@@ -16,7 +16,9 @@ describe(path.basename(__filename), function() {
     var linter = cp.spawnSync("python", [
       path.join(__dirname, "../vendor/styleguide/cpplint/cpplint.py"),
       "--verbose=0",
-      "Countly.h", "Countly.cpp"
+      "Countly.h", "Countly.cpp",
+      "CountlyConnectionQueue.h",
+      "CountlyEventQueue.h"
     ], { stdio: "pipe" });
 
     if (linter.status) {
