@@ -255,7 +255,10 @@ namespace CountlyCpp
       curl_easy_setopt(curl, CURLOPT_URL, fullURI.str().c_str());
       curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
       code = curl_easy_perform(curl);
-      ok = (code == CURLE_OK);
+      if (code == CURLE_OK) {
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
+        ok = (code == 200);
+      }
       curl_easy_cleanup(curl);
     }
 #else
