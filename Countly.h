@@ -57,6 +57,7 @@ namespace CountlyCpp
       void SetPath(std::string path);  //Setup work directory (where Countly sqlite file will be written)
       void SetMetrics(std::string os, std::string os_version, std::string device, std::string resolution, std::string carrier, std::string app_version);
       void SetMaxEventsPerMessage(int maxEvents);
+      void SetMinUpdatePeriod(int minUpdateMillis);
       void Start(std::string appKey, std::string host, int port);
       void StartOnCloud(std::string appKey);
       void Stop();
@@ -75,6 +76,7 @@ namespace CountlyCpp
       static Countly      * _instance;
       CountlyEventQueue   * _eventQueue;
       CountlyConnectionQueue   * _connectionQueue;
+      int                     _minUpdateMillis;
 
 #ifndef _WIN32
       pthread_t             _thread;

@@ -57,6 +57,7 @@ namespace CountlyCpp
   {
     _eventQueue = new CountlyEventQueue();
     _connectionQueue = new CountlyConnectionQueue();
+    _minUpdateMillis = 1000;
   }
   
   Countly::~Countly()
@@ -89,6 +90,11 @@ namespace CountlyCpp
   void Countly::SetMaxEventsPerMessage(int maxEvents)
   {
     _connectionQueue->SetMaxEventsPerMessage(maxEvents);
+  }
+
+  void Countly::SetMinUpdatePeriod(int minUpdateMillis)
+  {
+    _minUpdateMillis = minUpdateMillis;
   }
 
   void Countly::SetMetrics(std::string os, std::string os_version, std::string device, std::string resolution, std::string carrier, std::string app_version)
@@ -167,9 +173,9 @@ namespace CountlyCpp
     {
       _connectionQueue->UpdateSession(_eventQueue);
 #ifndef _WIN32
-      usleep(1000 * 1000);
+      usleep(_minUpdateMillis * 1000);
 #else
-      Sleep(1000);
+      Sleep(_minUpdateMillis);
 #endif
     }
   }

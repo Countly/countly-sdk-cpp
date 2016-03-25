@@ -35,13 +35,16 @@ describe(path.basename(__filename), function() {
       "0122101221" + "0122101221" +
       "0122101221" + "0122101221" +
       "0122101221" + "0122101221" +
+      "0122101221" + "0122101221" +
+      "0122101221" + "0122101221" +
+      "0122101221" + "0122101221" +
       "0122101221" + "0122101221");
     done();
   });
 
-  it("wait 3.5 seconds", function(done) {
-    this.timeout(4.5 * 1000);
-    setTimeout(done, 3.5 * 1000);
+  it("wait 4.5 seconds", function(done) {
+    this.timeout(5.5 * 1000);
+    setTimeout(done, 4.5 * 1000);
   });
 
   it("binary should exit", function(done) {
@@ -58,6 +61,13 @@ describe(path.basename(__filename), function() {
   it("check begin_session", function(done) {
     var json = server.shift();
     device_id = compare(json, "begin_session");
+    done();
+  });
+
+  it("check 50 events pack", function(done) {
+    var json = server.shift();
+    compare(json, "event", device_id);
+    assert.equal(json.events.length, 50);
     done();
   });
 

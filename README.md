@@ -36,6 +36,8 @@ int main(int argc, char * argv[])
   Countly * ct = Countly::GetInstance();
   ct->SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Free", "1.0");
   ct->Start("abf2034f975393fa994d1cf8adf9a93e4a29ac29", "http://myserver.com", 8080);
+  ct->SetMaxEventsPerMessage(40);
+  ct->SetMinUpdatePeriod(2000);
   
   ct->RecordEvent("MyCustomEvent", 123);
   ct->RecordEvent("MyCustomEvent", 17);

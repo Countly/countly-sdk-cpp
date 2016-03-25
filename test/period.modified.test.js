@@ -22,22 +22,34 @@ describe(path.basename(__filename), function() {
     binary.start(server, done);
   });
 
-  it("modify 'maxEvents'", function(done) {
-    binary.command("e");
+  it("modify 'minPeriod'", function(done) {
+    binary.command("p");
     done();
   });
 
-  it("make 53 events", function(done) {
+  it("make many events", function(done) {
     binary.command(
       "0122101221" + "0122101221" +
       "0122101221" + "0122101221" +
-      "0122101221" + "012");
+      "0122101221" + "0122101221" +
+      "0122101221" + "0122101221" +
+      "0122101221" + "0122101221" +
+      "0122101221" + "0122101221" +
+      "0122101221" + "0122101221" +
+      "0122101221" + "0122101221" +
+      "0122101221" + "0122101221" +
+      "0122101221" + "0122101221" +
+      "0122101221" + "0122101221" +
+      "0122101221" + "0122101221" +
+      "0122101221" + "0122101221" +
+      "0122101221" + "0122101221" +
+      "0122101221" + "0122101221");
     done();
   });
 
-  it("wait 2 seconds", function(done) {
-    this.timeout(3 * 1000);
-    setTimeout(done, 2 * 1000);
+  it("wait 4.5 seconds", function(done) {
+    this.timeout(5.5 * 1000);
+    setTimeout(done, 4.5 * 1000);
   });
 
   it("binary should exit", function(done) {
@@ -57,17 +69,17 @@ describe(path.basename(__filename), function() {
     done();
   });
 
-  it("check 40 events pack", function(done) {
+  it("check 50 events pack", function(done) {
     var json = server.shift();
     compare(json, "event", device_id);
-    assert.equal(json.events.length, 40);
+    assert.equal(json.events.length, 50);
     done();
   });
 
-  it("check 13 events pack", function(done) {
+  it("check 50 events pack", function(done) {
     var json = server.shift();
     compare(json, "event", device_id);
-    assert.equal(json.events.length, 13);
+    assert.equal(json.events.length, 50);
     done();
   });
 
