@@ -1,6 +1,7 @@
 {
   "private": true,
   "devDependencies": {
+    "express": "^4.13.4",
     "mocha": "^2.3.3"
   },
   "scripts": {
