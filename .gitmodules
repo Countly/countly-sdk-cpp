@@ -1,3 +1,6 @@
 [submodule "vendor/gyp"]
 	path = vendor/gyp
 	url = https://chromium.googlesource.com/external/gyp
+[submodule "vendor/styleguide"]
+	path = vendor/styleguide
+	url = https://github.com/google/styleguide
