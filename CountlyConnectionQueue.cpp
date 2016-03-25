@@ -247,22 +247,17 @@ namespace CountlyCpp
     CURL* curl;
     CURLcode code;
     curl = curl_easy_init();
-
     if (curl)
     {
       stringstream fullURI;
       fullURI << (_https ? "https://" : "http://");
       fullURI << _appHostName << ":" << _appPort << URI;
-      code = curl_easy_setopt(curl, CURLOPT_URL, fullURI.str().c_str());
-      if (code == CURLE_OK)
-      {
-        code = curl_easy_perform(curl);
-        ok = (code == CURLE_OK);
-      }
+      curl_easy_setopt(curl, CURLOPT_URL, fullURI.str().c_str());
+      curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
+      code = curl_easy_perform(curl);
+      ok = (code == CURLE_OK);
       curl_easy_cleanup(curl);
     }
-
-    return ok;
 #else
     HINTERNET hSession = WinHttpOpen(NULL, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
       WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
