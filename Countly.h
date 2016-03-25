@@ -33,7 +33,7 @@
 
 #define COUNTLY_VERSION "1.4"
 
-#include <cstdint>
+#include <stdint.h>
 #include <map>
 #include <iostream>
 #include <string>
