@@ -28,13 +28,15 @@
  */
 
 
-#ifndef __CountlyCpp__Countly__
-#define __CountlyCpp__Countly__
+#ifndef COUNTLY_H_
+#define COUNTLY_H_
 
 #define COUNTLY_VERSION "1.4"
 
+#include <cstdint>
 #include <map>
 #include <iostream>
+#include <string>
 
 #ifndef _WIN32
 #include <pthread.h>
@@ -42,59 +44,58 @@
 #include <windows.h>
 #endif
 
-namespace CountlyCpp
-{
-  class CountlyEventQueue;
-  class CountlyConnectionQueue;
-  
-  class Countly
-  {
-    public:
-      static Countly * GetInstance();
-      static void DeleteInstance();
-      static std::string GetVersion();
+namespace CountlyCpp {
 
-      void SetPath(std::string path);  //Setup work directory (where Countly sqlite file will be written)
-      void SetMetrics(std::string os, std::string os_version, std::string device, std::string resolution, std::string carrier, std::string app_version);
-      void SetMaxEventsPerMessage(int maxEvents);
-      void SetMinUpdatePeriod(int minUpdateMillis);
-      void Start(std::string appKey, std::string host, int port);
-      void StartOnCloud(std::string appKey);
-      void Stop();
-    
-      void RecordEvent(std::string key, int count);
-      void RecordEvent(std::string key, int count, double sum);
-      void RecordEvent(std::string key, std::map<std::string, std::string> segmentation, int count);
-      void RecordEvent(std::string key, std::map<std::string, std::string> segmentation, int count, double sum);
+class CountlyEventQueue;
+class CountlyConnectionQueue;
 
-      //Internal
-      void StartThreadTimer();
-    
-      static unsigned long long GetTimestamp();
+class Countly {
+ public:
+    static Countly * GetInstance();
+    static void DeleteInstance();
+    static std::string GetVersion();
 
-    private:
-      static Countly      * _instance;
-      CountlyEventQueue   * _eventQueue;
-      CountlyConnectionQueue   * _connectionQueue;
-      int                     _minUpdateMillis;
+    // setup work directory (where countly.deviceid is)
+    void SetPath(std::string path);
+    void SetMetrics(std::string os, std::string os_version, std::string device,
+      std::string resolution, std::string carrier, std::string app_version);
+    void SetMaxEventsPerMessage(int maxEvents);
+    void SetMinUpdatePeriod(int minUpdateMillis);
+    void Start(std::string appKey, std::string host, int port);
+    void StartOnCloud(std::string appKey);
+    void Stop();
+
+    void RecordEvent(std::string key, int count);
+    void RecordEvent(std::string key, int count, double sum);
+    void RecordEvent(std::string key,
+      std::map<std::string, std::string> segmentation, int count);
+    void RecordEvent(std::string key,
+      std::map<std::string, std::string> segmentation, int count, double sum);
+
+    // internal
+    void StartThreadTimer();
+    static uint64_t GetTimestamp();
+
+ private:
+    static Countly*          _instance;
+    CountlyEventQueue*       _eventQueue;
+    CountlyConnectionQueue*  _connectionQueue;
+    int                      _minUpdateMillis;
 
 #ifndef _WIN32
-      pthread_t             _thread;
+    pthread_t                _thread;
 #else
-      HANDLE                _thread;
+    HANDLE                   _thread;
 #endif
 
-      bool                  _threadRunning;
+    bool                     _threadRunning;
 
-    
-      Countly();
-      ~Countly();
-      void TimerUpdate();
-    
-  
-  
-  };
 
-}
+    Countly();
+    ~Countly();
+    void TimerUpdate();
+};
 
-#endif /* defined(__CountlyCpp__Countly__) */
+}  // namespace CountlyCpp
+
+#endif  // COUNTLY_H_
