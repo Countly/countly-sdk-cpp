@@ -23,22 +23,24 @@ var filename;
 });
 
 var binary;
-var exited = false;
 
 module.exports.start = function(server, cb) {
 
   assert(!binary);
-  assert(!exited);
+
+  [ "../countly.deviceid",
+    "../countly.sqlite",
+    "../countly.sqlite-journal"
+  ].some(function(trash) {
+    var full = path.join(__dirname, trash);
+    try { fs.unlinkSync(full); } catch (_) {}
+  });
 
   binary = cp.spawn(
     filename,
     ["http://" + server.ip, server.port],
     { stdio: [ "pipe", "inherit", "inherit" ] }
   );
-
-  binary.on("exit", function() {
-    exited = true;
-  });
 
   setTimeout(function() {
     cb();
@@ -49,23 +51,20 @@ module.exports.start = function(server, cb) {
 module.exports.stop = function(cb) {
 
   assert(binary);
-  assert(!exited);
+
+  binary.on("exit", function() {
+    assert(binary);
+    binary = null;
+    cb();
+  });
 
   binary.stdin.write("q");
-
-  setTimeout(function() {
-    assert(exited);
-    binary = null;
-    exited = false;
-    cb();
-  }, 1500);
 
 }
 
 module.exports.command = function(c) {
 
   assert(binary);
-  assert(!exited);
 
   binary.stdin.write(c);
 

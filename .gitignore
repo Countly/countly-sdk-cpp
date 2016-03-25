@@ -6,6 +6,8 @@ countly.deviceid
 *.sdf
 *.opensdf
 *.v12.suo
+*.sqlite
+*.sqlite-journal
 /Debug
 /Release
 /out

@@ -46,7 +46,7 @@ describe(path.basename(__filename), function() {
 
   it("wait 29 seconds", function(done) {
     this.timeout(30 * 1000);
-    setTimeout(done, 25 * 1000);
+    setTimeout(done, 29 * 1000);
   });
 
   it("server should have no requests", function(done) {
