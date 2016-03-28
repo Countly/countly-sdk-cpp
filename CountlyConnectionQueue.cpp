@@ -266,41 +266,46 @@ namespace CountlyCpp
       curl_easy_cleanup(curl);
     }
 #else
-    HINTERNET hSession = WinHttpOpen(NULL, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+    HINTERNET hSession;
+    HINTERNET hConnect;
+    HINTERNET hRequest;
+
+    hSession = WinHttpOpen(NULL, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
       WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    if (hSession)
-    {
+    if (hSession) {
       wchar_t wideHostName[256];
       MultiByteToWideChar(0, 0, _appHostName.c_str(), -1, wideHostName, 256);
-      HINTERNET hConnect = WinHttpConnect(hSession, wideHostName, _appPort, 0);
-      if (hConnect)
-      {
-        wchar_t wideURI[65536];
-        MultiByteToWideChar(0, 0, URI.c_str(), -1, wideURI, 65536);
-        HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", wideURI, NULL,
-          WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, _https ? WINHTTP_FLAG_SECURE : 0);
-        if (hRequest)
-        {
-          stringstream headers;
-          headers << "User-Agent: Countly " << Countly::GetVersion();
-          wchar_t wideHeaders[256];
-          MultiByteToWideChar(0, 0, headers.str().c_str(), -1, wideHeaders, 256);
-          ok = WinHttpSendRequest(hRequest, wideHeaders, headers.str().size(),
-            WINHTTP_NO_REQUEST_DATA, 0, 0, 0) != 0;
-          if (ok) {
-            ok = WinHttpReceiveResponse(hRequest, NULL) != 0;
-            if (ok) {
-              DWORD dwStatusCode = 0;
-              DWORD dwSize = sizeof(dwStatusCode);
-              WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-                WINHTTP_HEADER_NAME_BY_INDEX, &dwStatusCode, &dwSize, WINHTTP_NO_HEADER_INDEX);
-              ok = dwStatusCode == 200;
-            }
-          }
-          WinHttpCloseHandle(hRequest);
+      hConnect = WinHttpConnect(hSession, wideHostName, _appPort, 0);
+    }
+    if (hConnect) {
+      wchar_t wideURI[65536];
+      MultiByteToWideChar(0, 0, URI.c_str(), -1, wideURI, 65536);
+      hRequest = WinHttpOpenRequest(hConnect, L"GET", wideURI, NULL,
+        WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, _https ? WINHTTP_FLAG_SECURE : 0);
+    }
+    if (hRequest) {
+      stringstream headers;
+      headers << "User-Agent: Countly " << Countly::GetVersion();
+      wchar_t wideHeaders[256];
+      MultiByteToWideChar(0, 0, headers.str().c_str(), -1, wideHeaders, 256);
+      ok = WinHttpSendRequest(hRequest, wideHeaders, headers.str().size(),
+        WINHTTP_NO_REQUEST_DATA, 0, 0, 0) != 0;
+      if (ok) {
+        ok = WinHttpReceiveResponse(hRequest, NULL) != 0;
+        if (ok) {
+          DWORD dwStatusCode = 0;
+          DWORD dwSize = sizeof(dwStatusCode);
+          WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+            WINHTTP_HEADER_NAME_BY_INDEX, &dwStatusCode, &dwSize, WINHTTP_NO_HEADER_INDEX);
+          ok = dwStatusCode == 200;
         }
-        WinHttpCloseHandle(hConnect);
       }
+      WinHttpCloseHandle(hRequest);
+    }
+    if (hConnect) {
+      WinHttpCloseHandle(hConnect);
+    }
+    if (hSession) {
       WinHttpCloseHandle(hSession);
     }
 #endif
