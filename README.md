@@ -54,4 +54,4 @@ int main(int argc, char * argv[])
 **Testing**
 
 * `npm install --ignore-scripts`
-* `npm test`
+* `npm test` or `COUNTLY_VALGRIND=1 npm test`
