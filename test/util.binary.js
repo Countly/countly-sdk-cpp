@@ -36,15 +36,33 @@ module.exports.start = function(server, cb) {
     try { fs.unlinkSync(full); } catch (_) {}
   });
 
-  binary = cp.spawn(
-    filename,
-    ["http://" + server.ip, server.port],
-    { stdio: [ "pipe", "inherit", "inherit" ] }
-  );
+  if (process.env.COUNTLY_VALGRIND) {
 
-  setTimeout(function() {
-    cb();
-  }, 500);
+    binary = cp.spawn(
+      "valgrind",
+      [ "--suppressions=" + path.resolve(__dirname, "..", "CountlyCpp.supp"),
+        "--leak-check=full", "--show-leak-kinds=all",
+        filename, "http://" + server.ip, server.port],
+      { stdio: [ "pipe", "inherit", "inherit" ] }
+    );
+
+    setTimeout(function() {
+      cb();
+    }, 1500);
+
+  } else {
+
+    binary = cp.spawn(
+      filename,
+      ["http://" + server.ip, server.port],
+      { stdio: [ "pipe", "inherit", "inherit" ] }
+    );
+
+    setTimeout(function() {
+      cb();
+    }, 500);
+
+  }
 
 }
 
@@ -54,6 +72,7 @@ module.exports.stop = function(cb) {
 
   binary.on("exit", function() {
     assert(binary);
+    assert.equal(binary.exitCode, 0);
     binary = null;
     cb();
   });
@@ -65,7 +84,6 @@ module.exports.stop = function(cb) {
 module.exports.command = function(c) {
 
   assert(binary);
-
   binary.stdin.write(c);
 
 }
