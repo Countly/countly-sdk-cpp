@@ -65,8 +65,10 @@ namespace CountlyCpp
   
   CountlyConnectionQueue::~CountlyConnectionQueue()
   {
-    string URI = "/i?app_key=" + _appKey +"&device_id="+ _deviceId +"&end_session=1";
-    HTTPGET(URI);
+    if (_beginSessionSent) {
+      string URI = "/i?app_key=" + _appKey +"&device_id="+ _deviceId +"&end_session=1";
+      HTTPGET(URI);
+    }
   }
   
   void CountlyConnectionQueue::SetAppKey(std::string key)
