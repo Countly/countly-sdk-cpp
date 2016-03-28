@@ -69,6 +69,9 @@ CountlyConnectionQueue::~CountlyConnectionQueue() {
       _deviceId + "&end_session=1";
     HTTPGET(URI);
   }
+#ifndef _WIN32
+  curl_global_cleanup();
+#endif
 }
 
 void CountlyConnectionQueue::SetAppKey(string key) {
