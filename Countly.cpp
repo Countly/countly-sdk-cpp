@@ -45,11 +45,13 @@
 #include "CountlyEventQueue.h"
 #include "CountlyConnectionQueue.h"
 
+using std::string;
+
 namespace CountlyCpp {
 
 Countly* Countly::_instance = NULL;
 
-void * _startThreadTimer(void * obj) {
+void * _startThreadTimer(void* obj) {
   Countly* ptr = reinterpret_cast<Countly*>(obj);
   ptr->StartThreadTimer();
   return NULL;
@@ -80,7 +82,7 @@ void Countly::DeleteInstance() {
   _instance = NULL;
 }
 
-std::string Countly::GetVersion() {
+string Countly::GetVersion() {
   return COUNTLY_VERSION;
 }
 
@@ -92,9 +94,9 @@ void Countly::SetMinUpdatePeriod(int minUpdateMillis) {
   _minUpdateMillis = minUpdateMillis;
 }
 
-void Countly::SetMetrics(std::string os, std::string os_version,
-  std::string device, std::string resolution, std::string carrier,
-  std::string app_version
+void Countly::SetMetrics(string os, string os_version,
+  string device, string resolution, string carrier,
+  string app_version
 ) {
   _connectionQueue->SetMetrics(os, os_version, device, resolution,
     carrier, app_version);
@@ -111,11 +113,11 @@ void Countly::Stop() {
 #endif
 }
 
-void Countly::SetPath(std::string path) {
+void Countly::SetPath(string path) {
   _eventQueue->SetPath(path);
 }
 
-void Countly::Start(std::string appKey, std::string host, int port) {
+void Countly::Start(string appKey, string host, int port) {
   _connectionQueue->SetAppKey(appKey);
   _connectionQueue->SetAppHost(host, port);
 
@@ -131,26 +133,26 @@ void Countly::Start(std::string appKey, std::string host, int port) {
 #endif
 }
 
-void Countly::StartOnCloud(std::string appKey) {
+void Countly::StartOnCloud(string appKey) {
   Start(appKey, "https://cloud.count.ly", 80);
 }
 
-void Countly::RecordEvent(std::string key, int count) {
+void Countly::RecordEvent(string key, int count) {
   _eventQueue->RecordEvent(key, count);
 }
 
-void Countly::RecordEvent(std::string key, int count, double sum) {
+void Countly::RecordEvent(string key, int count, double sum) {
   _eventQueue->RecordEvent(key, count, sum);
 }
 
-void Countly::RecordEvent(std::string key,
-  std::map<std::string, std::string> segmentation, int count
+void Countly::RecordEvent(string key,
+  std::map<string, string> segmentation, int count
 ) {
   _eventQueue->RecordEvent(key, segmentation, count);
 }
 
-void Countly::RecordEvent(std::string key,
-  std::map<std::string, std::string> segmentation, int count, double sum
+void Countly::RecordEvent(string key,
+  std::map<string, string> segmentation, int count, double sum
 ) {
   _eventQueue->RecordEvent(key, segmentation, count, sum);
 }

@@ -46,6 +46,8 @@
 #include "./sqlite3.h"
 #endif
 
+using std::string;
+
 namespace CountlyCpp {
 
 class CountlyEventQueue {
@@ -53,40 +55,40 @@ class CountlyEventQueue {
     CountlyEventQueue();
     ~CountlyEventQueue();
 
-    void SetPath(std::string path);
+    void SetPath(string path);
 
     int Count();
-    std::string PopEvent(int * evtId, size_t offset);
+    string PopEvent(int* evtId, size_t offset);
     void ClearEvent(int evtId);
 
-    bool RecordEvent(std::string key, int count);
-    bool RecordEvent(std::string key, int count, double sum);
-    bool RecordEvent(std::string key,
-      std::map<std::string, std::string> segmentation, int count);
-    bool RecordEvent(std::string key,
-      std::map<std::string, std::string> segmentation, int count, double sum);
+    bool RecordEvent(string key, int count);
+    bool RecordEvent(string key, int count, double sum);
+    bool RecordEvent(string key,
+      std::map<string, string> segmentation, int count);
+    bool RecordEvent(string key,
+      std::map<string, string> segmentation, int count, double sum);
 
-    std::string GetDeviceId();
+    string GetDeviceId();
 
  private:
-    bool AddEvent(std::string json);
+    bool AddEvent(string json);
     bool LoadDb();
     void Lock();
     void Unlock();
-    std::string MakeDeviceId();
+    string MakeDeviceId();
 
-    std::string      _path;
+    string           _path;
 
 #ifndef NOSQLITE
     sqlite3*         _sqlHandler;
 #else
     struct EventsItem {
-      int                   evtId;
-      std::string           json;
+      int            evtId;
+      string         json;
     };
     std::deque<EventsItem>  _events;
     int              _evtIdCounter;
-    std::string      _deviceid;
+    string           _deviceid;
 #endif
 
 #ifndef _WIN32

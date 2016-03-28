@@ -44,6 +44,8 @@
 #include <windows.h>
 #endif
 
+using std::string;
+
 namespace CountlyCpp {
 
 class CountlyEventQueue;
@@ -53,24 +55,24 @@ class Countly {
  public:
     static Countly* GetInstance();
     static void DeleteInstance();
-    static std::string GetVersion();
+    static string GetVersion();
 
     // setup work directory (where countly.deviceid is)
-    void SetPath(std::string path);
-    void SetMetrics(std::string os, std::string os_version, std::string device,
-      std::string resolution, std::string carrier, std::string app_version);
+    void SetPath(string path);
+    void SetMetrics(string os, string os_version, string device,
+      string resolution, string carrier, string app_version);
     void SetMaxEventsPerMessage(int maxEvents);
     void SetMinUpdatePeriod(int minUpdateMillis);
-    void Start(std::string appKey, std::string host, int port);
-    void StartOnCloud(std::string appKey);
+    void Start(string appKey, string host, int port);
+    void StartOnCloud(string appKey);
     void Stop();
 
-    void RecordEvent(std::string key, int count);
-    void RecordEvent(std::string key, int count, double sum);
-    void RecordEvent(std::string key,
-      std::map<std::string, std::string> segmentation, int count);
-    void RecordEvent(std::string key,
-      std::map<std::string, std::string> segmentation, int count, double sum);
+    void RecordEvent(string key, int count);
+    void RecordEvent(string key, int count, double sum);
+    void RecordEvent(string key,
+      std::map<string, string> segmentation, int count);
+    void RecordEvent(string key,
+      std::map<string, string> segmentation, int count, double sum);
 
     // internal
     void StartThreadTimer();

@@ -18,7 +18,7 @@ describe(path.basename(__filename), function() {
       "--verbose=0",
       "Countly.h", "Countly.cpp",
       "CountlyConnectionQueue.h", "CountlyConnectionQueue.cpp",
-      "CountlyEventQueue.h"
+      "CountlyEventQueue.h", "CountlyEventQueue.cpp"
     ], { stdio: "pipe" });
 
     if (linter.status) {

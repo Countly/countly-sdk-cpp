@@ -155,7 +155,7 @@ bool CountlyConnectionQueue::BeginSession() {
 }
 
 // returns true only if no more events to send
-bool CountlyConnectionQueue::UpdateSession(CountlyEventQueue * queue) {
+bool CountlyConnectionQueue::UpdateSession(CountlyEventQueue* queue) {
   int evtId;
   std::vector<int> evtIds;
   string all;
@@ -223,7 +223,7 @@ string CountlyConnectionQueue::URLEncode(const string &value) {
   return escaped.str();
 }
 
-bool CountlyConnectionQueue::HTTPGET(std::string URI) {
+bool CountlyConnectionQueue::HTTPGET(string URI) {
   bool ok = false;
 
   // printf("%s\n", URI.c_str());
