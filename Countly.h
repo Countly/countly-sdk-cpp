@@ -31,7 +31,7 @@
 #ifndef COUNTLY_H_
 #define COUNTLY_H_
 
-#define COUNTLY_VERSION "1.4"
+#define COUNTLY_VERSION "16.02"
 
 #include <stdint.h>
 #include <map>
