@@ -77,5 +77,5 @@ module.exports.stop = function() {
 }
 
 if (!module.parent) {
-  module.exports.start(process.argv[2] || "correct");
+  module.exports.start(process.argv[2] || "502");
 }
