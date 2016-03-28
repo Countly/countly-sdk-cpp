@@ -243,6 +243,8 @@ namespace CountlyCpp
   {
     bool ok = false;
 
+    // printf("%s\n", URI.c_str());
+
 #ifndef _WIN32
     CURL* curl;
     CURLcode code;
