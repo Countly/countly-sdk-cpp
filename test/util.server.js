@@ -27,6 +27,7 @@ module.exports.start = function(correct) {
   if (correct === "correct") {
 
     server = http.createServer(function(req, res) {
+      if (!module.parent) console.log(unescape(req.url));
       queue.push(req);
       res.writeHead(200, { "Content-Type": "text/plain" });
       res.end("Success\n");
