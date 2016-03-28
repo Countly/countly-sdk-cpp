@@ -3,7 +3,6 @@
 var assert = require("assert");
 var http = require("http");
 var url = require("url");
-var express = require("express");
 var qs = require("querystring");
 var queue = [];
 
@@ -27,9 +26,10 @@ module.exports.start = function(correct) {
 
   if (correct === "correct") {
 
-    server = express().get("/i", function(req, res) {
+    server = http.createServer(function(req, res) {
       queue.push(req);
-      res.send("Success\n");
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      res.end("Success\n");
     }).listen(port, ip);
 
   } else
@@ -37,27 +37,27 @@ module.exports.start = function(correct) {
 
     var counter = 0;
 
-    server = express().get("/i", function(req, res) {
+    server = http.createServer(function(req, res) {
       if (counter === 0) {
         counter++;
-        res.status(502);
-        res.send(
-          "<html>\n" +
-          "<head><title>502 Bad Gateway</title></head>\n" +
-          "<body bgcolor=\"white\">\n" +
-          "<center><h1>502 Bad Gateway</h1></center>\n" +
-          "<hr><center>nginx/1.4.6 (Ubuntu)</center>\n" +
-          "</body>\n" +
-          "</html>\n" +
-          "<!-- a padding to disable MSIE and Chrome friendly error page -->\n" +
-          "<!-- a padding to disable MSIE and Chrome friendly error page -->\n" +
-          "<!-- a padding to disable MSIE and Chrome friendly error page -->\n" +
-          "<!-- a padding to disable MSIE and Chrome friendly error page -->\n" +
-          "<!-- a padding to disable MSIE and Chrome friendly error page -->\n" +
-          "<!-- a padding to disable MSIE and Chrome friendly error page -->\n");
+        res.writeHead(502, { "Content-Type": "text/html" });
+        res.end("<html>\n" +
+                "<head><title>502 Bad Gateway</title></head>\n" +
+                "<body bgcolor=\"white\">\n" +
+                "<center><h1>502 Bad Gateway</h1></center>\n" +
+                "<hr><center>nginx/1.4.6 (Ubuntu)</center>\n" +
+                "</body>\n" +
+                "</html>\n" +
+                "<!-- a padding to disable MSIE and Chrome friendly error page -->\n" +
+                "<!-- a padding to disable MSIE and Chrome friendly error page -->\n" +
+                "<!-- a padding to disable MSIE and Chrome friendly error page -->\n" +
+                "<!-- a padding to disable MSIE and Chrome friendly error page -->\n" +
+                "<!-- a padding to disable MSIE and Chrome friendly error page -->\n" +
+                "<!-- a padding to disable MSIE and Chrome friendly error page -->\n");
       } else {
         queue.push(req);
-        res.send("Success\n");
+        res.writeHead(200, { "Content-Type": "text/html" });
+        res.end("Success\n");
       }
     }).listen(port, ip);
 
@@ -77,5 +77,5 @@ module.exports.stop = function() {
 }
 
 if (!module.parent) {
-  module.exports.start(process.argv[2] || "502");
+  module.exports.start("502");
 }
