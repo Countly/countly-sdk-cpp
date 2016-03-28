@@ -233,7 +233,7 @@ bool CountlyConnectionQueue::HTTPGET(string URI) {
   CURLcode code;
   curl = curl_easy_init();
   if (curl) {
-    stringstream fullURI;
+    std::stringstream fullURI;
     fullURI << (_https ? "https://" : "http://");
     fullURI << _appHostName << ":" << _appPort << URI;
     curl_easy_setopt(curl, CURLOPT_URL, fullURI.str().c_str());
