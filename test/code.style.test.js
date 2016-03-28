@@ -17,7 +17,7 @@ describe(path.basename(__filename), function() {
       path.join(__dirname, "../vendor/styleguide/cpplint/cpplint.py"),
       "--verbose=0",
       "Countly.h", "Countly.cpp",
-      "CountlyConnectionQueue.h",
+      "CountlyConnectionQueue.h", "CountlyConnectionQueue.cpp",
       "CountlyEventQueue.h"
     ], { stdio: "pipe" });
 
