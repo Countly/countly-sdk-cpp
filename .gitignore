@@ -10,6 +10,7 @@ countly.deviceid
 *.sqlite-journal
 /Debug
 /Release
+/build
 /out
 /Makefile
 /*.Makefile

@@ -9,7 +9,7 @@ module.exports = function(json, c, device_id) {
   if (c === "begin_session") {
     assert.equal(json.app_key, app_key);
     assert.ok(json.device_id.length > 4);
-    assert.equal(json.sdk_version, "1.4");
+    assert.ok(json.sdk_version.length > 4);
     assert.equal(json.begin_session, "1");
     // TODO // metrics.test(json.metrics);
     return json.device_id;
