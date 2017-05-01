@@ -1,28 +1,33 @@
-CountlyCpp
-==========
+## What's Countly?
 
-C++ SDK for Countly (count.ly)
+[Countly](http://count.ly) is an innovative, real-time, open source mobile analytics and push notifications platform. It collects data from mobile devices, and visualizes this information to analyze mobile application usage and end-user behavior. There are two parts of Countly: [the server that collects and analyzes data](http://github.com/countly/countly-server), and mobile SDK that sends this data. Both parts are open source with different licensing terms.
 
-CountlyCpp is a portable SDK for Countly (http://count.ly) written in C++.
+* **Slack user?** [Join our Slack community](http://slack.count.ly:3000/)
+* **Questions?** [Ask in our Community forum](http://community.count.ly)
 
-**Dependencies**
+## About this SDK
 
-CountlyCpp has been designed to work with very few deps in order to be portable on most platforms.
+This repository includes the portable Countly C++ SDK. 
 
-**Building**
 
-Python 2.7 is required for GYP.
-Package `libcurl4-openssl-dev` is also required in Linux.
+## Dependencies and building
 
-* clone this repository
-* `git submodule update --init --recursive'
-* launch `generate` or `generate.cmd`
+Countly C++ SDK has been designed to work with very few deps in order to be portable on most platforms.
 
-Windows: `MSBuild.exe CountlyCpp.sln` or open CountlyCpp.sln in MSVS
+In order to build this SDK, Python 2.7 is required. Package `libcurl4-openssl-dev` is also required in Linux.
 
-Linux: `make`
+First, clone the repository and run following commands:
 
-**Usage**
+```
+`git submodule update --init --recursive'
+launch `generate` or `generate.cmd`
+```
+
+On Windows, run `MSBuild.exe CountlyCpp.sln` or open CountlyCpp.sln in MSVS
+
+On Linux, run `make`
+
+## Usage
 
 Typical use is:
 
@@ -35,7 +40,7 @@ int main(int argc, char * argv[])
 {
   Countly* ct = Countly::GetInstance();
   ct->SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Free", "1.0");
-  ct->Start("abf2034f975393fa994d1cf8adf9a93e4a29ac29", "http://myserver.com", 8080);
+  ct->Start("abf2034f975393fa994d1cf8adf9a93e4a29ac29", "https://myserver.com", 403);
   ct->SetMaxEventsPerMessage(40);
   ct->SetMinUpdatePeriod(2000);
   
@@ -51,7 +56,7 @@ int main(int argc, char * argv[])
 }
 ```
 
-**Testing**
+## Testing
 
 * `npm install --ignore-scripts`
 * `npm test` or `COUNTLY_VALGRIND=1 npm test`
