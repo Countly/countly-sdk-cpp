@@ -39,7 +39,9 @@ using namespace CountlyCpp;
 int main(int argc, char * argv[])
 {
   Countly* ct = Countly::GetInstance();
-  ct->SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Free", "1.0");
+  // OS, OS_version, device, resolution, carrier, app_version);
+  ct->SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Carrier", "1.0");
+  // Server and port
   ct->Start("abf2034f975393fa994d1cf8adf9a93e4a29ac29", "https://myserver.com", 403);
   ct->SetMaxEventsPerMessage(40);
   ct->SetMinUpdatePeriod(2000);
