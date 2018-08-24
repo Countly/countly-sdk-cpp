@@ -35,6 +35,7 @@
 
 #ifndef _WIN32
 #include <unistd.h>
+#include <sys/times.h>
 #endif
 
 #if TARGET_OS_IPHONE
