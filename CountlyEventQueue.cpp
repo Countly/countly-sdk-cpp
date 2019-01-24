@@ -159,75 +159,73 @@ bool CountlyEventQueue::LoadDb() {
 }
 
 bool CountlyEventQueue::RecordEvent(string key, int count) {
-  std::stringstream json;
-  json << "{\n";
-  json << "  \"timestamp\": \"" << std::dec
-    << Countly::GetTimestamp() << "\",\n";
-  json << "  \"key\": \"" << key << "\",\n";
-  json << "  \"count\": " << std::dec << count << "\n";
-  json << "}";
-  return AddEvent(json.str());
+  ArduinoJson::StaticJsonBuffer<512> jsonBuffer;
+
+  ArduinoJson::JsonObject& root = jsonBuffer.createObject();
+  root["timestamp"] = Countly::GetTimestamp();
+  root["key"] = key;
+  root["count"] = count;
+
+  std::string jsonString;
+  root.printTo(jsonString);
+  return AddEvent(jsonString);
 }
 
 bool CountlyEventQueue::RecordEvent(string key, int count, double sum) {
-  std::stringstream json;
-  json << "{\n";
-  json << "  \"timestamp\": \"" << std::dec
-    << Countly::GetTimestamp() << "\",\n";
-  json << "  \"key\": \"" << key << "\",\n";
-  json << "  \"count\": " << std::dec << count << ",\n";
-  json << "  \"sum\": \"" << std::dec << sum << "\"\n";
-  json << "}";
-  return AddEvent(json.str());
+  ArduinoJson::StaticJsonBuffer<512> jsonBuffer;
+
+  ArduinoJson::JsonObject& root = jsonBuffer.createObject();
+  root["timestamp"] = Countly::GetTimestamp();
+  root["key"] = key;
+  root["count"] = count;
+  root["sum"] = sum;
+
+  std::string jsonString;
+  root.printTo(jsonString);
+  return AddEvent(jsonString);
 }
 
 bool CountlyEventQueue::RecordEvent(string key,
-  std::map<string, string> segmentation, int count
-) {
-  std::stringstream json;
+    std::map<string, string> segmentation, int count) {
+  ArduinoJson::StaticJsonBuffer<512> jsonBuffer;
+
+  ArduinoJson::JsonObject& root = jsonBuffer.createObject();
+  root["timestamp"] = Countly::GetTimestamp();
+  root["key"] = key;
+  root["count"] = count;
+
+  ArduinoJson::JsonObject& jsonSegmentation =
+    root.createNestedObject("segmentation");
   std::map<string, string>::iterator it;
-  json << "{\n";
-  json << "  \"timestamp\": \"" << std::dec
-    << Countly::GetTimestamp() << "\",\n";
-  json << "  \"key\": \"" << key << "\",\n";
-  json << "  \"count\": " << std::dec << count << ",\n";
-
-  json << "  \"segmentation\": {\n";
-
-  it = segmentation.begin();
-  while (it != segmentation.end()) {
-    json << "    \"" << it->first << "\": \"" << it->second
-         << "\"" << (it == segmentation.end() ? "":",") << "\n";
-    it++;
+  for (it = segmentation.begin(); it != segmentation.end(); it++) {
+    jsonSegmentation[it->first] = it->second;
   }
-  json << "  }\n";
-  json << "}";
-  return AddEvent(json.str());
+
+  std::string jsonString;
+  root.printTo(jsonString);
+  return AddEvent(jsonString);
 }
 
 bool CountlyEventQueue::RecordEvent(string key,
-  std::map<string, string> segmentation, int count, double sum
-) {
-  std::stringstream json;
+    std::map<string, string> segmentation, int count, double sum) {
+  ArduinoJson::StaticJsonBuffer<512> jsonBuffer;
+
+  ArduinoJson::JsonObject& root = jsonBuffer.createObject();
+  root["timestamp"] = Countly::GetTimestamp();
+  root["key"] = key;
+  root["count"] = count;
+  root["sum"] = sum;
+
+  ArduinoJson::JsonObject& jsonSegmentation =
+    root.createNestedObject("segmentation");
   std::map<string, string>::iterator it;
-
-  json << "{\n";
-  json << "  \"timestamp\": \"" << std::dec
-    << Countly::GetTimestamp() << "\",\n";
-  json << "  \"key\": \"" << key << "\",\n";
-  json << "  \"count\": " << std::dec << count << ",\n";
-  json << "  \"sum\": \"" << std::dec << sum << "\",\n";
-  json << "  \"segmentation\": {\n";
-
-  it = segmentation.begin();
-  while (it != segmentation.end()) {
-    json << "    \"" << it->first << "\": \"" << it->second
-         << "\"" << (it == segmentation.end() ? "":",") << "\n";
-    it++;
+  for (it = segmentation.begin(); it != segmentation.end(); it++) {
+    jsonSegmentation[it->first] = it->second;
   }
-  json << "  }\n";
-  json << "}";
-  return AddEvent(json.str());
+
+  std::string jsonString;
+  root.printTo(jsonString);
+  return AddEvent(jsonString);
 }
 
 bool CountlyEventQueue::AddEvent(string json) {

@@ -46,6 +46,8 @@
 #include "./vendor/sqlite3/sqlite3.h"
 #endif
 
+#include "./vendor/arduino-json/ArduinoJson.h"
+
 using std::string;
 
 namespace CountlyCpp {
