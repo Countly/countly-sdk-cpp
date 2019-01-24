@@ -4,3 +4,6 @@
 [submodule "vendor/styleguide"]
 	path = vendor/styleguide
 	url = https://github.com/google/styleguide
+[submodule "vendor/arduino-json"]
+	path = vendor/arduino-json
+	url = https://github.com/bblanchon/ArduinoJson
