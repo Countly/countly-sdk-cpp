@@ -1,23 +1,23 @@
 /*
  CountlyEventQueue.cpp
  CountlyCpp
- 
+
  Created by Benoit Girard on 26/10/14.
- 
+
  The MIT License (MIT)
- 
+
  Copyright (c) 2015 Kontrol SAS (tanker.io)
- 
+
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
  in the Software without restriction, including without limitation the rights
  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  copies of the Software, and to permit persons to whom the Software is
  furnished to do so, subject to the following conditions:
- 
+
  The above copyright notice and this permission notice shall be included in all
  copies or substantial portions of the Software.
- 
+
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -26,7 +26,6 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE.
  */
-
 
 #include "CountlyEventQueue.h"
 
@@ -357,7 +356,8 @@ string CountlyEventQueue::PopEvent(int* evtId, size_t offset) {
   *evtId = -1;
 
   char req[64];
-  snprintf(req, "SELECT evtid, event FROM events LIMIT 1 OFFSET %d", offset);
+  snprintf(req, sizeof(req),
+           "SELECT evtid, event FROM events LIMIT 1 OFFSET %zu", offset);
   unsigned int code = sqlite3_get_table(_sqlHandler, req,
     &pazResult, &rows, &nbCols, &zErrMsg);
   if (code != SQLITE_OK) {
@@ -395,13 +395,74 @@ string CountlyEventQueue::PopEvent(int* evtId, size_t offset) {
   return ret;
 }
 
+size_t CountlyEventQueue::PopEvents(int* eventIds, string* events,
+                                    size_t capacity, size_t offset) {
+  int rows;
+
+  LoadDb();
+  Lock();
+
+#ifndef NOSQLITE
+  char* zErrMsg = NULL;
+  char** pazResult;
+  int columns;
+  char req[64];
+
+  snprintf(req, sizeof(req),
+           "SELECT evtid, event FROM events OFFSET %zu LIMIT %zu",
+           offset, capacity);
+
+  unsigned int code = sqlite3_get_table(_sqlHandler, req, &pazResult,
+                                        &rows, &columns, &zErrMsg);
+  if (code != SQLITE_OK) {
+    if ((code == SQLITE_CORRUPT) ||
+        (code == SQLITE_IOERR_SHORT_READ) ||
+        (code == SQLITE_IOERR_WRITE) ||
+        (code == SQLITE_IOERR)) {
+      sqlite3_close(_sqlHandler);
+      _sqlHandler = NULL;
+    }
+    Unlock();
+    return 0;
+  }
+
+  if (!rows) {
+    Unlock();
+    return rows;
+  }
+
+  for (int rowIndex = 0; rowIndex < rows; rowIndex++) {
+    eventIds[rowIndex] = atoi(pazResult[rowIndex * columns]);
+    events[rowIndex] = pazResult[(rowIndex * columns) + 1];
+  }
+
+  sqlite3_free_table(pazResult);
+#else
+  if ((offset + capacity) > _events.size()) {
+    rows = _events.size() - offset;
+  } else {
+    rows = capacity;
+  }
+
+  for (int eventIndex = offset;
+       eventIndex < (offset + rows);
+       eventIndex++) {
+    eventIds[eventIndex - offset] = _events[eventIndex].evtId;
+    events[eventIndex - offset] = _events[eventIndex].json;
+  }
+#endif
+
+  Unlock();
+  return rows;
+}
+
 void CountlyEventQueue::ClearEvent(int evtId) {
   LoadDb();
   Lock();
 
 #ifndef NOSQLITE
-  stringstream req;
-  req  << "DELETE FROM events WHERE evtid=" << dec << evtId;
+  std::stringstream req;
+  req  << "DELETE FROM events WHERE evtid=" << std::dec << evtId;
 
   char* zErrMsg = NULL;
   unsigned int code = sqlite3_exec(_sqlHandler, req.str().c_str(),

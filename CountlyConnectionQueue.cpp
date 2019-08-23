@@ -1,23 +1,23 @@
 /*
  CountlyConnectionQueue.cpp
  CountlyCpp
- 
+
  Created by Benoit Girard on 26/10/14.
- 
+
  The MIT License (MIT)
- 
+
  Copyright (c) 2015 Kontrol SAS (tanker.io)
- 
+
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
  in the Software without restriction, including without limitation the rights
  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  copies of the Software, and to permit persons to whom the Software is
  furnished to do so, subject to the following conditions:
- 
+
  The above copyright notice and this permission notice shall be included in all
  copies or substantial portions of the Software.
- 
+
  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -159,49 +159,68 @@ bool CountlyConnectionQueue::BeginSession() {
 
 // returns true only if no more events to send
 bool CountlyConnectionQueue::UpdateSession(CountlyEventQueue* queue) {
-  int evtId;
-  std::vector<int> evtIds;
-  string all;
-  string URI;
-
-  if (!_deviceId.size())
+  if (!_deviceId.size()) {
     _deviceId = queue->GetDeviceId();
+  }
 
   if (!_beginSessionSent) {
-    if (!BeginSession()) return false;
+    if (!BeginSession()) {
+      return false;
+    }
     _beginSessionSent = true;
   }
 
-  string json;
+  int *eventIds = new int[_maxEvents];
+  string* events = new string[_maxEvents];
+  size_t eventCount = queue->PopEvents(eventIds, events, _maxEvents, 0);
 
-  for (int i = 0; i < _maxEvents; i++) {
-    json = queue->PopEvent(&evtId, i);
-    if (evtId == -1) break;
-    evtIds.push_back(evtId);
-    if (i > 0) all = all + ",";
-    all = all + json;
-  }
-
-  if (evtIds.size() == 0) {
+  if (eventCount == 0) {
     if (Countly::GetTimestamp() - _lastSend > KEEPALIVE * 1000) {
       std::ostringstream URI;
-      URI << "/i?app_key=" + _appKey + "&device_id=" +
-        _deviceId + "&session_duration=";
-      URI << KEEPALIVE;
-      if (!HTTPGET(URI.str())) return false;
+      URI << "/i?app_key=" << _appKey;
+      URI << "&device_id=" << _deviceId;
+      URI << "&session_duration=" << std::dec << KEEPALIVE;
+
+      if (!HTTPGET(URI.str())) {
+        delete []eventIds;
+        delete []events;
+        return false;
+      }
       _lastSend = Countly::GetTimestamp();
     }
-    return true;  // true is only here. no events
-    // and successful keepalive (if needed)
+
+    delete []eventIds;
+    delete []events;
+    return true;  // no events and successful keepalive (if needed)
   }
 
-  all = "[" + all + "]";
-  URI = "/i?app_key=" + _appKey + "&device_id=" +
-    _deviceId + "&events=" + URLEncode(all);
-  if (!HTTPGET(URI)) return false;
+
+  ArduinoJson::DynamicJsonBuffer jsonBuffer(eventCount * 16);
+  ArduinoJson::JsonArray &eventArray = jsonBuffer.createArray();
+
+  for (size_t eventIndex = 0; eventIndex < eventCount; eventIndex++) {
+    eventArray.add(ArduinoJson::RawJson(events[eventIndex]));
+  }
+  delete []events;
+
+  string all;
+  eventArray.printTo(all);
+  jsonBuffer.clear();
+
+  string URI = "/i?app_key=" + _appKey +
+    "&device_id=" + _deviceId +
+    "&events=" + URLEncode(all);
+
+  if (!HTTPGET(URI)) {
+    delete []eventIds;
+    return false;
+  }
   _lastSend = Countly::GetTimestamp();
-  for (size_t i = 0; i < evtIds.size(); i++)
-    queue->ClearEvent(evtIds[i]);
+  for (size_t i = 0; i < eventCount; i++) {
+    queue->ClearEvent(eventIds[i]);
+  }
+
+  delete []eventIds;
   return false;  // false! see above
 }
 

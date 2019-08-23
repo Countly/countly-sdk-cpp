@@ -61,6 +61,8 @@ class CountlyEventQueue {
 
     int Count();
     string PopEvent(int* evtId, size_t offset);
+    size_t PopEvents(int* eventIds, string* events,
+                     size_t capacity, size_t offset);
     void ClearEvent(int evtId);
 
     bool RecordEvent(string key, int count);
