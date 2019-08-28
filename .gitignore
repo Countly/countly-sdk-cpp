@@ -1,17 +1,18 @@
-node_modules
-countly.deviceid
-*.sln
-*.vcxproj
-*.vcxproj.user
-*.sdf
-*.opensdf
-*.v12.suo
-*.sqlite
-*.sqlite-journal
-/Debug
-/Release
-/build
-/out
-/Makefile
-/*.Makefile
-/*.target.mk
+# for out of source builds
+build/
+
+# cmake generates this file
+include/countly.hpp
+
+# in case someone runs `cmake .` in project root
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+Testing
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps
