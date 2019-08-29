@@ -1,7 +1,8 @@
 # for out of source builds
 build/
 
-# cmake generates this file
+# cmake generates these files
+src/countly.hpp
 include/countly.hpp
 
 # in case someone runs `cmake .` in project root

@@ -1,9 +1,7 @@
 #ifndef COUNTLY_HPP_
 #define COUNTLY_HPP_
 
-#include <string>
-
-#define COUNTLY_SDK_VERSION "0.1.0"
+#define COUNTLY_SDK_VERSION "@COUNTLY_SDK_VERSION@"
 
 class Countly {
 public:
@@ -17,11 +15,6 @@ public:
 	// Do not implicitly generate the copy assignment operator, this is a singleton.
 	void operator=(const Countly&) = delete;
 
-	std::string detectOSName();
-
-	std::string detectOSVersion();
-
-	void setPath(std::string path);
 };
 
 #endif
