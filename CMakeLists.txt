@@ -6,8 +6,8 @@ string(STRIP ${COUNTLY_SDK_VERSION} COUNTLY_SDK_VERSION)
 project(libcountly VERSION ${COUNTLY_SDK_VERSION} LANGUAGES CXX)
 
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
-option(COUNTLY_USE_STDLIB "Use the C++11 standard library" ON)
 option(COUNTLY_USE_CUSTOM_HTTP "Use a custom HTTP library" OFF)
+option(COUNTLY_USE_SQLITE "Use SQLite" ON)
 option(COUNTLY_BUILD_TESTS "Build test programs" OFF)
 
 if (NOT BUILD_SHARED_LIBS AND NOT COUNTLY_CUSTOM_HTTP)
@@ -34,14 +34,19 @@ set_target_properties(countly PROPERTIES
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO)
 
-if(COUNTLY_USE_STDLIB)
-  target_compile_definitions(countly PRIVATE COUNTLY_USE_STDLIB)
-  # else use a special compiler
-endif()
-
 if(COUNTLY_USE_CUSTOM_HTTP)
   target_compile_definitions(countly PRIVATE COUNTLY_USE_CUSTOM_HTTP)
-# else if not windows; link curl
+elseif(NOT WIN32)
+  find_package(CURL REQUIRED)
+  target_link_libraries(countly CURL::libcurl)
+endif()
+
+if(COUNTLY_USE_SQLITE)
+  find_package(Threads)
+  target_link_libraries(countly Threads::Threads)
+  set(Sqlite3_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/sqlite/build")
+  find_package(Sqlite3)
+  target_link_libraries(countly sqlite3)
 endif()
 
 if(COUNTLY_BUILD_TESTS)
