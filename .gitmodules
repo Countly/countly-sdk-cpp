@@ -1,9 +1,6 @@
-[submodule "vendor/gyp"]
-	path = vendor/gyp
-	url = https://chromium.googlesource.com/external/gyp
-[submodule "vendor/styleguide"]
-	path = vendor/styleguide
-	url = https://github.com/google/styleguide
-[submodule "vendor/arduino-json"]
-	path = vendor/arduino-json
-	url = https://github.com/bblanchon/ArduinoJson
+[submodule "vendor/sqlite"]
+	path = vendor/sqlite
+	url = git@github.com:azadkuh/sqlite-amalgamation.git
+[submodule "vendor/rapidjson"]
+	path = vendor/rapidjson
+	url = git@github.com:Tencent/rapidjson.git

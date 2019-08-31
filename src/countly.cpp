@@ -21,12 +21,12 @@ Countly& Countly::getInstance() {
 	return instance;
 }
 
-void Countly::setLogger(void (*fun)(int level, const char *message)) {
+void Countly::setLogger(void (*fun)(Countly::LogLevel level, const std::string& message)) {
 	logger_function = fun;
 }
 
 #ifdef COUNTLY_USE_CUSTOM_HTTP
-void Countly::setHTTPClient(bool (*fun)(bool is_post, const char *url, const char *data)) {
+void Countly::setHTTPClient(bool (*fun)(bool is_post, const std::string& url, const std::string& data)) {
 	http_client_function = fun;
 }
 #endif
@@ -49,7 +49,7 @@ void Countly::stop() {
 
 void Countly::log(Countly::LogLevel level, const std::string& message) {
 	if (logger_function != nullptr) {
-		logger_function(level, message.c_str());
+		logger_function(level, message);
 	}
 }
 
@@ -60,7 +60,7 @@ bool Countly::sendHTTP(const std::string& url, const std::string& data) {
 		return false;
 	}
 
-	return http_client_function(data.size() > COUNTLY_POST_THRESHOLD, url.c_str(), data.c_str());
+	return http_client_function(data.size() > COUNTLY_POST_THRESHOLD, url, data);
 #else
 	bool ok = false;
 #ifdef _WIN32
