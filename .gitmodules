@@ -1,6 +1,3 @@
 [submodule "vendor/sqlite"]
 	path = vendor/sqlite
 	url = git@github.com:azadkuh/sqlite-amalgamation.git
-[submodule "vendor/rapidjson"]
-	path = vendor/rapidjson
-	url = git@github.com:Tencent/rapidjson.git
