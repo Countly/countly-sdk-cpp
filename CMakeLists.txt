@@ -1,27 +1,19 @@
 cmake_minimum_required(VERSION 3.0)
 
-file(READ ${CMAKE_CURRENT_SOURCE_DIR}/scripts/version.txt COUNTLY_SDK_VERSION)
-string(STRIP ${COUNTLY_SDK_VERSION} COUNTLY_SDK_VERSION)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/include/countly.hpp" COUNTLY_HPP_CONTENTS)
+string(REGEX MATCH "#define COUNTLY_SDK_VERSION \"[^\"]+\"" COUNTLY_SDK_VERSION ${COUNTLY_HPP_CONTENTS})
+string(REGEX REPLACE "#define COUNTLY_SDK_VERSION \"([^\"]+)\"" "\\1" COUNTLY_SDK_VERSION ${COUNTLY_SDK_VERSION})
 
-project(libcountly VERSION ${COUNTLY_SDK_VERSION} LANGUAGES CXX)
+project(countly VERSION "${COUNTLY_SDK_VERSION}" LANGUAGES CXX)
 
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(COUNTLY_USE_CUSTOM_HTTP "Use a custom HTTP library" OFF)
-option(COUNTLY_USE_SQLITE "Use SQLite" ON)
+option(COUNTLY_USE_SQLITE "Use SQLite" OFF)
 option(COUNTLY_BUILD_TESTS "Build test programs" OFF)
 
 if (NOT BUILD_SHARED_LIBS AND NOT COUNTLY_CUSTOM_HTTP)
-  message(FATAL_ERROR "You must provide a custom HTTP library when compiling statically.")
+  message(FATAL_ERROR "You must provide a custom HTTP function when compiling statically.")
 endif()
-
-configure_file(
-  "${CMAKE_CURRENT_SOURCE_DIR}/include/countly.hpp.in"
-  "${CMAKE_CURRENT_SOURCE_DIR}/include/countly.hpp")
-
-configure_file(
-  "${CMAKE_CURRENT_SOURCE_DIR}/include/countly.hpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/countly.hpp"
-  COPYONLY)
 
 add_library(countly src/countly.cpp)
 
@@ -42,6 +34,7 @@ elseif(NOT WIN32)
 endif()
 
 if(COUNTLY_USE_SQLITE)
+  target_compile_definitions(countly PRIVATE COUNTLY_USE_SQLITE)
   find_package(Threads)
   target_link_libraries(countly Threads::Threads)
   set(Sqlite3_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/sqlite/build")
