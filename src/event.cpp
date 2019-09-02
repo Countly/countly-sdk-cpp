@@ -10,10 +10,6 @@ Countly::Event::Event(const std::string& key, size_t count, double sum) {
 	json_start << "{\"key\":\"" << key << "\",\"count\":" << count << ",\"sum\":" << sum;
 }
 
-void Countly::Event::addSegmentationRaw(const std::string& key, const std::string& json_value) {
-	segmentation[key] = json_value;
-}
-
 template<>
 void Countly::Event::addSegmentation<const char*>(const std::string& key, const char* value) {
 	segmentation[key] = formatString(value);

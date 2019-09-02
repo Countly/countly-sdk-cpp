@@ -45,8 +45,6 @@ public:
 		Event(const std::string& key, size_t count);
 		Event(const std::string& key, size_t count, double sum);
 
-		void addSegmentationRaw(const std::string& key, const std::string& json_value);
-
 		template<typename T>
 		void addSegmentation(const std::string& key, T value) {
 			segmentation[key] = std::to_string(value);
