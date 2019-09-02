@@ -63,6 +63,10 @@ void Countly::stop() {
 	// TODO
 }
 
+void Countly::addEvent(const Event& event) {
+	// TODO
+}
+
 void Countly::log(Countly::LogLevel level, const std::string& message) {
 	if (logger_function != nullptr) {
 		logger_function(level, message);

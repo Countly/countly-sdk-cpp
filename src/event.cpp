@@ -25,7 +25,7 @@ void Countly::Event::addSegmentation<bool>(const std::string& key, bool value) {
 	segmentation[key] = value ? "true" : "false";
 }
 
-std::string Countly::Event::serialize() {
+std::string Countly::Event::serialize() const {
 	std::ostringstream json_buffer;
 	json_buffer << json_start.str();
 

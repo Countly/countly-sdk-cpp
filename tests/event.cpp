@@ -15,12 +15,6 @@ TEST_CASE("events are serialized correctly") {
 	}
 
 	SUBCASE("with segmentation") {
-		SUBCASE("with raw json") {
-			Countly::Event event("buy", 1);
-			event.addSegmentationRaw("productID", "null");
-			CHECK(event.serialize() == "{\"key\":\"buy\",\"count\":1,\"segmentation\":{\"productID\":null}}");
-		}
-
 		SUBCASE("with signed integer") {
 			Countly::Event event("lose", 3);
 			event.addSegmentation("points", -144);

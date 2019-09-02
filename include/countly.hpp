@@ -38,7 +38,17 @@ public:
 
 	void startOnCloud(const std::string& app_key);
 
+	void stop();
+
+	class Event;
+
+	void addEvent(const Event& event);
+
 	bool updateSession();
+
+#ifdef COUNTLY_USE_SQLITE
+	void setWorkpath(const std::string& path);
+#endif
 
 	class Event {
 	public:
@@ -50,7 +60,7 @@ public:
 			segmentation[key] = std::to_string(value);
 		}
 
-		std::string serialize();
+		std::string serialize() const;
 	private:
 		static std::string formatString(const std::string& string);
 
@@ -58,7 +68,6 @@ public:
 		std::map<std::string, std::string> segmentation;
 	};
 
-	void stop();
 private:
 	void log(LogLevel level, const std::string& message);
 
@@ -67,7 +76,6 @@ private:
 	void (*logger_function)(LogLevel level, const std::string& message);
 	bool (*http_client_function)(bool is_post, const std::string& url, const std::string& data);
 	size_t max_events;
-	std::string device_id;
 	std::string app_key;
 	std::string host;
 	int port;
