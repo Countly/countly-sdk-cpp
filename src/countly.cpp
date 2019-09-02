@@ -10,7 +10,11 @@
 #include <curl/curl.h>
 #endif
 
-Countly::Countly() {}
+Countly::Countly() {
+#ifndef _WIN32
+	curl_global_init(CURL_GLOBAL_ALL);
+#endif
+}
 
 Countly::~Countly() {
 	this->stop();
