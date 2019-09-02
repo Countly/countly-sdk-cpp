@@ -155,13 +155,13 @@ bool Countly::sendHTTP(const std::string& path, const std::string& data) {
 	curl = curl_easy_init();
 	if (curl) {
 		std::string full_url(host);
-		host += ':';
-		host += std::to_string(port);
-		host += path;
+		full_url += ':';
+		full_url += std::to_string(port);
+		full_url += path;
 
 		if (data.size() <= COUNTLY_POST_THRESHOLD) {
-			host += '?';
-			host += data;
+			full_url += '?';
+			full_url += data;
 			curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
 		} else {
 			curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.c_str());
