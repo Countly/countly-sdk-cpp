@@ -25,22 +25,34 @@ void Countly::setLogger(void (*fun)(Countly::LogLevel level, const std::string& 
 	logger_function = fun;
 }
 
-#ifdef COUNTLY_USE_CUSTOM_HTTP
-void Countly::setHTTPClient(bool (*fun)(bool is_post, const std::string& url, const std::string& data)) {
+void Countly::setHTTPClient(bool (*fun)(bool use_post, const std::string& url, const std::string& data)) {
 	http_client_function = fun;
 }
-#endif
 
 void Countly::start(const std::string& app_key, const std::string& host, int port) {
-	this->app_key = app_key;
 	this->host = host;
-	this->port = port;
+	if (host.find("http://") == 0) {
+		use_https = false;
+	} else if (host.find("https://") == 0) {
+		use_https = true;
+	} else {
+		use_https = false;
+		this->host.insert(0, "http://");
+	}
+
+	this->app_key = app_key;
+
+	if (port == -1) {
+		this->port = use_https ? 443 : 80;
+	} else {
+		this->port = port;
+	}
 
 	// TODO Start thread
 }
 
 void Countly::startOnCloud(const std::string& app_key) {
-	this->start(app_key, "https://cloud.count.ly", 80);
+	this->start(app_key, "https://cloud.count.ly", 443);
 }
 
 void Countly::stop() {
@@ -53,15 +65,20 @@ void Countly::log(Countly::LogLevel level, const std::string& message) {
 	}
 }
 
-bool Countly::sendHTTP(const std::string& url, const std::string& data) {
+bool Countly::sendHTTP(const std::string& path, const std::string& data) {
+	bool use_post = data.size() > COUNTLY_POST_THRESHOLD;
 #ifdef COUNTLY_USE_CUSTOM_HTTP
 	if (http_client_function == nullptr) {
 		log(Countly::LogLevel::FATAL, "Missing HTTP client function");
 		return false;
 	}
 
-	return http_client_function(data.size() > COUNTLY_POST_THRESHOLD, url, data);
+	return http_client_function(data.size() > COUNTLY_POST_THRESHOLD, path, data);
 #else
+	if (http_client_function != nullptr) {
+		return http_client_function(use_post, path, data);
+	}
+
 	bool ok = false;
 #ifdef _WIN32
 	HINTERNET hSession;
@@ -70,35 +87,50 @@ bool Countly::sendHTTP(const std::string& url, const std::string& data) {
 
 	hSession = WinHttpOpen(NULL, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
 	if (hSession) {
-		wchar_t wideHostName[256];
-		MultiByteToWideChar(0, 0, _appHostName.c_str(), -1, wideHostName, 256);
-		hConnect = WinHttpConnect(hSession, wideHostName, _appPort, 0);
+		size_t scheme_offset = use_https ? (sizeof("https://") - 1) : (sizeof("http://") - 1);
+		size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, host.c_str() + scheme_offset, -1, nullptr, 0);
+		wchar_t *wide_hostname = new wchar_t[buffer_size];
+		MultiByteToWideChar(CP_ACP, 0, host.c_str() + scheme_offset, -1, wide_hostname, buffer_size);
+
+		hConnect = WinHttpConnect(hSession, wide_hostname, port, 0);
+
+		delete[] wide_hostname;
 	}
 
 	if (hConnect) {
-		wchar_t wideURI[65536];
-		MultiByteToWideChar(0, 0, URI.c_str(), -1, wideURI, 65536);
-		hRequest = WinHttpOpenRequest(hConnect, L"GET", wideURI, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, _https ? WINHTTP_FLAG_SECURE : 0);
+		const std::string* full_path;
+
+		if (use_post) {
+			full_path = new std::string(path);
+			*full_path += '?';
+			*full_path += data;
+		} else {
+			full_path = &path;
+		}
+
+		size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, full_path.c_str(), -1, nullptr, 0);
+		wchar_t *wide_path= new wchar_t[buffer_size];
+		MultiByteToWideChar(CP_ACP, 0, full_path.c_str(), -1, wide_path, buffer_size);
+
+		hRequest = WinHttpOpenRequest(hConnect, use_post ? L"POST" : L"GET", wide_path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, use_https ? WINHTTP_FLAG_SECURE : 0);
+
+		if (use_post) {
+			delete full_path;
+		}
 	}
 
 	if (hRequest) {
-		std::stringstream headers;
-		headers << "User-Agent: Countly " << Countly::GetVersion();
-		wchar_t wideHeaders[256];
-		MultiByteToWideChar(0, 0, headers.str().c_str(), -1, wideHeaders, 256);
-		ok = WinHttpSendRequest(hRequest, wideHeaders, headers.str().size(), WINHTTP_NO_REQUEST_DATA, 0, 0, 0) != 0;
-
+		ok = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, use_post ? data.c_str() : WINHTTP_NO_REQUEST_DATA, use_post ? data.size() : 0, 0, nullptr) != 0;
 		if (ok) {
 			ok = WinHttpReceiveResponse(hRequest, NULL) != 0;
 			if (ok) {
 				DWORD dwStatusCode = 0;
 				DWORD dwSize = sizeof(dwStatusCode);
-				WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE |
-						    WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX,
-						    &dwStatusCode, &dwSize, WINHTTP_NO_HEADER_INDEX);
+				WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &dwStatusCode, &dwSize, WINHTTP_NO_HEADER_INDEX);
 				ok = (dwStatusCode == 200);
 			}
 		}
+
 		WinHttpCloseHandle(hRequest);
 	}
 
@@ -114,17 +146,20 @@ bool Countly::sendHTTP(const std::string& url, const std::string& data) {
 	CURLcode curl_code;
 	curl = curl_easy_init();
 	if (curl) {
-		std::stringstream fullURI;
-		fullURI << host << ':' << std::dec << port << url;
+		std::string full_url(host);
+		host += ':';
+		host += std::to_string(port);
+		host += path;
 
 		if (data.size() <= COUNTLY_POST_THRESHOLD) {
-			fullURI << '?' << data;
+			host += '?';
+			host += data;
 			curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
 		} else {
 			curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.c_str());
 		}
 
-		curl_easy_setopt(curl, CURLOPT_URL, fullURI.str().c_str());
+		curl_easy_setopt(curl, CURLOPT_URL, full_url.c_str());
 
 		curl_code = curl_easy_perform(curl);
 		if (curl_code == CURLE_OK) {

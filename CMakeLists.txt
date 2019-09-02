@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.0)
 
-file(READ "${CMAKE_CURRENT_SOURCE_DIR}/include/countly.hpp" COUNTLY_HPP_CONTENTS)
+file(READ ${CMAKE_CURRENT_SOURCE_DIR}/include/countly.hpp COUNTLY_HPP_CONTENTS)
 string(REGEX MATCH "#define COUNTLY_SDK_VERSION \"[^\"]+\"" COUNTLY_SDK_VERSION ${COUNTLY_HPP_CONTENTS})
 string(REGEX REPLACE "#define COUNTLY_SDK_VERSION \"([^\"]+)\"" "\\1" COUNTLY_SDK_VERSION ${COUNTLY_SDK_VERSION})
 
-project(countly VERSION "${COUNTLY_SDK_VERSION}" LANGUAGES CXX)
+project(countly VERSION ${COUNTLY_SDK_VERSION} LANGUAGES CXX)
 
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(COUNTLY_USE_CUSTOM_HTTP "Use a custom HTTP library" OFF)
@@ -15,7 +15,9 @@ if (NOT BUILD_SHARED_LIBS AND NOT COUNTLY_CUSTOM_HTTP)
   message(FATAL_ERROR "You must provide a custom HTTP function when compiling statically.")
 endif()
 
-add_library(countly src/countly.cpp)
+add_library(countly
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/countly.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/event.cpp)
 
 target_include_directories(countly
   PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -37,13 +39,15 @@ if(COUNTLY_USE_SQLITE)
   target_compile_definitions(countly PRIVATE COUNTLY_USE_SQLITE)
   find_package(Threads)
   target_link_libraries(countly Threads::Threads)
-  set(Sqlite3_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/sqlite/build")
+  set(Sqlite3_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor/sqlite/build)
   find_package(Sqlite3)
   target_link_libraries(countly sqlite3)
 endif()
 
 if(COUNTLY_BUILD_TESTS)
-  find_package(doctest REQUIRED)
-  add_executable(countly-tests)
-  target_link_libraries(countly-tests countly doctest::doctest)
+  add_executable(countly-tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/event.cpp)
+  target_include_directories(countly-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/doctest/doctest)
+  target_link_libraries(countly-tests countly)
 endif()
