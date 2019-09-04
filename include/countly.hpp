@@ -5,6 +5,7 @@
 #include <sstream>
 #include <string>
 #include <map>
+#include <set>
 
 #ifndef COUNTLY_USE_SQLITE
 #include <deque>
@@ -35,9 +36,9 @@ public:
 
 	void setHTTPClient(bool (*fun)(bool use_post, const std::string& url, const std::string& data));
 
-	void start(const std::string& app_key, const std::string& host, int port = -1);
+	void start(const std::string& app_key, const std::string& device_id, const std::string& host, int port = -1);
 
-	void startOnCloud(const std::string& app_key);
+	void startOnCloud(const std::string& app_key, const std::string& device_id);
 
 	void stop();
 
@@ -54,7 +55,6 @@ public:
 	static std::string encodeURL(const std::string& data);
 
 	static std::string serializeForm(const std::map<std::string, std::string> data);
-
 
 #ifdef COUNTLY_USE_SQLITE
 	void setWorkpath(const std::string& path);
@@ -88,6 +88,7 @@ private:
 	bool began_session;
 	uint64_t last_sent;
 	size_t max_events;
+	std::string device_id;
 	std::string app_key;
 	std::string host;
 	int port;

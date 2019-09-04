@@ -2,6 +2,7 @@
 
 #include <string>
 #include <sstream>
+#include <iomanip>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -33,7 +34,7 @@ void Countly::setHTTPClient(bool (*fun)(bool use_post, const std::string& url, c
 	http_client_function = fun;
 }
 
-void Countly::start(const std::string& app_key, const std::string& host, int port) {
+void Countly::start(const std::string& app_key, const std::string& device_id, const std::string& host, int port) {
 	this->host = host;
 	if (host.find("http://") == 0) {
 		use_https = false;
@@ -45,6 +46,7 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 	}
 
 	this->app_key = app_key;
+	this->device_id = device_id;
 
 	if (port == -1) {
 		this->port = use_https ? 443 : 80;
@@ -55,8 +57,8 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 	// TODO Start thread
 }
 
-void Countly::startOnCloud(const std::string& app_key) {
-	this->start(app_key, "https://cloud.count.ly", 443);
+void Countly::startOnCloud(const std::string& app_key, const std::string& device_id) {
+	this->start(app_key, device_id, "https://cloud.count.ly", 443);
 }
 
 void Countly::stop() {
@@ -71,6 +73,10 @@ void Countly::addEvent(const Event& event) {
 	}
 	event_queue.push_back(event);
 #endif
+}
+
+bool Countly::beginSession() {
+	return true;
 }
 
 bool Countly::updateSession() {
@@ -95,16 +101,30 @@ bool Countly::updateSession() {
 		}
 
 		json_buffer.seekp(-1, json_buffer.cur);
-		json_buffer << ']';;
+		json_buffer << ']';
 	}
-#else
 #endif
 
 	if (no_events) {
 		if (Countly::getTimestamp() - last_sent > COUNTLY_KEEPALIVE_INTERVAL) {
+			std::map<std::string, std::string> data = {{"app_key", app_key}, {"device_id", device_id}, {"session_duration", std::to_string(COUNTLY_KEEPALIVE_INTERVAL)}};
+			if (!sendHTTP("/i", Countly::serializeForm(data))) {
+				return false;
+			}
+			last_sent = Countly::getTimestamp();
 		}
+		return true;
 	} else {
+		std::map<std::string, std::string> data = {{"app_key", app_key}, {"device_id", device_id}, {"events", json_buffer.str()}};
+		if (!sendHTTP("/i", Countly::serializeForm(data))) {
+			return false;
+		}
+		last_sent = Countly::getTimestamp();
 	}
+
+#ifndef COUNTLY_USE_SQLITE
+	event_queue.clear();
+#endif
 
 	return true;
 }
@@ -115,9 +135,30 @@ uint64_t Countly::getTimestamp() {
 }
 
 std::string Countly::encodeURL(const std::string& data) {
+	std::ostringstream encoded;
+
+	for (auto character: data) {
+		if (std::isalnum(character) || character == '.' || character == '_' || character == '~') {
+			encoded << character;
+		} else {
+			encoded << '%' << std::setw(2) << std::hex << std::uppercase << (int)((unsigned char) character);
+		}
+	}
+
+	return encoded.str();
 }
 
 std::string Countly::serializeForm(const std::map<std::string, std::string> data) {
+	std::ostringstream serialized;
+
+	for (const auto& key_value: data) {
+		serialized << key_value.first << "=" << Countly::encodeURL(key_value.second) << '&';
+	}
+
+	std::string serialized_string = serialized.str();
+	serialized_string.resize(serialized_string.size() - 1);
+
+	return serialized_string;
 }
 
 #ifdef COUNTLY_USE_SQLITE
