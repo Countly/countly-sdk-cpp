@@ -3,11 +3,15 @@
 #include <sstream>
 
 Countly::Event::Event(const std::string& key, size_t count) {
-	json_start << "{\"key\":\"" << key << "\",\"count\":" << count;
+	std::ostringstream json_buffer;
+	json_buffer << "{\"key\":\"" << key << "\",\"count\":" << count;
+	json_start = json_buffer.str();
 }
 
 Countly::Event::Event(const std::string& key, size_t count, double sum) {
-	json_start << "{\"key\":\"" << key << "\",\"count\":" << count << ",\"sum\":" << sum;
+	std::ostringstream json_buffer;
+	json_buffer << "{\"key\":\"" << key << "\",\"count\":" << count << ",\"sum\":" << sum;
+	json_start = json_buffer.str();
 }
 
 template<>
@@ -27,13 +31,13 @@ void Countly::Event::addSegmentation<bool>(const std::string& key, bool value) {
 
 std::string Countly::Event::serialize() const {
 	std::ostringstream json_buffer;
-	json_buffer << json_start.str();
+	json_buffer << json_start;
 
 	if (!segmentation.empty()) {
 		json_buffer << ",\"segmentation\":{";
 
-		for (const auto& iterator: segmentation) {
-			json_buffer << formatString(iterator.first) << ':' << iterator.second << ',';
+		for (const auto& key_value: segmentation) {
+			json_buffer << formatString(key_value.first) << ':' << key_value.second << ',';
 		}
 
 		json_buffer.seekp(-1, json_buffer.cur);

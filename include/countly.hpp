@@ -13,6 +13,7 @@
 #define COUNTLY_SDK_VERSION "0.1.0"
 #define COUNTLY_API_VERSION "19.8.0"
 #define COUNTLY_POST_THRESHOLD 2000
+#define COUNTLY_KEEPALIVE_INTERVAL 3000
 
 class Countly {
 public:
@@ -44,7 +45,16 @@ public:
 
 	void addEvent(const Event& event);
 
+	bool beginSession();
+
 	bool updateSession();
+
+	static uint64_t getTimestamp();
+
+	static std::string encodeURL(const std::string& data);
+
+	static std::string serializeForm(const std::map<std::string, std::string> data);
+
 
 #ifdef COUNTLY_USE_SQLITE
 	void setWorkpath(const std::string& path);
@@ -64,7 +74,7 @@ public:
 	private:
 		static std::string formatString(const std::string& string);
 
-		std::ostringstream json_start;
+		std::string json_start;
 		std::map<std::string, std::string> segmentation;
 	};
 
@@ -75,6 +85,8 @@ private:
 
 	void (*logger_function)(LogLevel level, const std::string& message);
 	bool (*http_client_function)(bool is_post, const std::string& url, const std::string& data);
+	bool began_session;
+	uint64_t last_sent;
 	size_t max_events;
 	std::string app_key;
 	std::string host;

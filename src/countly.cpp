@@ -64,8 +64,66 @@ void Countly::stop() {
 }
 
 void Countly::addEvent(const Event& event) {
-	// TODO
+#ifndef COUNTLY_USE_SQLITE
+	if (event_queue.size() == max_events) {
+		log(Countly::LogLevel::WARNING, "Event queue is full, dropping the oldest event to insert a new one");
+		event_queue.pop_front();
+	}
+	event_queue.push_back(event);
+#endif
 }
+
+bool Countly::updateSession() {
+	if (!began_session) {
+		if (!beginSession()) {
+			return false;
+		}
+
+		began_session = true;
+	}
+
+	std::ostringstream json_buffer;
+	bool no_events;
+
+#ifndef COUNTLY_USE_SQLITE
+	no_events = event_queue.empty();
+	if (!no_events) {
+		json_buffer << '[';;
+
+		for (const auto& event: event_queue) {
+			json_buffer << event.serialize() << ',';
+		}
+
+		json_buffer.seekp(-1, json_buffer.cur);
+		json_buffer << ']';;
+	}
+#else
+#endif
+
+	if (no_events) {
+		if (Countly::getTimestamp() - last_sent > COUNTLY_KEEPALIVE_INTERVAL) {
+		}
+	} else {
+	}
+
+	return true;
+}
+
+uint64_t Countly::getTimestamp() {
+	// TODO
+	return 0;
+}
+
+std::string Countly::encodeURL(const std::string& data) {
+}
+
+std::string Countly::serializeForm(const std::map<std::string, std::string> data) {
+}
+
+#ifdef COUNTLY_USE_SQLITE
+void Countly::setWorkpath(const std::string& path) {
+}
+#endif
 
 void Countly::log(Countly::LogLevel level, const std::string& message) {
 	if (logger_function != nullptr) {
