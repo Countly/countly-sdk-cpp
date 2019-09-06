@@ -1,24 +1,36 @@
-#include "countly.hpp"
-
+#include <chrono>
 #include <string>
 #include <sstream>
+#include <thread>
 #include <iomanip>
+#include <iostream>
 
+#include "countly.hpp"
+
+#ifndef COUNTLY_USE_CUSTOM_HTTP
 #ifdef _WIN32
-#include <Windows.h>
-#include <WinHTTP.h>
+#include "Windows.h"
+#include "WinHTTP.h"
 #else
-#include <curl/curl.h>
+#include "curl/curl.h"
+#endif
 #endif
 
-Countly::Countly() {
-#ifndef _WIN32
+#ifdef COUNTLY_USE_SQLITE
+#include "sqlite3.h"
+#endif
+
+Countly::Countly() : max_events(200), running(false) {
+#if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_init(CURL_GLOBAL_ALL);
 #endif
 }
 
 Countly::~Countly() {
 	this->stop();
+#if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
+	curl_global_cleanup();
+#endif
 }
 
 Countly& Countly::getInstance() {
@@ -27,14 +39,59 @@ Countly& Countly::getInstance() {
 }
 
 void Countly::setLogger(void (*fun)(Countly::LogLevel level, const std::string& message)) {
+	mutex.lock();
 	logger_function = fun;
+	mutex.unlock();
 }
 
 void Countly::setHTTPClient(bool (*fun)(bool use_post, const std::string& url, const std::string& data)) {
+	mutex.lock();
 	http_client_function = fun;
+	mutex.unlock();
 }
 
-void Countly::start(const std::string& app_key, const std::string& device_id, const std::string& host, int port) {
+void Countly::setMetrics(const std::string& os, const std::string& os_version, const std::string& device,
+			 const std::string& resolution, const std::string& carrier, const std::string& app_version) {
+	std::ostringstream json_buffer;
+
+	json_buffer << '{';
+
+	if (!os.empty()) {
+		json_buffer << "_os:" << Countly::formatJSONString(os) << ',';
+	}
+
+	if (!os_version.empty()) {
+		json_buffer << "_os_version:" << Countly::formatJSONString(os_version) << ',';
+	}
+
+	if (!device.empty()) {
+		json_buffer << "_device:" << Countly::formatJSONString(device) << ',';
+	}
+
+	if (!resolution.empty()) {
+		json_buffer << "_resolution:" << Countly::formatJSONString(resolution) << ',';
+	}
+
+	if (!carrier.empty()) {
+		json_buffer << "_carrier:" << Countly::formatJSONString(carrier) << ',';
+	}
+
+	if (!app_version.empty()) {
+		json_buffer << "_app_version:" << Countly::formatJSONString(app_version) << ',';
+	}
+
+	if (json_buffer.str() != "{") {
+		json_buffer.seekp(-1, json_buffer.cur);
+	}
+
+	json_buffer << '}';
+	mutex.lock();
+	metrics = json_buffer.str();
+	mutex.unlock();
+}
+
+void Countly::start(const std::string& app_key, const std::string& device_id, const std::string& host, int port, bool start_thread) {
+	mutex.lock();
 	this->host = host;
 	if (host.find("http://") == 0) {
 		use_https = false;
@@ -48,13 +105,17 @@ void Countly::start(const std::string& app_key, const std::string& device_id, co
 	this->app_key = app_key;
 	this->device_id = device_id;
 
-	if (port == -1) {
+	if (port <= 0) {
 		this->port = use_https ? 443 : 80;
 	} else {
 		this->port = port;
 	}
 
-	// TODO Start thread
+	if (!running && start_thread) {
+		stop_thread = false;
+		thread = new std::thread(&Countly::updateLoop, this);
+	}
+	mutex.unlock();
 }
 
 void Countly::startOnCloud(const std::string& app_key, const std::string& device_id) {
@@ -62,29 +123,71 @@ void Countly::startOnCloud(const std::string& app_key, const std::string& device
 }
 
 void Countly::stop() {
-	// TODO
+	mutex.lock();
+	if (began_session) {
+		mutex.unlock();
+		endSession();
+		mutex.lock();
+	}
+	stop_thread = true;
+	mutex.unlock();
+	if (thread != nullptr && thread->joinable()) {
+		thread->join();
+		delete thread;
+	}
 }
 
 void Countly::addEvent(const Event& event) {
+	mutex.lock();
 #ifndef COUNTLY_USE_SQLITE
 	if (event_queue.size() == max_events) {
 		log(Countly::LogLevel::WARNING, "Event queue is full, dropping the oldest event to insert a new one");
 		event_queue.pop_front();
 	}
 	event_queue.push_back(event);
+#else
+	sqlite3 *database;
+	int return_value;
+	char *error_message;
+
+	return_value = sqlite3_open(database_path.c_str(), &database);
+	if (return_value == SQLITE_OK) {
+		std::ostringstream sql_statement_stream;
+		sql_statement_stream << "INSERT INTO events (event) VALUES('" << event.serialize() << "');";
+		std::string sql_statement = sql_statement_stream.str();
+
+		return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
+		if (return_value != SQLITE_OK) {
+			log(Countly::LogLevel::ERROR, error_message);
+			sqlite3_free(error_message);
+		}
+	}
+	sqlite3_close(database);
 #endif
+	mutex.unlock();
 }
 
 bool Countly::beginSession() {
-	return true;
+	mutex.lock();
+	std::map<std::string, std::string> data = {{"app_key", app_key}, {"device_id", device_id}, {"sdk_version", COUNTLY_API_VERSION}, {"begin_session", "1"}, {"metrics", metrics}};
+	if (sendHTTP("/i", Countly::serializeForm(data))) {
+		last_sent = Countly::getTimestamp();
+		began_session = true;
+	}
+
+	mutex.unlock();
+	return began_session;
 }
 
 bool Countly::updateSession() {
+	mutex.lock();
 	if (!began_session) {
+		mutex.unlock();
 		if (!beginSession()) {
 			return false;
 		}
 
+		mutex.lock();
 		began_session = true;
 	}
 
@@ -94,7 +197,7 @@ bool Countly::updateSession() {
 #ifndef COUNTLY_USE_SQLITE
 	no_events = event_queue.empty();
 	if (!no_events) {
-		json_buffer << '[';;
+		json_buffer << '[';
 
 		for (const auto& event: event_queue) {
 			json_buffer << event.serialize() << ',';
@@ -103,35 +206,110 @@ bool Countly::updateSession() {
 		json_buffer.seekp(-1, json_buffer.cur);
 		json_buffer << ']';
 	}
+#else
+	sqlite3 *database;
+	int return_value, row_count, column_count;
+	char** table;
+	char *error_message;
+	std::string event_ids;
+
+	return_value = sqlite3_open(database_path.c_str(), &database);
+	if (return_value == SQLITE_OK) {
+		std::ostringstream sql_statement_stream;
+		sql_statement_stream << "SELECT evtid, event FROM events LIMIT " << std::dec << max_events << ';';
+		std::string sql_statement = sql_statement_stream.str();
+
+		return_value = sqlite3_get_table(database, sql_statement.c_str(), &table, &row_count, &column_count, &error_message);
+		no_events = (row_count == 0);
+		if (return_value == SQLITE_OK && !no_events) {
+			std::ostringstream event_id_stream;
+
+			json_buffer << '[';
+			event_id_stream << '(';
+
+			for (int event_index = 1; event_index < row_count+1; event_index++) {
+				event_id_stream << table[event_index * column_count] << ',';
+				json_buffer << table[(event_index * column_count) + 1] << ',';
+			}
+
+			event_id_stream.seekp(-1, json_buffer.cur);
+			event_id_stream << ')';
+			event_ids = event_id_stream.str();
+
+			json_buffer.seekp(-1, json_buffer.cur);
+			json_buffer << ']';
+		} else if (return_value != SQLITE_OK) {
+			log(Countly::LogLevel::ERROR, error_message);
+			sqlite3_free(error_message);
+		}
+		sqlite3_free_table(table);
+	}
+	sqlite3_close(database);
 #endif
 
+	mutex.unlock();
+	auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
+	mutex.lock();
 	if (no_events) {
-		if (Countly::getTimestamp() - last_sent > COUNTLY_KEEPALIVE_INTERVAL) {
-			std::map<std::string, std::string> data = {{"app_key", app_key}, {"device_id", device_id}, {"session_duration", std::to_string(COUNTLY_KEEPALIVE_INTERVAL)}};
+		if (duration.count() > COUNTLY_KEEPALIVE_INTERVAL) {
+			std::map<std::string, std::string> data = {{"app_key", app_key}, {"device_id", device_id}, {"session_duration", std::to_string(duration.count())}};
 			if (!sendHTTP("/i", Countly::serializeForm(data))) {
+				mutex.unlock();
 				return false;
 			}
-			last_sent = Countly::getTimestamp();
+			last_sent += duration;
 		}
 		return true;
 	} else {
-		std::map<std::string, std::string> data = {{"app_key", app_key}, {"device_id", device_id}, {"events", json_buffer.str()}};
+		std::map<std::string, std::string> data = {{"app_key", app_key}, {"device_id", device_id}, {"session_duration", std::to_string(duration.count())}, {"events", json_buffer.str()}};
 		if (!sendHTTP("/i", Countly::serializeForm(data))) {
+			mutex.unlock();
 			return false;
 		}
 		last_sent = Countly::getTimestamp();
 	}
 
+	if (!no_events) {
 #ifndef COUNTLY_USE_SQLITE
-	event_queue.clear();
-#endif
+		event_queue.clear();
+#else
+		return_value = sqlite3_open(database_path.c_str(), &database);
+		if (return_value == SQLITE_OK) {
+			std::ostringstream sql_statement_stream;
+			sql_statement_stream << "DELETE FROM events WHERE evtid IN " << event_ids << ';';
+			std::string sql_statement = sql_statement_stream.str();
 
+			return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
+			if (return_value != SQLITE_OK) {
+				log(Countly::LogLevel::ERROR, error_message);
+				sqlite3_free(error_message);
+			}
+		}
+		sqlite3_close(database);
+#endif
+	}
+
+	mutex.unlock();
 	return true;
 }
 
-uint64_t Countly::getTimestamp() {
-	// TODO
-	return 0;
+bool Countly::endSession() {
+	auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
+	mutex.lock();
+	std::map<std::string, std::string> data = {{"app_key", app_key}, {"device_id", device_id}, {"session_duration", std::to_string(duration.count())}, {"end_session", "1"}};
+	if (sendHTTP("/i", Countly::serializeForm(data))) {
+		last_sent += duration;
+		began_session = false;
+		mutex.unlock();
+		return true;
+	}
+
+	mutex.unlock();
+	return false;
+}
+
+std::chrono::system_clock::time_point Countly::getTimestamp() {
+	return std::chrono::system_clock::now();
 }
 
 std::string Countly::encodeURL(const std::string& data) {
@@ -161,8 +339,42 @@ std::string Countly::serializeForm(const std::map<std::string, std::string> data
 	return serialized_string;
 }
 
+std::string Countly::formatJSONString(const std::string& string) {
+	std::string formattedString = string;
+
+	for (auto index = formattedString.find('"', 0);
+	     index != std::string::npos;
+	     index = formattedString.find('"', index + 1)) {
+		if (index == 0 || formattedString[index - 1] == '\\') {
+			formattedString.insert(index, 1, '\\');
+		}
+	}
+
+	formattedString.insert(0, 1, '\"');
+	formattedString.push_back('\"');
+	return formattedString;
+}
+
 #ifdef COUNTLY_USE_SQLITE
-void Countly::setWorkpath(const std::string& path) {
+void Countly::setDatabasePath(const std::string& path) {
+	sqlite3 *database;
+	int return_value, row_count, column_count;
+	char** table;
+	char *error_message;
+
+	mutex.lock();
+	database_path = path;
+
+	return_value = sqlite3_open(database_path.c_str(), &database);
+	if (return_value == SQLITE_OK) {
+		return_value = sqlite3_exec(database, "CREATE TABLE IF NOT EXISTS events (evtid INTEGER PRIMARY KEY, event TEXT)", nullptr, nullptr, &error_message);
+		if (return_value != SQLITE_OK) {
+			log(Countly::LogLevel::ERROR, error_message);
+			sqlite3_free(error_message);
+		}
+	}
+	sqlite3_close(database);
+	mutex.unlock();
 }
 #endif
 
@@ -280,4 +492,31 @@ bool Countly::sendHTTP(const std::string& path, const std::string& data) {
 #endif
 	return ok;
 #endif
+}
+
+std::chrono::system_clock::duration Countly::getSessionDuration() {
+	mutex.lock();
+	std::chrono::system_clock::duration duration = last_sent - Countly::getTimestamp();
+	mutex.unlock();
+	return duration;
+}
+
+void Countly::updateLoop() {
+	mutex.lock();
+	running = true;
+	mutex.unlock();
+	while (true) {
+		mutex.lock();
+		if (stop_thread) {
+			stop_thread = false;
+			mutex.unlock();
+			break;
+		}
+		mutex.unlock();
+		updateSession();
+		std::this_thread::sleep_for(std::chrono::milliseconds(COUNTLY_KEEPALIVE_INTERVAL));
+	}
+	mutex.lock();
+	running = false;
+	mutex.unlock();
 }

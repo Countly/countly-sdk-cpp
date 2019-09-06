@@ -28,6 +28,9 @@ set_target_properties(countly PROPERTIES
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO)
 
+find_package(Threads)
+target_link_libraries(countly Threads::Threads)
+
 if(COUNTLY_USE_CUSTOM_HTTP)
   target_compile_definitions(countly PRIVATE COUNTLY_USE_CUSTOM_HTTP)
 elseif(NOT WIN32)
@@ -37,10 +40,9 @@ endif()
 
 if(COUNTLY_USE_SQLITE)
   target_compile_definitions(countly PRIVATE COUNTLY_USE_SQLITE)
-  find_package(Threads)
-  target_link_libraries(countly Threads::Threads)
   set(Sqlite3_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor/sqlite/build)
   find_package(Sqlite3)
+  target_include_directories(countly PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/sqlite)
   target_link_libraries(countly sqlite3)
 endif()
 
@@ -48,6 +50,10 @@ if(COUNTLY_BUILD_TESTS)
   add_executable(countly-tests
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/event.cpp)
+  if(COUNTLY_USE_SQLITE)
+    target_compile_definitions(countly-tests PRIVATE COUNTLY_USE_SQLITE)
+    target_include_directories(countly-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/sqlite)
+  endif()
   target_include_directories(countly-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/doctest/doctest)
   target_link_libraries(countly-tests countly)
 endif()
