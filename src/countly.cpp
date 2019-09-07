@@ -27,7 +27,7 @@ Countly::Countly() : max_events(200), running(false) {
 }
 
 Countly::~Countly() {
-	this->stop();
+	stop();
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_cleanup();
 #endif

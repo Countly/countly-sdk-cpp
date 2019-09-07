@@ -14,6 +14,12 @@
 #define COUNTLY_TEST_DEVICE_ID "11732aa3-19a6-4272-9057-e3411f1938be"
 #define COUNTLY_TEST_HOST "http://test.countly.notarealdomain"
 #define COUNTLY_TEST_PORT 8080
+#ifdef COUNTLY_USE_SQLITE
+#define WAIT_FOR_SQLITE(N) std::this_thread::sleep_for(std::chrono::seconds(N))
+#else
+#define WAIT_FOR_SQLITE(N)
+#endif
+
 
 struct HTTPCall {
 	bool use_post;
@@ -71,10 +77,10 @@ TEST_CASE("events are sent correctly") {
 	countly.setDatabasePath("countly.db");
 #endif
 
-	countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_DEVICE_ID, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT);
+	countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_DEVICE_ID, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
 
-	countly.beginSession();
 	{
+		countly.beginSession();
 		HTTPCall http_call = popHTTPCall();
 		CHECK(!http_call.use_post);
 		CHECK(http_call.data["begin_session"] == "1");
@@ -84,12 +90,36 @@ TEST_CASE("events are sent correctly") {
 		Countly::Event event("win", 4);
 		event.addSegmentation("points", 100);
 		countly.addEvent(event);
-		std::this_thread::sleep_for(std::chrono::seconds(1));
+		WAIT_FOR_SQLITE(1);
 		countly.updateSession();
-		std::this_thread::sleep_for(std::chrono::seconds(1));
 
 		HTTPCall http_call = popHTTPCall();
 		CHECK(!http_call.use_post);
 		CHECK(http_call.data["events"] == "%5B%7B%22key%22%3A%22win%22%2C%22count%22%3A4%2C%22segmentation%22%3A%7B%22points%22%3A100%7D%7D%5D");
+	}
+
+	{
+		Countly::Event event1("win", 2);
+		Countly::Event event2("achievement", 1);
+		countly.addEvent(event1);
+		countly.addEvent(event2);
+		WAIT_FOR_SQLITE(1);
+		countly.updateSession();
+
+		HTTPCall http_call = popHTTPCall();
+		CHECK(!http_call.use_post);
+		CHECK(http_call.data["events"] == "%5B%7B%22key%22%3A%22win%22%2C%22count%22%3A2%7D%2C%7B%22key%22%3A%22achievement%22%2C%22count%22%3A1%7D%5D");
+	}
+
+	{
+		for (int i = 0; i < 100; i++) {
+			Countly::Event event("click", i);
+			countly.addEvent(event);
+		}
+		WAIT_FOR_SQLITE(1);
+		countly.updateSession();
+
+		HTTPCall http_call = popHTTPCall();
+		CHECK(http_call.use_post);
 	}
 }
