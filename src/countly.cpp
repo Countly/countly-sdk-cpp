@@ -153,6 +153,7 @@ void Countly::addEvent(const Event& event) {
 	return_value = sqlite3_open(database_path.c_str(), &database);
 	if (return_value == SQLITE_OK) {
 		std::ostringstream sql_statement_stream;
+		// TODO Investigate if we need to escape single quotes in serialized event
 		sql_statement_stream << "INSERT INTO events (event) VALUES('" << event.serialize() << "');";
 		std::string sql_statement = sql_statement_stream.str();
 

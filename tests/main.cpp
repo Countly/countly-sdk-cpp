@@ -74,19 +74,19 @@ TEST_CASE("events are sent correctly") {
 	countly.setHTTPClient(fakeSendHTTP);
 
 #ifdef COUNTLY_USE_SQLITE
-	countly.setDatabasePath("countly.db");
+	countly.setDatabasePath("countly-test.db");
 #endif
 
 	countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_DEVICE_ID, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
 
-	{
+	SUBCASE("session begins") {
 		countly.beginSession();
 		HTTPCall http_call = popHTTPCall();
 		CHECK(!http_call.use_post);
 		CHECK(http_call.data["begin_session"] == "1");
 	}
 
-	{
+	SUBCASE("single event is sent") {
 		Countly::Event event("win", 4);
 		event.addSegmentation("points", 100);
 		countly.addEvent(event);
@@ -98,7 +98,7 @@ TEST_CASE("events are sent correctly") {
 		CHECK(http_call.data["events"] == "%5B%7B%22key%22%3A%22win%22%2C%22count%22%3A4%2C%22segmentation%22%3A%7B%22points%22%3A100%7D%7D%5D");
 	}
 
-	{
+	SUBCASE("two events are sent") {
 		Countly::Event event1("win", 2);
 		Countly::Event event2("achievement", 1);
 		countly.addEvent(event1);
@@ -111,7 +111,7 @@ TEST_CASE("events are sent correctly") {
 		CHECK(http_call.data["events"] == "%5B%7B%22key%22%3A%22win%22%2C%22count%22%3A2%7D%2C%7B%22key%22%3A%22achievement%22%2C%22count%22%3A1%7D%5D");
 	}
 
-	{
+	SUBCASE("100 events are sent") {
 		for (int i = 0; i < 100; i++) {
 			Countly::Event event("click", i);
 			countly.addEvent(event);
