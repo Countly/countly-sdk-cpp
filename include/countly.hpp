@@ -12,8 +12,6 @@
 
 #ifndef COUNTLY_USE_SQLITE
 #include <deque>
-#else
-#include "sqlite3.h"
 #endif
 
 #define COUNTLY_SDK_VERSION "0.1.0"
@@ -34,6 +32,10 @@ public:
 
 	// Do not implicitly generate the copy assignment operator, this is a singleton.
 	void operator=(const Countly&) = delete;
+
+	void alwaysUsePost(bool value);
+
+	void setSalt(const std::string& value);
 
 	enum LogLevel {DEBUG, INFO, WARNING, ERROR, FATAL};
 
@@ -90,7 +92,7 @@ public:
 private:
 	void log(LogLevel level, const std::string& message);
 
-	bool sendHTTP(const std::string& path, const std::string& data);
+	bool sendHTTP(std::string path, std::string data);
 
 	std::chrono::system_clock::duration getSessionDuration();
 
@@ -98,20 +100,26 @@ private:
 
 	void (*logger_function)(LogLevel level, const std::string& message);
 	bool (*http_client_function)(bool is_post, const std::string& url, const std::string& data);
-	bool began_session;
-	std::chrono::system_clock::time_point last_sent;
-	size_t max_events;
-	std::string app_key;
+
 	std::string device_id;
+	std::string app_key;
+
 	std::string host;
 	int port;
 	bool use_https;
+	bool always_use_post;
+	std::chrono::system_clock::time_point last_sent;
+	bool began_session;
+
 	std::string metrics;
+	std::string salt;
+
 	std::thread *thread;
 	std::mutex mutex;
 	bool stop_thread;
 	bool running;
 
+	size_t max_events;
 #ifndef COUNTLY_USE_SQLITE
 	std::deque<Event> event_queue;
 #else

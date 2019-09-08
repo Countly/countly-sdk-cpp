@@ -5,6 +5,8 @@
 #include <iomanip>
 #include <iostream>
 
+#include "openssl/sha.h"
+
 #include "countly.hpp"
 
 #ifndef COUNTLY_USE_CUSTOM_HTTP
@@ -20,7 +22,7 @@
 #include "sqlite3.h"
 #endif
 
-Countly::Countly() : max_events(200), running(false) {
+Countly::Countly() : max_events(200), running(false), always_use_post(false) {
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_init(CURL_GLOBAL_ALL);
 #endif
@@ -36,6 +38,18 @@ Countly::~Countly() {
 Countly& Countly::getInstance() {
 	static Countly instance;
 	return instance;
+}
+
+void Countly::alwaysUsePost(bool value) {
+	mutex.lock();
+	always_use_post = value;
+	mutex.unlock();
+}
+
+void Countly::setSalt(const std::string& value) {
+	mutex.lock();
+	salt = value;
+	mutex.unlock();
 }
 
 void Countly::setLogger(void (*fun)(Countly::LogLevel level, const std::string& message)) {
@@ -385,15 +399,37 @@ void Countly::log(Countly::LogLevel level, const std::string& message) {
 	}
 }
 
-bool Countly::sendHTTP(const std::string& path, const std::string& data) {
-	bool use_post = data.size() > COUNTLY_POST_THRESHOLD;
+bool Countly::sendHTTP(std::string path, std::string data) {
+	bool use_post = always_use_post || (data.size() > COUNTLY_POST_THRESHOLD);
+
+	if (!salt.empty()) {
+		unsigned char checksum[SHA256_DIGEST_LENGTH];
+		std::string salted_data = data + salt;
+		SHA256_CTX sha256;
+
+		SHA256_Init(&sha256);
+		SHA256_Update(&sha256, salted_data.c_str(), salted_data.size());
+		SHA256_Final(checksum, &sha256);
+
+		std::ostringstream checksum_stream;
+		for (size_t index = 0; index < SHA256_DIGEST_LENGTH; index++) {
+			checksum_stream << std::setw(2) << std::hex << checksum[index];
+		}
+
+		if (!data.empty()) {
+			data += '&';
+		}
+
+		data += "checksum256=";
+		data += checksum_stream.str();
+	}
 #ifdef COUNTLY_USE_CUSTOM_HTTP
 	if (http_client_function == nullptr) {
 		log(Countly::LogLevel::FATAL, "Missing HTTP client function");
 		return false;
 	}
 
-	return http_client_function(data.size() > COUNTLY_POST_THRESHOLD, path, data);
+	return http_client_function(use_post, path, data);
 #else
 	if (http_client_function != nullptr) {
 		return http_client_function(use_post, path, data);
