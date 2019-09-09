@@ -58,7 +58,7 @@ void Countly::setLogger(void (*fun)(Countly::LogLevel level, const std::string& 
 	mutex.unlock();
 }
 
-void Countly::setHTTPClient(bool (*fun)(bool use_post, const std::string& url, const std::string& data)) {
+void Countly::setHTTPClient(Countly::HTTPResponse (*fun)(bool use_post, const std::string& url, const std::string& data)) {
 	mutex.lock();
 	http_client_function = fun;
 	mutex.unlock();
@@ -185,7 +185,7 @@ void Countly::addEvent(const Event& event) {
 bool Countly::beginSession() {
 	mutex.lock();
 	std::map<std::string, std::string> data = {{"app_key", app_key}, {"device_id", device_id}, {"sdk_version", COUNTLY_API_VERSION}, {"begin_session", "1"}, {"metrics", metrics}};
-	if (sendHTTP("/i", Countly::serializeForm(data))) {
+	if (sendHTTP("/i", Countly::serializeForm(data)).success) {
 		last_sent = Countly::getTimestamp();
 		began_session = true;
 	}
@@ -268,7 +268,7 @@ bool Countly::updateSession() {
 	if (no_events) {
 		if (duration.count() > COUNTLY_KEEPALIVE_INTERVAL) {
 			std::map<std::string, std::string> data = {{"app_key", app_key}, {"device_id", device_id}, {"session_duration", std::to_string(duration.count())}};
-			if (!sendHTTP("/i", Countly::serializeForm(data))) {
+			if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
 				mutex.unlock();
 				return false;
 			}
@@ -277,7 +277,7 @@ bool Countly::updateSession() {
 		return true;
 	} else {
 		std::map<std::string, std::string> data = {{"app_key", app_key}, {"device_id", device_id}, {"session_duration", std::to_string(duration.count())}, {"events", json_buffer.str()}};
-		if (!sendHTTP("/i", Countly::serializeForm(data))) {
+		if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
 			mutex.unlock();
 			return false;
 		}
@@ -312,7 +312,7 @@ bool Countly::endSession() {
 	auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
 	mutex.lock();
 	std::map<std::string, std::string> data = {{"app_key", app_key}, {"device_id", device_id}, {"session_duration", std::to_string(duration.count())}, {"end_session", "1"}};
-	if (sendHTTP("/i", Countly::serializeForm(data))) {
+	if (sendHTTP("/i", Countly::serializeForm(data)).success) {
 		last_sent += duration;
 		began_session = false;
 		mutex.unlock();
@@ -399,7 +399,7 @@ void Countly::log(Countly::LogLevel level, const std::string& message) {
 	}
 }
 
-bool Countly::sendHTTP(std::string path, std::string data) {
+Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 	bool use_post = always_use_post || (data.size() > COUNTLY_POST_THRESHOLD);
 
 	if (!salt.empty()) {
@@ -435,7 +435,8 @@ bool Countly::sendHTTP(std::string path, std::string data) {
 		return http_client_function(use_post, path, data);
 	}
 
-	bool ok = false;
+	Countly::HTTPResponse response;
+	response.success = false;
 #ifdef _WIN32
 	HINTERNET hSession;
 	HINTERNET hConnect;
@@ -454,25 +455,16 @@ bool Countly::sendHTTP(std::string path, std::string data) {
 	}
 
 	if (hConnect) {
-		const std::string* full_path;
-
-		if (use_post) {
-			full_path = new std::string(path);
-			*full_path += '?';
-			*full_path += data;
-		} else {
-			full_path = &path;
+		if (!use_post) {
+			path += '?';
+			path += data;
 		}
 
-		size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, full_path.c_str(), -1, nullptr, 0);
+		size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, path.c_str(), -1, nullptr, 0);
 		wchar_t *wide_path= new wchar_t[buffer_size];
-		MultiByteToWideChar(CP_ACP, 0, full_path.c_str(), -1, wide_path, buffer_size);
+		MultiByteToWideChar(CP_ACP, 0, path.c_str(), -1, wide_path, buffer_size);
 
 		hRequest = WinHttpOpenRequest(hConnect, use_post ? L"POST" : L"GET", wide_path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, use_https ? WINHTTP_FLAG_SECURE : 0);
-
-		if (use_post) {
-			delete full_path;
-		}
 	}
 
 	if (hRequest) {
@@ -483,7 +475,7 @@ bool Countly::sendHTTP(std::string path, std::string data) {
 				DWORD dwStatusCode = 0;
 				DWORD dwSize = sizeof(dwStatusCode);
 				WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &dwStatusCode, &dwSize, WINHTTP_NO_HEADER_INDEX);
-				ok = (dwStatusCode == 200);
+				response.success = (dwStatusCode >= 200 && dwStatusCode < 300);
 			}
 		}
 
@@ -502,26 +494,24 @@ bool Countly::sendHTTP(std::string path, std::string data) {
 	CURLcode curl_code;
 	curl = curl_easy_init();
 	if (curl) {
-		std::string full_url(host);
-		full_url += ':';
-		full_url += std::to_string(port);
-		full_url += path;
+		std::ostringstream full_url_stream;
+		full_url_stream << host << ':' << std::dec << port << path;
 
-		if (data.size() <= COUNTLY_POST_THRESHOLD) {
-			full_url += '?';
-			full_url += data;
+		if (!use_post) {
+			full_url_stream << '?' << data;
 			curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
 		} else {
 			curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.c_str());
 		}
 
+		std::string full_url = full_url_stream.str();
 		curl_easy_setopt(curl, CURLOPT_URL, full_url.c_str());
 
 		curl_code = curl_easy_perform(curl);
 		if (curl_code == CURLE_OK) {
 			long status_code;
 			curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
-			ok = (status_code == 200);
+			response.success = (status_code == 200);
 		}
 
 		curl_easy_cleanup(curl);

@@ -41,7 +41,12 @@ public:
 
 	void setLogger(void (*fun)(LogLevel level, const std::string& message));
 
-	void setHTTPClient(bool (*fun)(bool use_post, const std::string& url, const std::string& data));
+	struct HTTPResponse {
+		bool success;
+		std::map<std::string, std::string> data;
+	};
+
+	void setHTTPClient(HTTPResponse (*fun)(bool use_post, const std::string& url, const std::string& data));
 
 	void setMetrics(const std::string& os, const std::string& os_version, const std::string& device, const std::string& resolution, const std::string& carrier, const std::string& app_version);
 
@@ -92,14 +97,14 @@ public:
 private:
 	void log(LogLevel level, const std::string& message);
 
-	bool sendHTTP(std::string path, std::string data);
+	HTTPResponse sendHTTP(std::string path, std::string data);
 
 	std::chrono::system_clock::duration getSessionDuration();
 
 	void updateLoop();
 
 	void (*logger_function)(LogLevel level, const std::string& message);
-	bool (*http_client_function)(bool is_post, const std::string& url, const std::string& data);
+	HTTPResponse (*http_client_function)(bool is_post, const std::string& url, const std::string& data);
 
 	std::string device_id;
 	std::string app_key;
