@@ -379,6 +379,12 @@ void Countly::log(Countly::LogLevel level, const std::string& message) {
 	}
 }
 
+static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n_bytes, std::string *body) {
+	size_t data_size = byte_size * n_bytes;
+	body->append((const char *) data, data_size);
+	return data_size;
+}
+
 Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 	bool use_post = always_use_post || (data.size() > COUNTLY_POST_THRESHOLD);
 
@@ -456,23 +462,36 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 				DWORD dwSize = sizeof(dwStatusCode);
 				WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &dwStatusCode, &dwSize, WINHTTP_NO_HEADER_INDEX);
 				response.success = (dwStatusCode >= 200 && dwStatusCode < 300);
-				/*
 				if (response.success) {
-					DWORD body_size;
+					DWORD n_bytes_available;
+					bool error_reading_body = false;
+					std::string body;
 					do {
-						body_size = 0;
-						if (!WinHttpQueryDataAvailable(hRequest, &body_size)) {
+						n_bytes_available = 0;
+						if (!WinHttpQueryDataAvailable(hRequest, &n_bytes_available)) {
+							error_reading_body = true;
 							break;
 						}
 
-						if (body_size == 0) {
+						if (n_bytes_available == 0) {
 							break;
 						}
 
-						// TODO receive data and parse json
-					} while (body_size > 0);
+						char *body_part = new char[n_bytes_available];
+						DWORD n_bytes_read = 0;
+
+						if (!WinHttpReadData(hRequest, body_part, n_bytes_available, &n_bytes_read)) {
+							error_reading_body = true;
+							break;
+						}
+
+						body += body_part;
+					} while (n_bytes_available > 0);
+
+					if (!body.empty()) {
+						response.data = json::parse(body);
+					}
 				}
-				*/
 			}
 		}
 
@@ -504,11 +523,18 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 		std::string full_url = full_url_stream.str();
 		curl_easy_setopt(curl, CURLOPT_URL, full_url.c_str());
 
+		std::string body;
+		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, countly_curl_write_callback);
+		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
+
 		curl_code = curl_easy_perform(curl);
 		if (curl_code == CURLE_OK) {
 			long status_code;
 			curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
 			response.success = (status_code >= 200 && status_code < 300);
+			if (!body.empty()) {
+				response.data = json::parse(body);
+			}
 		}
 
 		curl_easy_cleanup(curl);

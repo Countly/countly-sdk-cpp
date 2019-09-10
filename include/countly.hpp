@@ -43,7 +43,7 @@ public:
 
 	struct HTTPResponse {
 		bool success;
-		std::map<std::string, std::string> data;
+		json data;
 	};
 
 	void setHTTPClient(HTTPResponse (*fun)(bool use_post, const std::string& url, const std::string& data));
