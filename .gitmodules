@@ -4,3 +4,6 @@
 [submodule "vendor/doctest"]
 	path = vendor/doctest
 	url = git@github.com:onqtam/doctest.git
+[submodule "vendor/json"]
+	path = vendor/json
+	url = git@github.com:nlohmann/json.git

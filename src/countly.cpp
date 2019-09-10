@@ -9,6 +9,9 @@
 
 #include "countly.hpp"
 
+#include "nlohmann/json.hpp"
+using json = nlohmann::json;
+
 #ifndef COUNTLY_USE_CUSTOM_HTTP
 #ifdef _WIN32
 #include "Windows.h"
@@ -22,7 +25,7 @@
 #include "sqlite3.h"
 #endif
 
-Countly::Countly() : max_events(200), running(false), always_use_post(false) {
+Countly::Countly() : max_events(200)  {
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_init(CURL_GLOBAL_ALL);
 #endif
@@ -66,41 +69,34 @@ void Countly::setHTTPClient(Countly::HTTPResponse (*fun)(bool use_post, const st
 
 void Countly::setMetrics(const std::string& os, const std::string& os_version, const std::string& device,
 			 const std::string& resolution, const std::string& carrier, const std::string& app_version) {
-	std::ostringstream json_buffer;
-
-	json_buffer << '{';
+	json metrics_object = json::object();
 
 	if (!os.empty()) {
-		json_buffer << "_os:" << Countly::formatJSONString(os) << ',';
+		metrics_object["os"] = os;
 	}
 
 	if (!os_version.empty()) {
-		json_buffer << "_os_version:" << Countly::formatJSONString(os_version) << ',';
+		metrics_object["os_version"] = os_version;
 	}
 
 	if (!device.empty()) {
-		json_buffer << "_device:" << Countly::formatJSONString(device) << ',';
+		metrics_object["device"] = device;
 	}
 
 	if (!resolution.empty()) {
-		json_buffer << "_resolution:" << Countly::formatJSONString(resolution) << ',';
+		metrics_object["resolution"] = resolution;
 	}
 
 	if (!carrier.empty()) {
-		json_buffer << "_carrier:" << Countly::formatJSONString(carrier) << ',';
+		metrics_object["carrier"] = carrier;
 	}
 
 	if (!app_version.empty()) {
-		json_buffer << "_app_version:" << Countly::formatJSONString(app_version) << ',';
+		metrics_object["app_version"] = app_version;
 	}
 
-	if (json_buffer.str() != "{") {
-		json_buffer.seekp(-1, json_buffer.cur);
-	}
-
-	json_buffer << '}';
 	mutex.lock();
-	metrics = json_buffer.str();
+	metrics = metrics_object.dump();
 	mutex.unlock();
 }
 
@@ -158,7 +154,7 @@ void Countly::addEvent(const Event& event) {
 		log(Countly::LogLevel::WARNING, "Event queue is full, dropping the oldest event to insert a new one");
 		event_queue.pop_front();
 	}
-	event_queue.push_back(event);
+	event_queue.push_back(event.serialize());
 #else
 	sqlite3 *database;
 	int return_value;
@@ -214,8 +210,8 @@ bool Countly::updateSession() {
 	if (!no_events) {
 		json_buffer << '[';
 
-		for (const auto& event: event_queue) {
-			json_buffer << event.serialize() << ',';
+		for (const auto& event_json: event_queue) {
+			json_buffer << event_json << ',';
 		}
 
 		json_buffer.seekp(-1, json_buffer.cur);
@@ -354,22 +350,6 @@ std::string Countly::serializeForm(const std::map<std::string, std::string> data
 	return serialized_string;
 }
 
-std::string Countly::formatJSONString(const std::string& string) {
-	std::string formattedString = string;
-
-	for (auto index = formattedString.find('"', 0);
-	     index != std::string::npos;
-	     index = formattedString.find('"', index + 1)) {
-		if (index == 0 || formattedString[index - 1] == '\\') {
-			formattedString.insert(index, 1, '\\');
-		}
-	}
-
-	formattedString.insert(0, 1, '\"');
-	formattedString.push_back('\"');
-	return formattedString;
-}
-
 #ifdef COUNTLY_USE_SQLITE
 void Countly::setDatabasePath(const std::string& path) {
 	sqlite3 *database;
@@ -468,14 +448,31 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 	}
 
 	if (hRequest) {
-		ok = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, use_post ? data.c_str() : WINHTTP_NO_REQUEST_DATA, use_post ? data.size() : 0, 0, nullptr) != 0;
+		bool ok = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, use_post ? data.c_str() : WINHTTP_NO_REQUEST_DATA, use_post ? data.size() : 0, 0, nullptr) != 0;
 		if (ok) {
-			ok = WinHttpReceiveResponse(hRequest, NULL) != 0;
+			ok = !WinHttpReceiveResponse(hRequest, NULL);
 			if (ok) {
 				DWORD dwStatusCode = 0;
 				DWORD dwSize = sizeof(dwStatusCode);
 				WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &dwStatusCode, &dwSize, WINHTTP_NO_HEADER_INDEX);
 				response.success = (dwStatusCode >= 200 && dwStatusCode < 300);
+				/*
+				if (response.success) {
+					DWORD body_size;
+					do {
+						body_size = 0;
+						if (!WinHttpQueryDataAvailable(hRequest, &body_size)) {
+							break;
+						}
+
+						if (body_size == 0) {
+							break;
+						}
+
+						// TODO receive data and parse json
+					} while (body_size > 0);
+				}
+				*/
 			}
 		}
 
@@ -511,13 +508,13 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 		if (curl_code == CURLE_OK) {
 			long status_code;
 			curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
-			response.success = (status_code == 200);
+			response.success = (status_code >= 200 && status_code < 300);
 		}
 
 		curl_easy_cleanup(curl);
 	}
 #endif
-	return ok;
+	return response;
 #endif
 }
 

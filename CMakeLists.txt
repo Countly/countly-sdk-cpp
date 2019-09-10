@@ -31,6 +31,8 @@ set_target_properties(countly PROPERTIES
 find_package(Threads)
 target_link_libraries(countly Threads::Threads)
 
+target_include_directories(countly PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include)
+
 if(COUNTLY_USE_CUSTOM_HTTP)
   target_compile_definitions(countly PRIVATE COUNTLY_USE_CUSTOM_HTTP)
 elseif(NOT WIN32)
@@ -55,5 +57,6 @@ if(COUNTLY_BUILD_TESTS)
     target_include_directories(countly-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/sqlite)
   endif()
   target_include_directories(countly-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/doctest/doctest)
+target_include_directories(countly-tests PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include)
   target_link_libraries(countly-tests countly)
 endif()

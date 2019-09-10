@@ -2,17 +2,17 @@
 #define COUNTLY_HPP_
 
 #include <chrono>
-#include <cstddef>
-#include <sstream>
 #include <string>
 #include <thread>
 #include <mutex>
 #include <map>
-#include <set>
 
 #ifndef COUNTLY_USE_SQLITE
 #include <deque>
 #endif
+
+#include "nlohmann/json.hpp"
+using json = nlohmann::json;
 
 #define COUNTLY_SDK_VERSION "0.1.0"
 #define COUNTLY_API_VERSION "19.8.0"
@@ -72,8 +72,6 @@ public:
 
 	static std::string serializeForm(const std::map<std::string, std::string> data);
 
-	static std::string formatJSONString(const std::string& string);
-
 #ifdef COUNTLY_USE_SQLITE
 	void setDatabasePath(const std::string& path);
 #endif
@@ -85,13 +83,16 @@ public:
 
 		template<typename T>
 		void addSegmentation(const std::string& key, T value) {
-			segmentation[key] = std::to_string(value);
+			if (object.find("segmentation") == object.end()) {
+				object["segmentation"] = json::object();
+			}
+
+			object["segmentation"][key] = value;
 		}
 
 		std::string serialize() const;
 	private:
-		std::string json_start;
-		std::map<std::string, std::string> segmentation;
+		json object;
 	};
 
 private:
@@ -126,19 +127,10 @@ private:
 
 	size_t max_events;
 #ifndef COUNTLY_USE_SQLITE
-	std::deque<Event> event_queue;
+	std::deque<std::string> event_queue;
 #else
 	std::string database_path;
 #endif
 };
-
-template<>
-void Countly::Event::addSegmentation<const char*>(const std::string& key, const char* value);
-
-template<>
-void Countly::Event::addSegmentation<const std::string&>(const std::string& key, const std::string& value);
-
-template<>
-void Countly::Event::addSegmentation<bool>(const std::string& key, bool value);
 
 #endif
