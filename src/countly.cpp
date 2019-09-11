@@ -180,7 +180,15 @@ void Countly::addEvent(const Event& event) {
 
 bool Countly::beginSession() {
 	mutex.lock();
-	std::map<std::string, std::string> data = {{"app_key", app_key}, {"device_id", device_id}, {"sdk_version", COUNTLY_API_VERSION}, {"begin_session", "1"}, {"metrics", metrics}};
+	std::map<std::string, std::string> data = {
+		{"app_key", app_key},
+		{"device_id", device_id},
+		{"sdk_version", COUNTLY_API_VERSION},
+		{"metrics", metrics},
+		{"sdk_name", COUNTLY_SDK_NAME},
+		{"sdk_version", COUNTLY_SDK_VERSION},
+		{"begin_session", "1"}
+	};
 	if (sendHTTP("/i", Countly::serializeForm(data)).success) {
 		last_sent = Countly::getTimestamp();
 		began_session = true;

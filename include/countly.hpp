@@ -14,6 +14,7 @@
 #include "nlohmann/json.hpp"
 using json = nlohmann::json;
 
+#define COUNTLY_SDK_NAME "language-origin-platform"
 #define COUNTLY_SDK_VERSION "0.1.0"
 #define COUNTLY_API_VERSION "19.8.0"
 #define COUNTLY_POST_THRESHOLD 2000
@@ -81,6 +82,11 @@ public:
 		Event(const std::string& key, size_t count);
 		Event(const std::string& key, size_t count, double sum);
 
+		void setTimestamp();
+
+		void startTimer();
+		void stopTimer();
+
 		template<typename T>
 		void addSegmentation(const std::string& key, T value) {
 			if (object.find("segmentation") == object.end()) {
@@ -93,6 +99,8 @@ public:
 		std::string serialize() const;
 	private:
 		json object;
+		bool timer_running;
+		std::chrono::system_clock::time_point timestamp;
 	};
 
 private:
