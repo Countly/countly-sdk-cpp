@@ -51,15 +51,19 @@ public:
 
 	void setMetrics(const std::string& os, const std::string& os_version, const std::string& device, const std::string& resolution, const std::string& carrier, const std::string& app_version);
 
-	void start(const std::string& app_key, const std::string& device_id, const std::string& host, int port = -1, bool start_thread = false);
+	void setDeviceID(const std::string& value, bool same_user = false);
 
-	void startOnCloud(const std::string& app_key, const std::string& device_id);
+	void start(const std::string& app_key, const std::string& host, int port = -1, bool start_thread = false);
+
+	void startOnCloud(const std::string& app_key);
 
 	void stop();
 
 	class Event;
 
 	void addEvent(const Event& event);
+
+	void flushEvents(std::chrono::seconds timeout = std::chrono::seconds(30));
 
 	bool beginSession();
 
@@ -79,7 +83,7 @@ public:
 
 	class Event {
 	public:
-		Event(const std::string& key, size_t count);
+		Event(const std::string& key, size_t count = 1);
 		Event(const std::string& key, size_t count, double sum);
 
 		void setTimestamp();
@@ -115,6 +119,7 @@ private:
 	void (*logger_function)(LogLevel level, const std::string& message);
 	HTTPResponse (*http_client_function)(bool is_post, const std::string& url, const std::string& data);
 
+	std::string old_device_id;
 	std::string device_id;
 	std::string app_key;
 

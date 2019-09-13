@@ -100,7 +100,33 @@ void Countly::setMetrics(const std::string& os, const std::string& os_version, c
 	mutex.unlock();
 }
 
-void Countly::start(const std::string& app_key, const std::string& device_id, const std::string& host, int port, bool start_thread) {
+void Countly::setDeviceID(const std::string& value, bool same_user) {
+	mutex.lock();
+	if (device_id.empty() || device_id == value) {
+		mutex.unlock();
+		return;
+	}
+
+	if (same_user) {
+		old_device_id = device_id;
+		device_id = value;
+		mutex.unlock();
+		endSession();
+		beginSession();
+		mutex.lock();
+		old_device_id.clear();
+	} else {
+		mutex.unlock();
+		flushEvents();
+		endSession();
+		mutex.lock();
+		device_id = value;
+		beginSession();
+	}
+	mutex.unlock();
+}
+
+void Countly::start(const std::string& app_key, const std::string& host, int port, bool start_thread) {
 	mutex.lock();
 	this->host = host;
 	if (host.find("http://") == 0) {
@@ -113,7 +139,6 @@ void Countly::start(const std::string& app_key, const std::string& device_id, co
 	}
 
 	this->app_key = app_key;
-	this->device_id = device_id;
 
 	if (port <= 0) {
 		this->port = use_https ? 443 : 80;
@@ -128,8 +153,8 @@ void Countly::start(const std::string& app_key, const std::string& device_id, co
 	mutex.unlock();
 }
 
-void Countly::startOnCloud(const std::string& app_key, const std::string& device_id) {
-	this->start(app_key, device_id, "https://cloud.count.ly", 443);
+void Countly::startOnCloud(const std::string& app_key) {
+	this->start(app_key, "https://cloud.count.ly", 443);
 }
 
 void Countly::stop() {
@@ -178,6 +203,72 @@ void Countly::addEvent(const Event& event) {
 	mutex.unlock();
 }
 
+void Countly::flushEvents(std::chrono::seconds timeout) {
+	auto wait_duration = std::chrono::seconds(1);
+	bool update_failed;
+	while (timeout.count() != 0) {
+#ifndef COUNTLY_USE_SQLITE
+		mutex.lock();
+		if (event_queue.empty()) {
+			mutex.unlock();
+			break;
+		}
+		mutex.unlock();
+
+		update_failed = !updateSession();
+#else
+		sqlite3 *database;
+		int return_value, row_count, column_count;
+		char** table;
+		char *error_message;
+
+		update_failed = true;
+		mutex.lock();
+		return_value = sqlite3_open(database_path.c_str(), &database);
+		mutex.unlock();
+		if (return_value == SQLITE_OK) {
+			return_value = sqlite3_get_table(database, "SELECT COUNT(*) FROM events;", &table, &row_count, &column_count, &error_message);
+			if (return_value == SQLITE_OK) {
+				int event_count = atoi(table[1]);
+				if (event_count > 0) {
+					update_failed = !updateSession();
+				}
+			} else {
+				log(Countly::LogLevel::ERROR, error_message);
+				sqlite3_free(error_message);
+			}
+			sqlite3_free_table(table);
+		}
+		sqlite3_close(database);
+#endif
+		if (update_failed) {
+			std::this_thread::sleep_for(wait_duration);
+			wait_duration *= 2;
+			timeout = (wait_duration > timeout) ? std::chrono::seconds(0) : (timeout - wait_duration);
+		}
+	}
+
+#ifndef COUNTLY_USE_SQLITE
+	event_queue.clear();
+#else
+	sqlite3 *database;
+	int return_value;
+	char *error_message;
+
+	update_failed = true;
+	return_value = sqlite3_open(database_path.c_str(), &database);
+	if (return_value == SQLITE_OK) {
+	        return_value = sqlite3_exec(database, "DELETE FROM events;", nullptr, nullptr, &error_message);
+		if (return_value != SQLITE_OK) {
+			log(Countly::LogLevel::FATAL, error_message);
+			sqlite3_free(error_message);
+		}
+		sqlite3_free_table(table);
+	}
+	sqlite3_close(database);
+#endif
+}
+
 bool Countly::beginSession() {
 	mutex.lock();
 	std::map<std::string, std::string> data = {
@@ -189,6 +280,11 @@ bool Countly::beginSession() {
 		{"sdk_version", COUNTLY_SDK_VERSION},
 		{"begin_session", "1"}
 	};
+
+	if (!old_device_id.empty()) {
+		data["old_device_id"] = old_device_id;
+	}
+
 	if (sendHTTP("/i", Countly::serializeForm(data)).success) {
 		last_sent = Countly::getTimestamp();
 		began_session = true;
