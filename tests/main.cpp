@@ -3,6 +3,7 @@
 #include <thread>
 #include <deque>
 #include <iostream>
+#include <cstdlib>
 #include <map>
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
@@ -24,6 +25,13 @@ using json = nlohmann::json;
 #define WAIT_FOR_SQLITE(N)
 #endif
 
+void decodeURL(std::string& encoded) {
+	for (auto percent_index = encoded.find('%'); percent_index != std::string::npos; percent_index = encoded.find('%', percent_index + 1)) {
+		std::string hex_string = encoded.substr(percent_index + 1, 2);
+		char value = std::strtol(hex_string.c_str(), nullptr, 16);
+		encoded.replace(percent_index, 3, std::string(1, value));
+	}
+}
 
 struct HTTPCall {
 	bool use_post;
@@ -43,6 +51,7 @@ Countly::HTTPResponse fakeSendHTTP(bool use_post, const std::string& url, const 
 			http_call.data[data.substr(startIndex, assignmentIndex - startIndex)] = "";
 		} else {
 			http_call.data[data.substr(startIndex, assignmentIndex - startIndex)] = data.substr(assignmentIndex + 1, seperatorIndex - assignmentIndex - 1);
+			decodeURL(http_call.data[data.substr(startIndex, assignmentIndex - startIndex)]);
 		}
 		startIndex = seperatorIndex + 1;
 	}
@@ -78,12 +87,13 @@ TEST_CASE("events are sent correctly") {
 	Countly& countly = Countly::getInstance();
 	countly.setLogger(logToConsole);
 	countly.setHTTPClient(fakeSendHTTP);
+	countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
 
 #ifdef COUNTLY_USE_SQLITE
 	countly.setDatabasePath("countly-test.db");
 #endif
 
-	countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_DEVICE_ID, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+	countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
 
 	SUBCASE("session begins") {
 		countly.beginSession();
@@ -101,7 +111,7 @@ TEST_CASE("events are sent correctly") {
 
 		HTTPCall http_call = popHTTPCall();
 		CHECK(!http_call.use_post);
-		CHECK(http_call.data["events"] == "%5B%7B%22count%22%3A4%2C%22key%22%3A%22win%22%2C%22segmentation%22%3A%7B%22points%22%3A100%7D%7D%5D");
+		CHECK(http_call.data["events"] == "[{\"count\":4,\"key\":\"win\",\"segmentation\":{\"points\":100}}]");
 	}
 
 	SUBCASE("two events are sent") {
@@ -114,7 +124,7 @@ TEST_CASE("events are sent correctly") {
 
 		HTTPCall http_call = popHTTPCall();
 		CHECK(!http_call.use_post);
-		CHECK(http_call.data["events"] == "%5B%7B%22count%22%3A2%2C%22key%22%3A%22win%22%7D%2C%7B%22count%22%3A1%2C%22key%22%3A%22achievement%22%7D%5D");
+		CHECK(http_call.data["events"] == "[{\"count\":2,\"key\":\"win\"},{\"count\":1,\"key\":\"achievement\"}]");
 	}
 
 	SUBCASE("100 events are sent") {
