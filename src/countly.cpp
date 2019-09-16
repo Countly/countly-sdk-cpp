@@ -69,59 +69,109 @@ void Countly::setHTTPClient(Countly::HTTPResponse (*fun)(bool use_post, const st
 
 void Countly::setMetrics(const std::string& os, const std::string& os_version, const std::string& device,
 			 const std::string& resolution, const std::string& carrier, const std::string& app_version) {
-	json metrics_object = json::object();
+	json metrics = json::object();
 
 	if (!os.empty()) {
-		metrics_object["os"] = os;
+		metrics["os"] = os;
 	}
 
 	if (!os_version.empty()) {
-		metrics_object["os_version"] = os_version;
+		metrics["os_version"] = os_version;
 	}
 
 	if (!device.empty()) {
-		metrics_object["device"] = device;
+		metrics["device"] = device;
 	}
 
 	if (!resolution.empty()) {
-		metrics_object["resolution"] = resolution;
+		metrics["resolution"] = resolution;
 	}
 
 	if (!carrier.empty()) {
-		metrics_object["carrier"] = carrier;
+		metrics["carrier"] = carrier;
 	}
 
 	if (!app_version.empty()) {
-		metrics_object["app_version"] = app_version;
+		metrics["app_version"] = app_version;
 	}
 
 	mutex.lock();
-	metrics = metrics_object.dump();
+	session_params["metrics"] = metrics;
 	mutex.unlock();
+}
+
+void Countly::setUserDetails(const std::map<std::string, std::string>& value) {
+	mutex.lock();
+	session_params["user_details"] = value;
+
+	if (began_session) {
+		std::map<std::string, std::string> data = {
+			{"app_key", session_params["app_key"].dump()},
+			{"device_id", session_params["device_id"].dump()},
+			{"user_details", session_params["user_details"].dump()}
+		};
+
+		sendHTTP("/i", Countly::serializeForm(data));
+	}
+	mutex.unlock();
+}
+
+void Countly::setCustomUserDetails(const std::map<std::string, std::string>& value) {
+	mutex.lock();
+	session_params["user_details"]["custom"] = value;
+
+	if (began_session) {
+		std::map<std::string, std::string> data = {
+			{"app_key", session_params["app_key"].dump()},
+			{"device_id", session_params["device_id"].dump()},
+			{"user_details", session_params["user_details"].dump()}
+		};
+
+		sendHTTP("/i", Countly::serializeForm(data));
+	}
+	mutex.unlock();
+}
+
+void Countly::setCountry(const std::string& country_code) {
+	session_params["country_code"] = country_code;
+}
+
+void Countly::setCity(const std::string& city_name) {
+	session_params["city"] = city_name;
+}
+
+void Countly::setLocation(double lattitude, double longitude) {
+	std::ostringstream location_stream;
+	location_stream << lattitude << ',' << longitude;
+	session_params["location"] = location_stream.str();
 }
 
 void Countly::setDeviceID(const std::string& value, bool same_user) {
 	mutex.lock();
-	if (device_id.empty() || device_id == value) {
+	if (session_params.find("device_id") != session_params.end() && session_params["device_id"].get<std::string>() == value) {
 		mutex.unlock();
 		return;
 	}
 
 	if (same_user) {
-		old_device_id = device_id;
-		device_id = value;
-		mutex.unlock();
-		endSession();
-		beginSession();
-		mutex.lock();
-		old_device_id.clear();
+		session_params["old_device_id"] = session_params["device_id"];
+		session_params["device_id"] = value;
+		if (began_session) {
+			mutex.unlock();
+			endSession();
+			beginSession();
+			mutex.lock();
+		}
+		session_params.erase("old_device_id");
 	} else {
-		mutex.unlock();
-		flushEvents();
-		endSession();
-		mutex.lock();
-		device_id = value;
-		beginSession();
+		if (began_session) {
+			mutex.unlock();
+			flushEvents();
+			endSession();
+			beginSession();
+			mutex.lock();
+		}
+		session_params["device_id"] = value;
 	}
 	mutex.unlock();
 }
@@ -138,7 +188,7 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 		this->host.insert(0, "http://");
 	}
 
-	this->app_key = app_key;
+	session_params["app_key"] = app_key;
 
 	if (port <= 0) {
 		this->port = use_https ? 443 : 80;
@@ -272,17 +322,13 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
 bool Countly::beginSession() {
 	mutex.lock();
 	std::map<std::string, std::string> data = {
-		{"app_key", app_key},
-		{"device_id", device_id},
-		{"sdk_version", COUNTLY_API_VERSION},
-		{"metrics", metrics},
 		{"sdk_name", COUNTLY_SDK_NAME},
-		{"sdk_version", COUNTLY_SDK_VERSION},
+		{"sdk_version", COUNTLY_API_VERSION},
 		{"begin_session", "1"}
 	};
 
-	if (!old_device_id.empty()) {
-		data["old_device_id"] = old_device_id;
+	for (auto& element : session_params.items()) {
+		data[element.key()] = element.value().dump();
 	}
 
 	if (sendHTTP("/i", Countly::serializeForm(data)).success) {
@@ -367,7 +413,11 @@ bool Countly::updateSession() {
 	mutex.lock();
 	if (no_events) {
 		if (duration.count() > COUNTLY_KEEPALIVE_INTERVAL) {
-			std::map<std::string, std::string> data = {{"app_key", app_key}, {"device_id", device_id}, {"session_duration", std::to_string(duration.count())}};
+			std::map<std::string, std::string> data = {
+				{"app_key", session_params["app_key"].get<std::string>()},
+				{"device_id", session_params["device_id"].get<std::string>()},
+				{"session_duration", std::to_string(duration.count())}
+			};
 			if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
 				mutex.unlock();
 				return false;
@@ -376,7 +426,12 @@ bool Countly::updateSession() {
 		}
 		return true;
 	} else {
-		std::map<std::string, std::string> data = {{"app_key", app_key}, {"device_id", device_id}, {"session_duration", std::to_string(duration.count())}, {"events", json_buffer.str()}};
+		std::map<std::string, std::string> data = {
+			{"app_key", session_params["app_key"].get<std::string>()},
+			{"device_id", session_params["device_id"].get<std::string>()},
+			{"session_duration", std::to_string(duration.count())},
+			{"events", json_buffer.str()}
+		};
 		if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
 			mutex.unlock();
 			return false;
@@ -411,7 +466,12 @@ bool Countly::updateSession() {
 bool Countly::endSession() {
 	auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
 	mutex.lock();
-	std::map<std::string, std::string> data = {{"app_key", app_key}, {"device_id", device_id}, {"session_duration", std::to_string(duration.count())}, {"end_session", "1"}};
+	std::map<std::string, std::string> data = {
+		{"app_key", session_params["app_key"].dump()},
+		{"device_id", session_params["device_id"].dump()},
+		{"session_duration", std::to_string(duration.count())},
+		{"end_session", "1"}
+	};
 	if (sendHTTP("/i", Countly::serializeForm(data)).success) {
 		last_sent += duration;
 		began_session = false;
