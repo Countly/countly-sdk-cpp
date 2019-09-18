@@ -99,6 +99,8 @@ TEST_CASE("events are sent correctly") {
 		countly.beginSession();
 		HTTPCall http_call = popHTTPCall();
 		CHECK(!http_call.use_post);
+		CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
+		CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
 		CHECK(http_call.data["begin_session"] == "1");
 	}
 
@@ -111,6 +113,8 @@ TEST_CASE("events are sent correctly") {
 
 		HTTPCall http_call = popHTTPCall();
 		CHECK(!http_call.use_post);
+		CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
+		CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
 		CHECK(http_call.data["events"] == "[{\"count\":4,\"key\":\"win\",\"segmentation\":{\"points\":100}}]");
 	}
 
@@ -124,6 +128,8 @@ TEST_CASE("events are sent correctly") {
 
 		HTTPCall http_call = popHTTPCall();
 		CHECK(!http_call.use_post);
+		CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
+		CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
 		CHECK(http_call.data["events"] == "[{\"count\":2,\"key\":\"win\"},{\"count\":1,\"key\":\"achievement\"}]");
 	}
 
@@ -137,5 +143,7 @@ TEST_CASE("events are sent correctly") {
 
 		HTTPCall http_call = popHTTPCall();
 		CHECK(http_call.use_post);
+		CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
+		CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
 	}
 }
