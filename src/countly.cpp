@@ -25,7 +25,7 @@ using json = nlohmann::json;
 #include "sqlite3.h"
 #endif
 
-Countly::Countly() : max_events(200)  {
+Countly::Countly() : max_events(COUNTLY_MAX_EVENTS_DEFAULT), wait_milliseconds(COUNTLY_KEEPALIVE_INTERVAL) {
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_init(CURL_GLOBAL_ALL);
 #endif
@@ -222,6 +222,12 @@ void Countly::stop() {
 	}
 }
 
+void Countly::setUpdateInterval(size_t milliseconds) {
+	mutex.lock();
+	wait_milliseconds = milliseconds;
+	mutex.unlock();
+}
+
 void Countly::addEvent(const Event& event) {
 	mutex.lock();
 #ifndef COUNTLY_USE_SQLITE
@@ -249,6 +255,18 @@ void Countly::addEvent(const Event& event) {
 		}
 	}
 	sqlite3_close(database);
+#endif
+	mutex.unlock();
+}
+
+void Countly::setMaxEvents(size_t value) {
+	mutex.lock();
+	max_events = value;
+#ifndef COUNTLY_USE_SQLITE
+	if (event_queue.size() > value) {
+		log(Countly::LogLevel::WARNING, "New event queue size is smaller than the old one, dropping the oldest events to fit");
+		event_queue.resize(value);
+	}
 #endif
 	mutex.unlock();
 }
@@ -730,9 +748,10 @@ void Countly::updateLoop() {
 			mutex.unlock();
 			break;
 		}
+		size_t last_wait_milliseconds = wait_milliseconds;
 		mutex.unlock();
 		updateSession();
-		std::this_thread::sleep_for(std::chrono::milliseconds(COUNTLY_KEEPALIVE_INTERVAL));
+		std::this_thread::sleep_for(std::chrono::milliseconds(last_wait_milliseconds));
 	}
 	mutex.lock();
 	running = false;

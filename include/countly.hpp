@@ -20,6 +20,7 @@ using json = nlohmann::json;
 #define COUNTLY_API_VERSION "19.8.0"
 #define COUNTLY_POST_THRESHOLD 2000
 #define COUNTLY_KEEPALIVE_INTERVAL 3000
+#define COUNTLY_MAX_EVENTS_DEFAULT 200
 
 class Countly {
 public:
@@ -70,9 +71,13 @@ public:
 
 	void stop();
 
+	void setUpdateInterval(size_t milliseconds);
+
 	class Event;
 
 	void addEvent(const Event& event);
+
+	void setMaxEvents(size_t value);
 
 	void flushEvents(std::chrono::seconds timeout = std::chrono::seconds(30));
 
@@ -128,6 +133,63 @@ public:
 		std::chrono::system_clock::time_point timestamp;
 	};
 
+	void SetPath(const std::string& path) {
+#ifdef COUNTLY_USE_SQLITE
+		setDatabasePath(path);
+#endif
+	}
+
+	void SetMetrics(const std::string& os, const std::string& os_version, const std::string& device, const std::string& resolution, const std::string& carrier, const std::string& app_version) {
+		setMetrics(os, os_version, device, resolution, carrier, app_version);
+	}
+
+	void SetMaxEventsPerMessage(int maxEvents) {
+		setMaxEvents(maxEvents);
+	}
+
+	void SetMinUpdatePeriod(int minUpdateMillis) {
+		setUpdateInterval(minUpdateMillis);
+	}
+
+	void Start(const std::string& appKey, const std::string& host, int port) {
+		start(appKey, host, port);
+	}
+
+	void StartOnCloud(const std::string& appKey) {
+		startOnCloud(appKey);
+	}
+
+	void Stop() {
+		stop();
+	}
+
+	void RecordEvent(const std::string key, int count) {
+		addEvent(Event(key, count));
+	}
+
+	void RecordEvent(const std::string key, int count, double sum) {
+		addEvent(Event(key, count, sum));
+	}
+
+	void RecordEvent(const std::string key, std::map<std::string, std::string> segmentation, int count) {
+		Event event(key, count);
+
+		for (auto key_value: segmentation) {
+			event.addSegmentation(key_value.first, json::parse(key_value.second));
+		}
+
+		addEvent(event);
+	}
+
+	void RecordEvent(const std::string key, std::map<std::string, std::string> segmentation, int count, double sum) {
+		Event event(key, count, sum);
+
+		for (auto key_value: segmentation) {
+			event.addSegmentation(key_value.first, json::parse(key_value.second));
+		}
+
+		addEvent(event);
+	}
 private:
 	void log(LogLevel level, const std::string& message);
 
@@ -154,6 +216,7 @@ private:
 	std::mutex mutex;
 	bool stop_thread;
 	bool running;
+	size_t wait_milliseconds;
 
 	size_t max_events;
 #ifndef COUNTLY_USE_SQLITE
