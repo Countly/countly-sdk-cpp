@@ -1,6 +1,7 @@
 #ifndef COUNTLY_HPP_
 #define COUNTLY_HPP_
 
+#include <iterator>
 #include <chrono>
 #include <string>
 #include <thread>
@@ -81,6 +82,16 @@ public:
 
 	bool endSession();
 
+	void enableRemoteConfig();
+
+	void updateRemoteConfig();
+
+	json getRemoteConfigValue(const std::string& key);
+
+	void updateRemoteConfigFor(std::string *keys, size_t key_count);
+
+	void updateRemoteConfigExcept(std::string *keys, size_t key_count);
+
 	static std::chrono::system_clock::time_point getTimestamp();
 
 	static std::string encodeURL(const std::string& data);
@@ -150,6 +161,9 @@ private:
 #else
 	std::string database_path;
 #endif
+
+	bool remote_config_enabled;
+	json remote_config;
 };
 
 #endif

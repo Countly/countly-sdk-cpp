@@ -328,7 +328,11 @@ bool Countly::beginSession() {
 	};
 
 	for (auto& element : session_params.items()) {
-		data[element.key()] = element.value().dump();
+		if (element.value().is_string()) {
+			data[element.key()] = element.value().get<std::string>();
+		} else {
+			data[element.key()] = element.value().dump();
+		}
 	}
 
 	if (sendHTTP("/i", Countly::serializeForm(data)).success) {
@@ -467,8 +471,8 @@ bool Countly::endSession() {
 	auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
 	mutex.lock();
 	std::map<std::string, std::string> data = {
-		{"app_key", session_params["app_key"].dump()},
-		{"device_id", session_params["device_id"].dump()},
+		{"app_key", session_params["app_key"].get<std::string>()},
+		{"device_id", session_params["device_id"].get<std::string>()},
 		{"session_duration", std::to_string(duration.count())},
 		{"end_session", "1"}
 	};
@@ -733,4 +737,73 @@ void Countly::updateLoop() {
 	mutex.lock();
 	running = false;
 	mutex.unlock();
+}
+
+void Countly::enableRemoteConfig() {
+	mutex.lock();
+	remote_config_enabled = true;
+	mutex.unlock();
+}
+
+void Countly::updateRemoteConfig() {
+	std::map<std::string, std::string> data = {
+		{"method", "fetch_remote_config"},
+		{"app_key", session_params["app_key"].get<std::string>()},
+		{"device_id", session_params["device_id"].get<std::string>()}
+	};
+
+	HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
+	if (response.success) {
+		remote_config = response.data;
+	}
+}
+
+json Countly::getRemoteConfigValue(const std::string& key) {
+	return remote_config[key];
+}
+
+void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
+	std::map<std::string, std::string> data = {
+		{"method", "fetch_remote_config"},
+		{"app_key", session_params["app_key"].get<std::string>()},
+		{"device_id", session_params["device_id"].get<std::string>()}
+	};
+
+	{
+		json keys_json = json::array();
+		for (size_t key_index = 0; key_index < key_count; key_index++) {
+			keys_json.push_back(keys[key_index]);
+		}
+		data["keys"] = keys_json.dump();
+	}
+
+	HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
+	if (response.success) {
+		for (auto it = response.data.begin(); it != response.data.end(); ++it) {
+			remote_config[it.key()] = it.value();
+		}
+	}
+}
+
+void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
+	std::map<std::string, std::string> data = {
+		{"method", "fetch_remote_config"},
+		{"app_key", session_params["app_key"].get<std::string>()},
+		{"device_id", session_params["device_id"].get<std::string>()}
+	};
+
+	{
+		json keys_json = json::array();
+		for (size_t key_index = 0; key_index < key_count; key_index++) {
+			keys_json.push_back(keys[key_index]);
+		}
+		data["omit_keys"] = keys_json.dump();
+	}
+
+	HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
+	if (response.success) {
+		for (auto it = response.data.begin(); it != response.data.end(); ++it) {
+			remote_config[it.key()] = it.value();
+		}
+	}
 }
