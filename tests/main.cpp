@@ -45,20 +45,63 @@ Countly::HTTPResponse fakeSendHTTP(bool use_post, const std::string& url, const 
 	HTTPCall http_call({use_post, url, {}});
 
 	std::string::size_type startIndex = 0;
-	for (auto seperatorIndex = data.find('&'); seperatorIndex != std::string::npos; seperatorIndex = data.find('&', startIndex)) {
+	for (auto seperatorIndex = data.find('&'); seperatorIndex != std::string::npos;) {
 		auto assignmentIndex = data.find('=', startIndex);
 		if (assignmentIndex == std::string::npos || assignmentIndex >= seperatorIndex) {
 			http_call.data[data.substr(startIndex, assignmentIndex - startIndex)] = "";
 		} else {
-			http_call.data[data.substr(startIndex, assignmentIndex - startIndex)] = data.substr(assignmentIndex + 1, seperatorIndex - assignmentIndex - 1);
+			http_call.data[data.substr(startIndex, assignmentIndex - startIndex)] = data.substr(assignmentIndex + 1, seperatorIndex - assignmentIndex - (seperatorIndex == (data.length() - 1) ? 0 : 1));
 			decodeURL(http_call.data[data.substr(startIndex, assignmentIndex - startIndex)]);
 		}
-		startIndex = seperatorIndex + 1;
+
+		if (seperatorIndex != (data.length() - 1)) {
+			startIndex = seperatorIndex + 1;
+			seperatorIndex = data.find('&', startIndex);
+
+			if (seperatorIndex == std::string::npos) {
+				seperatorIndex = data.length() - 1;
+			}
+		} else {
+			seperatorIndex = std::string::npos;
+		}
 	}
 
 	http_call_queue.push_back(http_call);
-	Countly::HTTPResponse response;
-	response.success = true;
+
+	Countly::HTTPResponse response { .success = false, .data = json::object() };
+
+	if (http_call.url == "/i") {
+		response.success = true;
+	} else if (http_call.url == "/o/sdk" && http_call.data["method"] == "fetch_remote_config") {
+		const json remote_config = {
+			{"color","#FF9900"},
+			{"playerQueueTimeout", 32},
+			{"isChristmas", true}
+		};
+
+		response.success = true;
+
+		if (http_call.data.find("keys") != http_call.data.end()) {
+			auto keys = json::parse(http_call.data["keys"]);
+
+			if (keys.is_array() && keys.size() > 0) {
+				for (const auto& key: keys.get<std::vector<std::string>>()) {
+					if (remote_config.find(key) != remote_config.end()) {
+						response.data[key] = remote_config.at(key);
+					}
+				}
+			}
+		} else if (http_call.data.find("keys") != http_call.data.end()) {
+			json omit_keys = json::parse(http_call.data["omit_keys"]);
+
+			for (const auto& element: remote_config.items()) {
+				if (omit_keys.find(element.key()) == omit_keys.end()) {
+					response.data[element.key()] = element.value();
+				}
+			}
+		}
+	}
+
 	return response;
 }
 
@@ -90,6 +133,7 @@ TEST_CASE("events are sent correctly") {
 	countly.setLogger(logToConsole);
 	countly.setHTTPClient(fakeSendHTTP);
 	countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+	countly.enableRemoteConfig();
 
 #ifdef COUNTLY_USE_SQLITE
 	countly.setDatabasePath("countly-test.db");
@@ -104,6 +148,13 @@ TEST_CASE("events are sent correctly") {
 		CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
 		CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
 		CHECK(http_call.data["begin_session"] == "1");
+	}
+
+	SUBCASE("remote config is fetched") {
+		HTTPCall http_call = popHTTPCall();
+		CHECK(!http_call.use_post);
+		CHECK(http_call.url == "/o/sdk");
+		CHECK(http_call.data["method"] == "fetch_remote_config");
 	}
 
 	SUBCASE("single event is sent") {
@@ -147,5 +198,14 @@ TEST_CASE("events are sent correctly") {
 		CHECK(http_call.use_post);
 		CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
 		CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
+	}
+
+	SUBCASE("session ends") {
+		countly.stop();
+		HTTPCall http_call = popHTTPCall();
+		CHECK(!http_call.use_post);
+		CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
+		CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
+		CHECK(http_call.data["end_session"] == "1");
 	}
 }

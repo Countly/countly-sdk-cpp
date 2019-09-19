@@ -358,7 +358,13 @@ bool Countly::beginSession() {
 		began_session = true;
 	}
 
-	mutex.unlock();
+	if (remote_config_enabled) {
+		mutex.unlock();
+		updateRemoteConfig();
+	} else {
+		mutex.unlock();
+	}
+
 	return began_session;
 }
 
@@ -773,12 +779,17 @@ void Countly::updateRemoteConfig() {
 
 	HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
 	if (response.success) {
+		mutex.lock();
 		remote_config = response.data;
+		mutex.unlock();
 	}
 }
 
 json Countly::getRemoteConfigValue(const std::string& key) {
-	return remote_config[key];
+	mutex.lock();
+	json value = remote_config[key];
+	mutex.unlock();
+	return value;
 }
 
 void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
@@ -798,9 +809,11 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
 
 	HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
 	if (response.success) {
+		mutex.lock();
 		for (auto it = response.data.begin(); it != response.data.end(); ++it) {
 			remote_config[it.key()] = it.value();
 		}
+		mutex.unlock();
 	}
 }
 
@@ -821,8 +834,10 @@ void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
 
 	HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
 	if (response.success) {
+		mutex.lock();
 		for (auto it = response.data.begin(); it != response.data.end(); ++it) {
 			remote_config[it.key()] = it.value();
 		}
+		mutex.unlock();
 	}
 }
