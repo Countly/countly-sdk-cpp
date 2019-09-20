@@ -1,9 +1,0 @@
-{
-  "private": true,
-  "devDependencies": {
-    "mocha": "^2.3.3"
-  },
-  "scripts": {
-    "test": "mocha test --bail"
-  }
-}

@@ -1,1 +1,0 @@
-./vendor/gyp/gyp --include common.gypi --depth .
