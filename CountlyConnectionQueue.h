@@ -74,7 +74,9 @@ class CountlyConnectionQueue {
 
     bool BeginSession();
     string URLEncode(const string &value);
+    bool HTTPSEND(string URI, string data);
     bool HTTPGET(string URI);
+    bool HTTPPOST(string URI, string data);
 };
 
 }  // namespace CountlyCpp

@@ -8,14 +8,30 @@ var url = require("url");
 var qs = require("querystring");
 var queue = [];
 
-module.exports.shift = function() {
-  var req = queue.shift();
-  if (!req) return;
-  var query = url.parse(req.url).query;
-  var json = qs.parse(query);
+function processData(json) {
   if (json.metrics) json.metrics = JSON.parse(json.metrics);
   if (json.events) json.events = JSON.parse(json.events);
   return json;
+}
+
+function processRequest(req, callback) {
+    if (!req) return;
+    if (req.method === "POST") {
+        let body = "";
+        req.on("data", function(data) {
+            body += data;
+        });
+        req.on("end", function() {
+            callback(processData(qs.parse(body)));
+        });
+    }
+    else {
+        callback(processData(qs.parse(url.parse(req.url).query)));
+    }
+}
+
+module.exports.shift = function() {
+  return queue.shift();
 };
 
 var ip = module.exports.ip = "127.0.0.1";
@@ -27,17 +43,16 @@ module.exports.start = function(correct) {
   assert(!server);
 
   if (correct === "correct") {
-
     server = http.createServer(function(req, res) {
       if (!module.parent) console.log(unescape(req.url));
-      queue.push(req);
-      res.writeHead(200, { "Content-Type": "text/plain" });
-      res.end("Success\n");
+      processRequest(req, function(json) {
+        queue.push(json);
+        res.writeHead(200, { "Content-Type": "text/plain" });
+        res.end("Success\n");
+      });
     }).listen(port, ip);
 
-  } else
-  if (correct === "502") { // 502 Bad Gateway after "countly stop"
-
+  } else if (correct === "502") { // 502 Bad Gateway after "countly stop"
     var counter = 0;
 
     server = http.createServer(function(req, res) {
@@ -58,9 +73,11 @@ module.exports.start = function(correct) {
                 "<!-- a padding to disable MSIE and Chrome friendly error page -->\n" +
                 "<!-- a padding to disable MSIE and Chrome friendly error page -->\n");
       } else {
-        queue.push(req);
-        res.writeHead(200, { "Content-Type": "text/html" });
-        res.end("Success\n");
+        processRequest(req, function(json) {
+          queue.push(json);
+          res.writeHead(200, { "Content-Type": "text/html" });
+          res.end("Success\n");
+        });
       }
     }).listen(port, ip);
 
