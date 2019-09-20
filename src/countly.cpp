@@ -4,6 +4,7 @@
 #include <thread>
 #include <iomanip>
 #include <iostream>
+#include <system_error>
 
 #include "openssl/sha.h"
 
@@ -148,7 +149,7 @@ void Countly::setLocation(double lattitude, double longitude) {
 
 void Countly::setDeviceID(const std::string& value, bool same_user) {
 	mutex.lock();
-	if (session_params.find("device_id") != session_params.end() && session_params["device_id"].get<std::string>() == value) {
+	if (session_params.find("device_id") == session_params.end() || (session_params["device_id"].is_string() && session_params["device_id"].get<std::string>() == value)) {
 		mutex.unlock();
 		return;
 	}
@@ -196,9 +197,19 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 		this->port = port;
 	}
 
-	if (!running && start_thread) {
-		stop_thread = false;
-		thread = new std::thread(&Countly::updateLoop, this);
+	if (!running) {
+		if (start_thread) {
+			stop_thread = false;
+			try {
+				thread = new std::thread(&Countly::updateLoop, this);
+			} catch(const std::system_error& e) {
+				std::ostringstream log_message;
+				log_message << "Could not create thread: " << e.what();
+				log(Countly::LogLevel::FATAL, log_message.str());
+			}
+		} else {
+			beginSession();
+		}
 	}
 	mutex.unlock();
 }
@@ -217,7 +228,11 @@ void Countly::stop() {
 	stop_thread = true;
 	mutex.unlock();
 	if (thread != nullptr && thread->joinable()) {
-		thread->join();
+		try {
+			thread->join();
+		} catch(const std::system_error& e) {
+			log(Countly::LogLevel::WARNING, "Could not join thread");
+		}
 		delete thread;
 	}
 }
@@ -339,6 +354,11 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
 
 bool Countly::beginSession() {
 	mutex.lock();
+	if (began_session) {
+		mutex.unlock();
+		return true;
+	}
+
 	std::map<std::string, std::string> data = {
 		{"sdk_name", COUNTLY_SDK_NAME},
 		{"sdk_version", COUNTLY_API_VERSION},
@@ -392,7 +412,7 @@ bool Countly::updateSession() {
 			json_buffer << event_json << ',';
 		}
 
-		json_buffer.seekp(-1, json_buffer.cur);
+		json_buffer.seekp(-1, json_buffer.cur); // may throw
 		json_buffer << ']';
 	}
 #else
