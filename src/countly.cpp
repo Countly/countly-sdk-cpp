@@ -150,6 +150,7 @@ void Countly::setLocation(double lattitude, double longitude) {
 void Countly::setDeviceID(const std::string& value, bool same_user) {
 	mutex.lock();
 	if (session_params.find("device_id") == session_params.end() || (session_params["device_id"].is_string() && session_params["device_id"].get<std::string>() == value)) {
+		session_params["device_id"] = value;
 		mutex.unlock();
 		return;
 	}
@@ -208,7 +209,9 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 				log(Countly::LogLevel::FATAL, log_message.str());
 			}
 		} else {
+			mutex.unlock();
 			beginSession();
+			mutex.lock();
 		}
 	}
 	mutex.unlock();
@@ -341,7 +344,7 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
 	update_failed = true;
 	return_value = sqlite3_open(database_path.c_str(), &database);
 	if (return_value == SQLITE_OK) {
-	        return_value = sqlite3_exec(database, "DELETE FROM events;", nullptr, nullptr, &error_message);
+		return_value = sqlite3_exec(database, "DELETE FROM events;", nullptr, nullptr, &error_message);
 		if (return_value != SQLITE_OK) {
 			log(Countly::LogLevel::FATAL, error_message);
 			sqlite3_free(error_message);
@@ -791,6 +794,11 @@ void Countly::enableRemoteConfig() {
 }
 
 void Countly::updateRemoteConfig() {
+	if (!session_params["app_key"].is_string() || !session_params["device_id"].is_string()) {
+		log(Countly::LogLevel::ERROR, "Error updating remote config, app key or device id is missing");
+		return;
+	}
+
 	std::map<std::string, std::string> data = {
 		{"method", "fetch_remote_config"},
 		{"app_key", session_params["app_key"].get<std::string>()},
