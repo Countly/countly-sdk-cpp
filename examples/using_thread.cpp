@@ -7,8 +7,11 @@
 int main() {
 	Countly& countly = Countly::getInstance();
 	countly.setMetrics("Windows", "10.22", "1920x1080", "Samsung Chromebook", "AT&T", "1.2.0");
+
+	// Device ID can be any string as long as its format is consistent across your Countly application
+	countly.setDeviceID("41aa9adf-2f2a-44fa-93de-b705e577c01f");
+
 	countly.start("a32cb06789a6e99958d628378ee66bf8583a454f", // Your Countly application key
-		      "41aa9adf-2f2a-44fa-93de-b705e577c01f",     // Device ID, can be any string as long as its format is consistent across your Countly application
 		      "https://your.countly.instance",            // URL of your Countly API server
 		      443,                                        // TCP port of your Countly API server
 		      true);                                      // Start the update loop on a new thread
@@ -23,12 +26,12 @@ int main() {
 		// Add the event to the event queue.
 		countly.addEvent(event);
 
-		/* Since the update loop is running on another thread, we just need to wait a bit.
-		 * Normally, your application would do actual work in this period of time. */
+		// Since the update loop is running on another thread, we just need to wait a bit.
+		// Normally, your application would do actual work in this period of time.
 		std::this_thread::sleep_for(std::chrono::seconds(1));
 	}
 
-	/* This isn't really needed as the Countly singleton will be destroyed when the program exits
-	 * and its deconstructor calls stop() already. */
+	// This isn't really needed as the Countly singleton will be destroyed when the program exits
+	// and its deconstructor calls stop() already.
 	countly.stop();
 }
