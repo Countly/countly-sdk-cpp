@@ -403,20 +403,15 @@ bool Countly::updateSession() {
 		began_session = true;
 	}
 
-	std::ostringstream json_buffer;
+	json events = json::array();
 	bool no_events;
 
 #ifndef COUNTLY_USE_SQLITE
 	no_events = event_queue.empty();
 	if (!no_events) {
-		json_buffer << '[';
-
 		for (const auto& event_json: event_queue) {
-			json_buffer << event_json << ',';
+			events.push_back(json::parse(event_json));
 		}
-
-		json_buffer.seekp(-1, json_buffer.cur); // may throw
-		json_buffer << ']';
 	}
 #else
 	sqlite3 *database;
@@ -435,21 +430,16 @@ bool Countly::updateSession() {
 		no_events = (row_count == 0);
 		if (return_value == SQLITE_OK && !no_events) {
 			std::ostringstream event_id_stream;
-
-			json_buffer << '[';
 			event_id_stream << '(';
 
 			for (int event_index = 1; event_index < row_count+1; event_index++) {
 				event_id_stream << table[event_index * column_count] << ',';
-				json_buffer << table[(event_index * column_count) + 1] << ',';
+				events.push_back(json.parse(table[(event_index * column_count) + 1]));
 			}
 
-			event_id_stream.seekp(-1, json_buffer.cur);
+			event_id_stream.seekp(-1, event_id_stream.cur);
 			event_id_stream << ')';
 			event_ids = event_id_stream.str();
-
-			json_buffer.seekp(-1, json_buffer.cur);
-			json_buffer << ']';
 		} else if (return_value != SQLITE_OK) {
 			log(Countly::LogLevel::ERROR, error_message);
 			sqlite3_free(error_message);
@@ -481,7 +471,7 @@ bool Countly::updateSession() {
 			{"app_key", session_params["app_key"].get<std::string>()},
 			{"device_id", session_params["device_id"].get<std::string>()},
 			{"session_duration", std::to_string(duration.count())},
-			{"events", json_buffer.str()}
+			{"events", events.dump()}
 		};
 		if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
 			mutex.unlock();
@@ -662,10 +652,11 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 		}
 
 		size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, path.c_str(), -1, nullptr, 0);
-		wchar_t *wide_path= new wchar_t[buffer_size];
+		wchar_t *wide_path = new wchar_t[buffer_size];
 		MultiByteToWideChar(CP_ACP, 0, path.c_str(), -1, wide_path, buffer_size);
 
 		hRequest = WinHttpOpenRequest(hConnect, use_post ? L"POST" : L"GET", wide_path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, use_https ? WINHTTP_FLAG_SECURE : 0);
+		delete wide_path;
 	}
 
 	if (hRequest) {
@@ -697,10 +688,12 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 
 						if (!WinHttpReadData(hRequest, body_part, n_bytes_available, &n_bytes_read)) {
 							error_reading_body = true;
+							delete body_part;
 							break;
 						}
 
 						body += body_part;
+						delete body_part;
 					} while (n_bytes_available > 0);
 
 					if (!body.empty()) {
