@@ -15,7 +15,7 @@
 #include "nlohmann/json.hpp"
 using json = nlohmann::json;
 
-#define COUNTLY_SDK_NAME "language-origin-platform"
+#define COUNTLY_SDK_NAME "cpp-native-unknown"
 #define COUNTLY_SDK_VERSION "0.1.0"
 #define COUNTLY_API_VERSION "19.8.0"
 #define COUNTLY_POST_THRESHOLD 2000
