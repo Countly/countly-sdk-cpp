@@ -13,10 +13,12 @@ addons:
     packages:
       - g++-7
       - libcurl4-openssl-dev
+      - libpthread-dev
   homebrew:
     packages:
       - gcc@7
       - curl-openssl
+      - cmake
 
 after_install:
   - CC=gcc-7 && CXX=g++-7
