@@ -349,7 +349,6 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
 			log(Countly::LogLevel::FATAL, error_message);
 			sqlite3_free(error_message);
 		}
-		sqlite3_free_table(table);
 	}
 	sqlite3_close(database);
 #endif
@@ -434,7 +433,7 @@ bool Countly::updateSession() {
 
 			for (int event_index = 1; event_index < row_count+1; event_index++) {
 				event_id_stream << table[event_index * column_count] << ',';
-				events.push_back(json.parse(table[(event_index * column_count) + 1]));
+				events.push_back(json::parse(table[(event_index * column_count) + 1]));
 			}
 
 			event_id_stream.seekp(-1, event_id_stream.cur);
