@@ -1,9 +1,9 @@
 [submodule "vendor/sqlite"]
 	path = vendor/sqlite
-	url = git@github.com:azadkuh/sqlite-amalgamation.git
+	url = https://github.com/azadkuh/sqlite-amalgamation.git
 [submodule "vendor/doctest"]
 	path = vendor/doctest
-	url = git@github.com:onqtam/doctest.git
+	url = https://github.com/onqtam/doctest.git
 [submodule "vendor/json"]
 	path = vendor/json
-	url = git@github.com:nlohmann/json.git
+	url = https://github.com/nlohmann/json.git
