@@ -19,7 +19,6 @@ addons:
       - gcc@7
       - curl-openssl
 
-
 before_script:
   - export CC="$(which -- gcc-7)" CXX="$(which -- g++-7)"
   - if [ ${TRAVIS_OS_NAME} = "osx" ]; then ln -s /usr/local/opt/openssl/include/openssl /usr/local/include; fi
