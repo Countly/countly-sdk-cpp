@@ -29,7 +29,7 @@ If you want to use SQLite to store session data persistently, build sqlite:
 ``` shell
 # assuming we are on project root
 cd vendor/sqlite
-cmake -D BUILD_SHARED_LIBS -B build . # out of source build, we don't like clutter :)
+cmake -D BUILD_SHARED_LIBS=1 -B build . # out of source build, we don't like clutter :)
 # we define `BUILD_SHARED_LIBS` because sqlite's cmake file compiles statically by default for some reason
 cd build
 make # you might want to add something like -j8 to parallelize the build process
@@ -76,7 +76,7 @@ int main(int argc, char *argv[]) {
 Build with the option `COUNTLY_BUILD_TESTS` on to build an executable that will run the tests:
 
 ``` shell
-cmake -D COUNTLY_BUILD_TESTS -B build . # or do it interactively with ccmake
+cmake -D COUNTLY_BUILD_TESTS=1 -B build . # or do it interactively with ccmake
 cd build
 make
 ./countly-tests
