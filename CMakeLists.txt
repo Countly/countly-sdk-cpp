@@ -48,8 +48,11 @@ if(COUNTLY_USE_SQLITE)
   target_include_directories(countly PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/sqlite)
   target_link_libraries(countly sqlite3)
   if (APPLE)
-    target_include_directories(countly PRIVATE /usr/local/opt/openssl/include)
+    set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl")
   endif()
+  find_package(OpenSSL REQUIRED)
+  target_include_directories(countly PRIVATE ${OPENSSL_INCLUDE_DIRS})
+  target_link_libraries(countly ${OPENSSL_LIBRARIES})
 endif()
 
 if(COUNTLY_BUILD_TESTS)
@@ -63,4 +66,8 @@ if(COUNTLY_BUILD_TESTS)
   target_include_directories(countly-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/doctest/doctest)
   target_include_directories(countly-tests PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include)
   target_link_libraries(countly-tests countly)
+  set_target_properties(countly-tests PROPERTIES
+    CXX_STANDARD 11
+    CXX_STANDARD_REQUIRED YES
+    CXX_EXTENSIONS NO)
 endif()

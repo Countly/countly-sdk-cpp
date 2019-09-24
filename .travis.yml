@@ -19,10 +19,10 @@ addons:
       - gcc@7
       - curl-openssl
 
-after_install:
-  - CC=gcc-7 && CXX=g++-7
 
 before_script:
+  - export CC="$(which -- gcc-7)" CXX="$(which -- g++-7)"
+  - if [ ${TRAVIS_OS_NAME} = "osx" ]; then ln -s /usr/local/opt/openssl/include/openssl /usr/local/include; fi
   - mkdir -p ${TRAVIS_BUILD_DIR}/vendor/sqlite/build && cd ${TRAVIS_BUILD_DIR}/vendor/sqlite/build && cmake -D BUILD_SHARED_LIBS=1 ..
   - cd ${TRAVIS_BUILD_DIR}/vendor/sqlite/build && make
 
