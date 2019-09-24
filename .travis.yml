@@ -1,0 +1,31 @@
+language: cpp
+
+os:
+  - linux
+  - osx
+
+compiler: gcc
+
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - g++-7
+      - libcurl4-openssl-dev
+  homebrew:
+    packages:
+      - gcc@7
+      - curl-openssl
+
+after_install:
+  - CC=gcc-7 && CXX=g++-7
+
+before_script:
+  - cd ${TRAVIS_BUILD_DIR}/vendor/sqlite && cmake -B build -D BUILD_SHARED_LIBS=1 .
+  - cd ${TRAVIS_BUILD_DIR}/vendor/sqlite/build && make
+
+script:
+  - cd ${TRAVIS_BUILD_DIR} && cmake -B build -D BUILD_SHARED_LIBS=1 -D CMAKE_BUILD_TYPE=Debug -D COUNTLY_BUILD_TESTS=1 -D COUNTLY_USE_SQLITE=1
+  - cd ${TRAVIS_BUILD_DIR}/build && make
+  - ${TRAVIS_BUILD_DIR}/build/countly-tests -s
