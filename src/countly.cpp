@@ -255,6 +255,12 @@ void Countly::addEvent(const Event& event) {
 	}
 	event_queue.push_back(event.serialize());
 #else
+	if (database_path.empty()) {
+		mutex.unlock();
+		log(Countly::LogLevel::FATAL, "Cannot add event, sqlite database path is not set");
+		return;
+	}
+
 	sqlite3 *database;
 	int return_value;
 	char *error_message;
@@ -303,6 +309,13 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
 
 		update_failed = !updateSession();
 #else
+		mutex.lock();
+		if (database_path.empty()) {
+			mutex.unlock();
+			log(Countly::LogLevel::FATAL, "Cannot flush events, sqlite database path is not set");
+			return;
+		}
+
 		sqlite3 *database;
 		int return_value, row_count, column_count;
 		char** table;
@@ -413,6 +426,12 @@ bool Countly::updateSession() {
 		}
 	}
 #else
+	if (database_path.empty()) {
+		mutex.unlock();
+		log(Countly::LogLevel::FATAL, "Cannot fetch events, sqlite database path is not set");
+		return false;
+	}
+
 	sqlite3 *database;
 	int return_value, row_count, column_count;
 	char** table;
@@ -571,6 +590,10 @@ void Countly::setDatabasePath(const std::string& path) {
 			log(Countly::LogLevel::ERROR, error_message);
 			sqlite3_free(error_message);
 		}
+	} else {
+		log(Countly::LogLevel::ERROR, "Failed to open sqlite database");
+		sqlite3_free(error_message);
+		database_path.clear();
 	}
 	sqlite3_close(database);
 	mutex.unlock();
