@@ -1,3 +1,9 @@
+# Countly C++ SDK
+
+![travis build status](https://img.shields.io/travis/Countly/countly-sdk-cpp?style=flat-square)
+
+This repository contains the portable Countly C++ SDK. 
+
 ## What's Countly?
 
 [Countly](http://count.ly) is an innovative, real-time, open source mobile analytics and push notifications platform. It collects data from mobile devices, and visualizes this information to analyze mobile application usage and end-user behavior. There are two parts of Countly: [the server that collects and analyzes data](http://github.com/countly/countly-server), and mobile SDK that sends this data. Both parts are open source with different licensing terms.
@@ -5,18 +11,14 @@
 * **Slack user?** [Join our Slack community](http://slack.count.ly:3000/)
 * **Questions?** [Ask in our Community forum](http://community.count.ly)
 
-## About this SDK
-
-This repository contains the portable Countly C++ SDK. 
-
 ## Dependencies and building
 
 Countly C++ SDK has been designed to work with very few dependencies in order to be available on most platforms.
 In order to build this SDK, you need:
 
 - a C++ compiler with C++11 support
-- libcurl and its headers (with openssl) if you are on *nix
-- cmake >= 3.0
+- libcurl (with openssl) and its headers if you are on *nix
+- cmake >= 3.13
 
 First, clone the repository with its submodules:
 
