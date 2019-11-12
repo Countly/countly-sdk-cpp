@@ -484,39 +484,39 @@ bool Countly::updateSession() {
 			last_sent += duration;
 		}
 		return true;
-	} else {
-		std::map<std::string, std::string> data = {
-			{"app_key", session_params["app_key"].get<std::string>()},
-			{"device_id", session_params["device_id"].get<std::string>()},
-			{"session_duration", std::to_string(duration.count())},
-			{"events", events.dump()}
-		};
-		if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
-			mutex.unlock();
-			return false;
-		}
-		last_sent = Countly::getTimestamp();
 	}
 
-	if (!no_events) {
+	std::map<std::string, std::string> data = {
+		{"app_key", session_params["app_key"].get<std::string>()},
+		{"device_id", session_params["device_id"].get<std::string>()},
+		{"session_duration", std::to_string(duration.count())},
+		{"events", events.dump()}
+	};
+
+	if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
+		mutex.unlock();
+		return false;
+	}
+
+	last_sent = Countly::getTimestamp();
+
 #ifndef COUNTLY_USE_SQLITE
-		event_queue.clear();
+	event_queue.clear();
 #else
-		return_value = sqlite3_open(database_path.c_str(), &database);
-		if (return_value == SQLITE_OK) {
-			std::ostringstream sql_statement_stream;
-			sql_statement_stream << "DELETE FROM events WHERE evtid IN " << event_ids << ';';
-			std::string sql_statement = sql_statement_stream.str();
+	return_value = sqlite3_open(database_path.c_str(), &database);
+	if (return_value == SQLITE_OK) {
+		std::ostringstream sql_statement_stream;
+		sql_statement_stream << "DELETE FROM events WHERE evtid IN " << event_ids << ';';
+		std::string sql_statement = sql_statement_stream.str();
 
-			return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
-			if (return_value != SQLITE_OK) {
-				log(Countly::LogLevel::ERROR, error_message);
-				sqlite3_free(error_message);
-			}
+		return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
+		if (return_value != SQLITE_OK) {
+			log(Countly::LogLevel::ERROR, error_message);
+			sqlite3_free(error_message);
 		}
-		sqlite3_close(database);
-#endif
 	}
+	sqlite3_close(database);
+#endif
 
 	mutex.unlock();
 	return true;
