@@ -470,6 +470,7 @@ bool Countly::updateSession() {
 	mutex.unlock();
 	auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
 	mutex.lock();
+
 	if (no_events) {
 		if (duration.count() > COUNTLY_KEEPALIVE_INTERVAL) {
 			std::map<std::string, std::string> data = {
@@ -483,6 +484,8 @@ bool Countly::updateSession() {
 			}
 			last_sent += duration;
 		}
+
+		mutex.unlock();
 		return true;
 	}
 
