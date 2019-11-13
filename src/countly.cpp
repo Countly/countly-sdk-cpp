@@ -73,27 +73,27 @@ void Countly::setMetrics(const std::string& os, const std::string& os_version, c
 	json metrics = json::object();
 
 	if (!os.empty()) {
-		metrics["os"] = os;
+		metrics["_os"] = os;
 	}
 
 	if (!os_version.empty()) {
-		metrics["os_version"] = os_version;
+		metrics["_os_version"] = os_version;
 	}
 
 	if (!device.empty()) {
-		metrics["device"] = device;
+		metrics["_device"] = device;
 	}
 
 	if (!resolution.empty()) {
-		metrics["resolution"] = resolution;
+		metrics["_resolution"] = resolution;
 	}
 
 	if (!carrier.empty()) {
-		metrics["carrier"] = carrier;
+		metrics["_carrier"] = carrier;
 	}
 
 	if (!app_version.empty()) {
-		metrics["app_version"] = app_version;
+		metrics["_app_version"] = app_version;
 	}
 
 	mutex.lock();
