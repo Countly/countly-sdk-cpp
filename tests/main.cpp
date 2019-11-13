@@ -109,6 +109,12 @@ void logToConsole(Countly::LogLevel level, const std::string& message) {
 	std::cout << level << '\t' << message << std::endl;
 }
 
+long getUnixTimestamp() {
+	const std::chrono::system_clock::time_point now = Countly::getTimestamp();
+	const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
+	return timestamp.count();
+}
+
 HTTPCall popHTTPCall() {
 	CHECK(!http_call_queue.empty());
 	HTTPCall oldest_call = http_call_queue.front();
@@ -130,6 +136,7 @@ TEST_CASE("forms are serialized correctly") {
 
 TEST_CASE("events are sent correctly") {
 	Countly& countly = Countly::getInstance();
+
 	countly.setLogger(logToConsole);
 	countly.setHTTPClient(fakeSendHTTP);
 	countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
@@ -140,14 +147,19 @@ TEST_CASE("events are sent correctly") {
 #endif
 
 	countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+	long timestamp;
 
 	SUBCASE("session begins") {
+		timestamp = getUnixTimestamp();
 		countly.beginSession();
 		HTTPCall http_call = popHTTPCall();
+		long timestampDiff = stol(http_call.data["timestamp"]) - timestamp;
 		CHECK(!http_call.use_post);
 		CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
 		CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
 		CHECK(http_call.data["begin_session"] == "1");
+		CHECK(timestampDiff >= 0);
+		CHECK(timestampDiff <= 1);
 	}
 
 	SUBCASE("remote config is fetched") {
@@ -200,12 +212,16 @@ TEST_CASE("events are sent correctly") {
 		CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
 	}
 
+	timestamp = getUnixTimestamp();
 	SUBCASE("session ends") {
 		countly.stop();
 		HTTPCall http_call = popHTTPCall();
+		long timestampDiff = stol(http_call.data["timestamp"]) - timestamp;
 		CHECK(!http_call.use_post);
 		CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
 		CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
 		CHECK(http_call.data["end_session"] == "1");
+		CHECK(timestampDiff >= 0);
+		CHECK(timestampDiff <= 1);
 	}
 }

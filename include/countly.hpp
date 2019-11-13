@@ -195,6 +195,8 @@ private:
 
 	HTTPResponse sendHTTP(std::string path, std::string data);
 
+	std::chrono::system_clock::duration getSessionDuration(std::chrono::system_clock::time_point now);
+
 	std::chrono::system_clock::duration getSessionDuration();
 
 	void updateLoop();

@@ -374,9 +374,13 @@ bool Countly::beginSession() {
 		return true;
 	}
 
+	const std::chrono::system_clock::time_point now = Countly::getTimestamp();
+	const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
+
 	std::map<std::string, std::string> data = {
 		{"sdk_name", COUNTLY_SDK_NAME},
 		{"sdk_version", COUNTLY_API_VERSION},
+		{"timestamp", std::to_string(timestamp.count())},
 		{"begin_session", "1"}
 	};
 
@@ -526,16 +530,20 @@ bool Countly::updateSession() {
 }
 
 bool Countly::endSession() {
-	auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
+	const std::chrono::system_clock::time_point now = Countly::getTimestamp();
+	const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
+	const auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration(now));
+
 	mutex.lock();
 	std::map<std::string, std::string> data = {
 		{"app_key", session_params["app_key"].get<std::string>()},
 		{"device_id", session_params["device_id"].get<std::string>()},
 		{"session_duration", std::to_string(duration.count())},
+		{"timestamp", std::to_string(timestamp.count())},
 		{"end_session", "1"}
 	};
 	if (sendHTTP("/i", Countly::serializeForm(data)).success) {
-		last_sent += duration;
+		last_sent = now;
 		began_session = false;
 		mutex.unlock();
 		return true;
@@ -777,11 +785,15 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 #endif
 }
 
-std::chrono::system_clock::duration Countly::getSessionDuration() {
+std::chrono::system_clock::duration Countly::getSessionDuration(std::chrono::system_clock::time_point now) {
 	mutex.lock();
-	std::chrono::system_clock::duration duration = last_sent - Countly::getTimestamp();
+	std::chrono::system_clock::duration duration = last_sent - now;
 	mutex.unlock();
 	return duration;
+}
+
+std::chrono::system_clock::duration Countly::getSessionDuration() {
+	return Countly::getSessionDuration(Countly::getTimestamp());
 }
 
 void Countly::updateLoop() {
