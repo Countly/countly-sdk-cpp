@@ -810,7 +810,12 @@ void Countly::updateLoop() {
 		size_t last_wait_milliseconds = wait_milliseconds;
 		mutex.unlock();
 		updateSession();
-		std::this_thread::sleep_for(std::chrono::milliseconds(last_wait_milliseconds));
+		for (size_t i = 0; i < 10; i++) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(last_wait_milliseconds / 10));
+			if (stop_thread) {
+				break;
+			}
+		}
 	}
 	mutex.lock();
 	running = false;
