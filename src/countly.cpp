@@ -17,6 +17,7 @@ using json = nlohmann::json;
 #ifdef _WIN32
 #include "Windows.h"
 #include "WinHTTP.h"
+#undef ERROR
 #pragma comment(lib, "winhttp.lib")
 #else
 #include "curl/curl.h"
@@ -694,7 +695,7 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 	}
 
 	if (hRequest) {
-		bool ok = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, use_post ? data.c_str() : WINHTTP_NO_REQUEST_DATA, use_post ? data.size() : 0, 0, nullptr) != 0;
+		bool ok = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, use_post ? (LPVOID)data.data() : WINHTTP_NO_REQUEST_DATA, use_post ? data.size() : 0, 0, 0) != 0;
 		if (ok) {
 			ok = WinHttpReceiveResponse(hRequest, NULL);
 			if (ok) {

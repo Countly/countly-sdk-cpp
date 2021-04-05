@@ -15,6 +15,10 @@
 #include "nlohmann/json.hpp"
 using json = nlohmann::json;
 
+#ifdef _WIN32
+#undef ERROR
+#endif
+
 #define COUNTLY_SDK_NAME "cpp-native-unknown"
 #define COUNTLY_SDK_VERSION "0.1.0"
 #define COUNTLY_API_VERSION "19.8.0"
@@ -136,6 +140,8 @@ public:
 	void SetPath(const std::string& path) {
 #ifdef COUNTLY_USE_SQLITE
 		setDatabasePath(path);
+#elif defined _WIN32
+		UNREFERENCED_PARAMETER(path);
 #endif
 	}
 
