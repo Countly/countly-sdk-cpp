@@ -225,11 +225,6 @@ void Countly::startOnCloud(const std::string& app_key) {
 
 void Countly::stop() {
 	mutex.lock();
-	if (began_session) {
-		mutex.unlock();
-		endSession();
-		mutex.lock();
-	}
 	stop_thread = true;
 	mutex.unlock();
 	if (thread != nullptr && thread->joinable()) {
@@ -239,6 +234,9 @@ void Countly::stop() {
 			log(Countly::LogLevel::WARNING, "Could not join thread");
 		}
 		delete thread;
+	}
+	if (began_session) {
+		endSession();
 	}
 }
 
