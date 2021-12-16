@@ -9,26 +9,20 @@ using namespace std;
 
 void printLog(Countly::LogLevel level, const string& msg) {
 	string lvl = "[DEBUG]";
-	switch (level)
-	{
+	switch (level) {
 	case Countly::LogLevel::DEBUG/* constant-expression */:
-		/* code */
 		lvl = "[Debug]";
 		break;
-	case Countly::LogLevel::INFO/* constant-expression */:
-		/* code */
+	case Countly::LogLevel::INFO:
 		lvl = "[INFO]";
 		break;
-		case Countly::LogLevel::WARNING/* constant-expression */:
-		/* code */
+		case Countly::LogLevel::WARNING:
 		lvl = "[WARNING]";
 		break;
-		case Countly::LogLevel::ERROR/* constant-expression */:
-		/* code */
+		case Countly::LogLevel::ERROR:
 		lvl = "[ERROR]";
 		break;
-		case Countly::LogLevel::FATAL/* constant-expression */:
-		/* code */
+		case Countly::LogLevel::FATAL:
 		lvl = "[FATAL]";
 		break;
 	
@@ -60,8 +54,7 @@ int main() {
 	ct.setUpdateInterval(15);
 
 	bool flag = true;
-	while (flag)
-	{
+	while (flag) {
 		cout<<"Choose your option:"<<endl;
 		cout<<"1) Basic Event"<<endl;
 		cout<<"2) Event with count and sum"<<endl;
@@ -70,8 +63,7 @@ int main() {
 		cout<<"0) Exit"<<endl;
 		int a;
 		cin>>a;
-		switch (a)
-		{
+		switch (a) {
 		case 1:
 			ct.RecordEvent("Basic Event", 123);
 			break;
