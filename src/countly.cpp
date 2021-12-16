@@ -370,7 +370,7 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
 
 bool Countly::beginSession() {
 	mutex.lock();
-	log(Countly::LogLevel::DEBUG, "[Countly] [beginSession]");
+	log(Countly::LogLevel::DEBUG, "[Countly][beginSession]");
 	if (began_session) {
 		mutex.unlock();
 		return true;
@@ -410,7 +410,7 @@ bool Countly::beginSession() {
 }
 
 bool Countly::updateSession() {
-	log(Countly::LogLevel::DEBUG, "Countly::updateSession");
+	log(Countly::LogLevel::DEBUG, "[Countly][updateSession]");
 
 	mutex.lock();
 	if (!began_session) {
@@ -534,7 +534,7 @@ bool Countly::updateSession() {
 }
 
 bool Countly::endSession() {
-	log(Countly::LogLevel::DEBUG, "[Countly] [endSession]");
+	log(Countly::LogLevel::DEBUG, "[Countly][endSession]");
 	const std::chrono::system_clock::time_point now = Countly::getTimestamp();
 	const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
 	const auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration(now));
@@ -631,7 +631,7 @@ static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n
 Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 	bool use_post = always_use_post || (data.size() > COUNTLY_POST_THRESHOLD);
 
-log(Countly::LogLevel::INFO, "[Countly] [sendHTTP] data: "+ data);
+log(Countly::LogLevel::INFO, "[Countly][sendHTTP] data: "+ data);
 	if (!salt.empty()) {
 		unsigned char checksum[SHA256_DIGEST_LENGTH];
 		std::string salted_data = data + salt;
