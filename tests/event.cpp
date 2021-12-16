@@ -53,6 +53,12 @@ TEST_CASE("events are serialized correctly") {
 			CHECK(event.serialize() == "{\"count\":3,\"key\":\"lose\",\"segmentation\":{\"points\":2000}}");
 		}
 
+		SUBCASE("with count, sum, duration and segmentation") {
+			Countly::Event event("lose", 3, 10, 100);
+			event.addSegmentation("points", 2000);
+			CHECK(event.serialize() == "{\"count\":3,\"dur\":100.0,\"key\":\"lose\",\"segmentation\":{\"points\":2000},\"sum\":10.0}");
+		}
+
 		SUBCASE("with multibyte strings") {
 			Countly::Event event("测试", 1);
 			event.addSegmentation("苹果", "美味");

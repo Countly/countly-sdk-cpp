@@ -115,6 +115,7 @@ public:
 	public:
 		Event(const std::string& key, size_t count = 1);
 		Event(const std::string& key, size_t count, double sum);
+		Event(const std::string& key, size_t count, double sum, double duration);
 
 		void setTimestamp();
 
@@ -189,6 +190,16 @@ public:
 
 	void RecordEvent(const std::string key, std::map<std::string, std::string> segmentation, int count, double sum) {
 		Event event(key, count, sum);
+
+		for (auto key_value: segmentation) {
+			event.addSegmentation(key_value.first, json::parse(key_value.second));
+		}
+
+		addEvent(event);
+	}
+
+	void RecordEvent(const std::string key, std::map<std::string, std::string> segmentation, int count, double sum, double duration) {
+		Event event(key, count, sum, duration);
 
 		for (auto key_value: segmentation) {
 			event.addSegmentation(key_value.first, json::parse(key_value.second));

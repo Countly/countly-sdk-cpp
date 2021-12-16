@@ -1,5 +1,8 @@
 # for out of source builds
 build/
+.idea/
+.vscode/
+.project
 
 # cmake generates these files
 src/countly.hpp

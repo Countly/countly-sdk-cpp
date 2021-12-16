@@ -10,6 +10,7 @@ option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(COUNTLY_USE_CUSTOM_HTTP "Use a custom HTTP library" OFF)
 option(COUNTLY_USE_SQLITE "Use SQLite" OFF)
 option(COUNTLY_BUILD_TESTS "Build test programs" OFF)
+option(COUNTLY_BUILD_SAMPLE "Build Sample programs" OFF)
 
 if (NOT WIN32 AND NOT BUILD_SHARED_LIBS AND NOT COUNTLY_CUSTOM_HTTP)
   message(FATAL_ERROR "You must provide a custom HTTP function when compiling statically.")
@@ -68,6 +69,22 @@ if(COUNTLY_BUILD_TESTS)
   target_include_directories(countly-tests PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include)
   target_link_libraries(countly-tests countly)
   set_target_properties(countly-tests PROPERTIES
+    CXX_STANDARD 11
+    CXX_STANDARD_REQUIRED YES
+    CXX_EXTENSIONS NO)
+endif()
+
+if(COUNTLY_BUILD_SAMPLE)
+  add_executable(countly-sample
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/example_integration.cpp)
+  if(COUNTLY_USE_SQLITE)
+    target_compile_definitions(countly-tests PRIVATE COUNTLY_USE_SQLITE)
+    target_include_directories(countly-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/sqlite)
+  endif()
+  target_include_directories(countly-sample PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/doctest/doctest)
+  target_include_directories(countly-sample PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include)
+  target_link_libraries(countly-sample countly)
+  set_target_properties(countly-sample PROPERTIES
     CXX_STANDARD 11
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO)
