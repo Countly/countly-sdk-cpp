@@ -2,27 +2,26 @@
 #include <chrono>
 #include <random>
 #include <iostream>
-using namespace std;
-
-
 #include "countly.hpp"
+
+using namespace std;
 
 void printLog(Countly::LogLevel level, const string& msg) {
 	string lvl = "[DEBUG]";
 	switch (level) {
-	case Countly::LogLevel::DEBUG/* constant-expression */:
+	case Countly::LogLevel::DEBUG:
 		lvl = "[Debug]";
 		break;
 	case Countly::LogLevel::INFO:
 		lvl = "[INFO]";
 		break;
-		case Countly::LogLevel::WARNING:
+	case Countly::LogLevel::WARNING:
 		lvl = "[WARNING]";
 		break;
-		case Countly::LogLevel::ERROR:
+	case Countly::LogLevel::ERROR:
 		lvl = "[ERROR]";
 		break;
-		case Countly::LogLevel::FATAL:
+	case Countly::LogLevel::FATAL:
 		lvl = "[FATAL]";
 		break;
 	
@@ -39,7 +38,7 @@ int main() {
 	cout<<"Sample App"<<endl;
 	Countly& ct = Countly::getInstance();
 	ct.alwaysUsePost(true);
-	ct.setDeviceID("zahidzafar");
+	ct.setDeviceID("test-device-id");
 
 	void (*logger_function)(Countly::LogLevel level, const std::string& message);
 	logger_function = printLog;
@@ -48,7 +47,7 @@ int main() {
 	ct.SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Carrier", "1.0");
 	ct.setCustomUserDetails({{"Account Type", "Basic"}, {"Employer", "Company4"}});
 	// Server and port
-	ct.Start("8c1d653f8f474be24958b282d5e9b4c4209ee552", "https://master.count.ly", 443);
+	ct.Start("YOUR_APP_KEY", "https://try.count.ly", 443);
 	ct.SetMaxEventsPerMessage(10);
 	ct.SetMinUpdatePeriod(10);
 	ct.setUpdateInterval(15);
@@ -60,6 +59,7 @@ int main() {
 		cout<<"2) Event with count and sum"<<endl;
 		cout<<"3) Event with count, sum, duration"<<endl;
 		cout<<"4) Event with sum, count, duration and segmentation"<<endl;
+		cout<<"5) Update Session"<<endl;
 		cout<<"0) Exit"<<endl;
 		int a;
 		cin>>a;
@@ -81,10 +81,12 @@ int main() {
 			ct.RecordEvent("Event with sum, count, duration and segmentation", segmentation, 1, 0, 10);
 			break;
 		}
+		case 5:
+			ct.updateSession();
+			break;
 		case 0:
 			flag = false;
 			break;
-		
 		default:
 			cout<<"Option not found!"<<endl;
 			break;
@@ -92,6 +94,7 @@ int main() {
 	}
 
 	ct.updateSession();
+	ct.stop();
 
 	return 0;
 }

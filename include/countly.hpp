@@ -21,7 +21,7 @@ using json = nlohmann::json;
 
 #define COUNTLY_SDK_NAME "cpp-native-unknown"
 #define COUNTLY_SDK_VERSION "0.1.0"
-#define COUNTLY_API_VERSION "19.8.0"
+#define COUNTLY_API_VERSION "21.11.0"
 #define COUNTLY_POST_THRESHOLD 2000
 #define COUNTLY_KEEPALIVE_INTERVAL 3000
 #define COUNTLY_MAX_EVENTS_DEFAULT 200
