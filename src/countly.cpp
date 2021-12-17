@@ -220,7 +220,12 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 	mutex.unlock();
 }
 
+
+/**
+ * startOnCloud is deprecated and this is going to be removed in the future.
+ */
 void Countly::startOnCloud(const std::string& app_key) {
+	log(Countly::LogLevel::WARNING, "[Countly][startOnCloud] 'startOnCloud' is deprecated, this is going to be removed in the future.");
 	this->start(app_key, "https://cloud.count.ly", 443);
 }
 
