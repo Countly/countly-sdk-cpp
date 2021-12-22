@@ -21,7 +21,7 @@ using json = nlohmann::json;
 
 #define COUNTLY_SDK_NAME "cpp-native-unknown"
 #define COUNTLY_SDK_VERSION "0.1.0"
-#define COUNTLY_API_VERSION "19.8.0"
+#define COUNTLY_API_VERSION "21.11.0"
 #define COUNTLY_POST_THRESHOLD 2000
 #define COUNTLY_KEEPALIVE_INTERVAL 3000
 #define COUNTLY_MAX_EVENTS_DEFAULT 200
@@ -115,6 +115,7 @@ public:
 	public:
 		Event(const std::string& key, size_t count = 1);
 		Event(const std::string& key, size_t count, double sum);
+		Event(const std::string& key, size_t count, double sum, double duration);
 
 		void setTimestamp();
 
@@ -189,6 +190,16 @@ public:
 
 	void RecordEvent(const std::string key, std::map<std::string, std::string> segmentation, int count, double sum) {
 		Event event(key, count, sum);
+
+		for (auto key_value: segmentation) {
+			event.addSegmentation(key_value.first, json::parse(key_value.second));
+		}
+
+		addEvent(event);
+	}
+
+	void RecordEvent(const std::string key, std::map<std::string, std::string> segmentation, int count, double sum, double duration) {
+		Event event(key, count, sum, duration);
 
 		for (auto key_value: segmentation) {
 			event.addSegmentation(key_value.first, json::parse(key_value.second));

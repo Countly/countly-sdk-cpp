@@ -198,6 +198,21 @@ TEST_CASE("events are sent correctly") {
 		CHECK(http_call.data["events"] == "[{\"count\":2,\"key\":\"win\"},{\"count\":1,\"key\":\"achievement\"}]");
 	}
 
+	SUBCASE("event with count, sum, duration and segmentation is sent") {
+		Countly::Event event("lose", 3, 10, 100);
+		event.addSegmentation("points", 2000);
+		countly.addEvent(event);
+
+		WAIT_FOR_SQLITE(1);
+		countly.updateSession();
+			
+		HTTPCall http_call = popHTTPCall();
+		CHECK(!http_call.use_post);
+		CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
+		CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
+		CHECK(http_call.data["events"] == "[{\"count\":3,\"dur\":100.0,\"key\":\"lose\",\"segmentation\":{\"points\":2000},\"sum\":10.0}]");
+	}
+
 	SUBCASE("100 events are sent") {
 		for (int i = 0; i < 100; i++) {
 			Countly::Event event("click", i);

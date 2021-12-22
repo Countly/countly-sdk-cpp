@@ -182,6 +182,7 @@ void Countly::setDeviceID(const std::string& value, bool same_user) {
 
 void Countly::start(const std::string& app_key, const std::string& host, int port, bool start_thread) {
 	mutex.lock();
+	log(Countly::LogLevel::INFO, "[Countly][start]");
 	this->host = host;
 	if (host.find("http://") == 0) {
 		use_https = false;
@@ -219,7 +220,12 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 	mutex.unlock();
 }
 
+
+/**
+ * startOnCloud is deprecated and this is going to be removed in the future.
+ */
 void Countly::startOnCloud(const std::string& app_key) {
+	log(Countly::LogLevel::WARNING, "[Countly][startOnCloud] 'startOnCloud' is deprecated, this is going to be removed in the future.");
 	this->start(app_key, "https://cloud.count.ly", 443);
 }
 
@@ -369,6 +375,7 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
 
 bool Countly::beginSession() {
 	mutex.lock();
+	log(Countly::LogLevel::INFO, "[Countly][beginSession]");
 	if (began_session) {
 		mutex.unlock();
 		return true;
@@ -408,6 +415,8 @@ bool Countly::beginSession() {
 }
 
 bool Countly::updateSession() {
+	log(Countly::LogLevel::INFO, "[Countly][updateSession]");
+
 	mutex.lock();
 	if (!began_session) {
 		mutex.unlock();
@@ -486,6 +495,7 @@ bool Countly::updateSession() {
 				mutex.unlock();
 				return false;
 			}
+
 			last_sent += duration;
 		}
 
@@ -505,7 +515,7 @@ bool Countly::updateSession() {
 		return false;
 	}
 
-	last_sent = Countly::getTimestamp();
+	last_sent += duration;
 
 #ifndef COUNTLY_USE_SQLITE
 	event_queue.clear();
@@ -530,6 +540,7 @@ bool Countly::updateSession() {
 }
 
 bool Countly::endSession() {
+	log(Countly::LogLevel::INFO, "[Countly][endSession]");
 	const std::chrono::system_clock::time_point now = Countly::getTimestamp();
 	const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
 	const auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration(now));
@@ -626,6 +637,7 @@ static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n
 Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 	bool use_post = always_use_post || (data.size() > COUNTLY_POST_THRESHOLD);
 
+log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: "+ data);
 	if (!salt.empty()) {
 		unsigned char checksum[SHA256_DIGEST_LENGTH];
 		std::string salted_data = data + salt;
@@ -762,6 +774,8 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 			curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.c_str());
 		}
 
+		log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] request: " + full_url_stream.str());
+
 		std::string full_url = full_url_stream.str();
 		curl_easy_setopt(curl, CURLOPT_URL, full_url.c_str());
 
@@ -771,6 +785,7 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 
 		curl_code = curl_easy_perform(curl);
 		if (curl_code == CURLE_OK) {
+
 			long status_code;
 			curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
 			response.success = (status_code >= 200 && status_code < 300);
@@ -778,17 +793,18 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 				response.data = json::parse(body);
 			}
 		}
-
 		curl_easy_cleanup(curl);
 	}
 #endif
+	log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] response: " + response.data.dump());
 	return response;
 #endif
+
 }
 
 std::chrono::system_clock::duration Countly::getSessionDuration(std::chrono::system_clock::time_point now) {
 	mutex.lock();
-	std::chrono::system_clock::duration duration = last_sent - now;
+	std::chrono::system_clock::duration duration = now - last_sent;
 	mutex.unlock();
 	return duration;
 }
@@ -798,6 +814,7 @@ std::chrono::system_clock::duration Countly::getSessionDuration() {
 }
 
 void Countly::updateLoop() {
+	log(Countly::LogLevel::DEBUG, "[Countly][updateLoop]");
 	mutex.lock();
 	running = true;
 	mutex.unlock();
