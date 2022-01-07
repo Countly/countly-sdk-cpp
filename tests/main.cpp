@@ -68,7 +68,7 @@ Countly::HTTPResponse fakeSendHTTP(bool use_post, const std::string& url, const 
 
 	http_call_queue.push_back(http_call);
 
-	Countly::HTTPResponse response { .success = false, .data = json::object() };
+	Countly::HTTPResponse response { false, json::object() };
 
 	if (http_call.url == "/i") {
 		response.success = true;
