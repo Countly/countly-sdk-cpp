@@ -7,6 +7,7 @@ string(REGEX REPLACE "#define COUNTLY_SDK_VERSION \"([^\"]+)\"" "\\1" COUNTLY_SD
 project(countly VERSION ${COUNTLY_SDK_VERSION} LANGUAGES CXX)
 
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
+option(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS  "Create a module definition (.def) on Windows." ON)
 option(COUNTLY_USE_CUSTOM_HTTP "Use a custom HTTP library" OFF)
 option(COUNTLY_USE_SQLITE "Use SQLite" OFF)
 option(COUNTLY_BUILD_TESTS "Build test programs" OFF)
