@@ -93,8 +93,8 @@ int main() {
 		}
 	}
 
-	ct.updateSession();
-	ct.stop();
+	//ct.updateSession();
+	ct.endSession();
 
 	return 0;
 }
