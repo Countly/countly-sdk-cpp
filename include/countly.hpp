@@ -207,6 +207,11 @@ public:
 
 		addEvent(event);
 	}
+
+	/* Provide 'updateInterval' in seconds. */
+	inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) {
+		_auto_session_update_interval = updateInterval;
+	}
 private:
 	void log(LogLevel level, const std::string& message);
 
@@ -236,6 +241,7 @@ private:
 	bool stop_thread;
 	bool running;
 	size_t wait_milliseconds;
+	unsigned short _auto_session_update_interval = 60; // value is in seconds;
 
 	size_t max_events;
 #ifndef COUNTLY_USE_SQLITE

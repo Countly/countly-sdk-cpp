@@ -482,7 +482,7 @@ bool Countly::updateSession() {
 	auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
 	mutex.lock();
 
-	if (duration.count() * 1000 >= COUNTLY_KEEPALIVE_INTERVAL) {
+	if (duration.count() >= _auto_session_update_interval) {
 		log(Countly::LogLevel::DEBUG, "[Countly][updateSession] sending session update.");
 		std::map<std::string, std::string> data = {
 			{"app_key", session_params["app_key"].get<std::string>()},
