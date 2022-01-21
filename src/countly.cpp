@@ -202,8 +202,14 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 	}
 
 	if (!running) {
+
+		mutex.unlock();
+		beginSession();
+		mutex.lock();
+
 		if (start_thread) {
 			stop_thread = false;
+
 			try {
 				thread = new std::thread(&Countly::updateLoop, this);
 			} catch(const std::system_error& e) {
@@ -211,10 +217,6 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 				log_message << "Could not create thread: " << e.what();
 				log(Countly::LogLevel::FATAL, log_message.str());
 			}
-		} else {
-			mutex.unlock();
-			beginSession();
-			mutex.lock();
 		}
 	}
 	mutex.unlock();
