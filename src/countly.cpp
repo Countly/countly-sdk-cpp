@@ -400,7 +400,7 @@ bool Countly::beginSession() {
 	}
 
 	if (sendHTTP("/i", Countly::serializeForm(data)).success) {
-		last_sent = Countly::getTimestamp();
+		last_sent_session_request = Countly::getTimestamp();
 		began_session = true;
 	}
 
@@ -507,7 +507,7 @@ bool Countly::updateSession() {
 		return false;
 	}
 
-	last_sent += duration;
+	last_sent_session_request += duration;
 
 #ifndef COUNTLY_USE_SQLITE
 	event_queue.clear();
@@ -546,7 +546,7 @@ bool Countly::endSession() {
 		{"end_session", "1"}
 	};
 	if (sendHTTP("/i", Countly::serializeForm(data)).success) {
-		last_sent = now;
+		last_sent_session_request = now;
 		began_session = false;
 		mutex.unlock();
 		return true;
@@ -796,7 +796,7 @@ log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: "+ data);
 
 std::chrono::system_clock::duration Countly::getSessionDuration(std::chrono::system_clock::time_point now) {
 	mutex.lock();
-	std::chrono::system_clock::duration duration = now - last_sent;
+	std::chrono::system_clock::duration duration = now - last_sent_session_request;
 	mutex.unlock();
 	return duration;
 }

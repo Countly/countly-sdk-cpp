@@ -225,7 +225,7 @@ private:
 	int port;
 	bool use_https;
 	bool always_use_post;
-	std::chrono::system_clock::time_point last_sent;
+	std::chrono::system_clock::time_point last_sent_session_request;
 	bool began_session;
 
 	json session_params;
