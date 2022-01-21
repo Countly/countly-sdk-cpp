@@ -484,32 +484,24 @@ bool Countly::updateSession() {
 	auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
 	mutex.lock();
 
-	if (no_events) {
-		if (duration.count() > COUNTLY_KEEPALIVE_INTERVAL) {
-			std::map<std::string, std::string> data = {
-				{"app_key", session_params["app_key"].get<std::string>()},
-				{"device_id", session_params["device_id"].get<std::string>()},
-				{"session_duration", std::to_string(duration.count())}
-			};
-			if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
-				mutex.unlock();
-				return false;
-			}
+	if (!no_events) {
+		std::map<std::string, std::string> data = {
+		{"app_key", session_params["app_key"].get<std::string>()},
+		{"device_id", session_params["device_id"].get<std::string>()},
+		{"events", events.dump()}
+		};
 
-			last_sent += duration;
+		if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
+			mutex.unlock();
+			return false;
 		}
-
-		mutex.unlock();
-		return true;
 	}
 
 	std::map<std::string, std::string> data = {
-		{"app_key", session_params["app_key"].get<std::string>()},
-		{"device_id", session_params["device_id"].get<std::string>()},
-		{"session_duration", std::to_string(duration.count())},
-		{"events", events.dump()}
+			{"app_key", session_params["app_key"].get<std::string>()},
+			{"device_id", session_params["device_id"].get<std::string>()},
+			{"session_duration", std::to_string(duration.count())}
 	};
-
 	if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
 		mutex.unlock();
 		return false;
@@ -827,8 +819,8 @@ void Countly::updateLoop() {
 		}
 		size_t last_wait_milliseconds = wait_milliseconds;
 		mutex.unlock();
-		updateSession();
 		std::this_thread::sleep_for(std::chrono::milliseconds(last_wait_milliseconds));
+		updateSession();
 	}
 	mutex.lock();
 	running = false;
