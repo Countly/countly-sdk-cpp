@@ -415,8 +415,6 @@ bool Countly::beginSession() {
 }
 
 bool Countly::updateSession() {
-	log(Countly::LogLevel::INFO, "[Countly][updateSession]");
-
 	mutex.lock();
 	if (!began_session) {
 		mutex.unlock();
@@ -484,7 +482,23 @@ bool Countly::updateSession() {
 	auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
 	mutex.lock();
 
+	if (duration.count() * 1000 >= COUNTLY_KEEPALIVE_INTERVAL) {
+		log(Countly::LogLevel::DEBUG, "[Countly][updateSession] sending session update.");
+		std::map<std::string, std::string> data = {
+			{"app_key", session_params["app_key"].get<std::string>()},
+			{"device_id", session_params["device_id"].get<std::string>()},
+			{"session_duration", std::to_string(duration.count())}
+		};
+		if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
+			mutex.unlock();
+			return false;
+		}
+
+		last_sent_session_request += duration;
+	}
+
 	if (!no_events) {
+		log(Countly::LogLevel::DEBUG, "[Countly][updateSession] sending event.");
 		std::map<std::string, std::string> data = {
 		{"app_key", session_params["app_key"].get<std::string>()},
 		{"device_id", session_params["device_id"].get<std::string>()},
@@ -496,18 +510,6 @@ bool Countly::updateSession() {
 			return false;
 		}
 	}
-
-	std::map<std::string, std::string> data = {
-			{"app_key", session_params["app_key"].get<std::string>()},
-			{"device_id", session_params["device_id"].get<std::string>()},
-			{"session_duration", std::to_string(duration.count())}
-	};
-	if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
-		mutex.unlock();
-		return false;
-	}
-
-	last_sent_session_request += duration;
 
 #ifndef COUNTLY_USE_SQLITE
 	event_queue.clear();
