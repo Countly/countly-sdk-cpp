@@ -205,7 +205,7 @@ void Countly::changeDeviceIdWithMerge(const std::string& value) {
 /* Change device ID without merge after SDK has been initialized.*/
 void Countly::changeDeviceIdWithoutMerge(const std::string& value) {
 	mutex.lock();
-	log(Countly::LogLevel::INFO, "[Countly][changeDeviceIdWithoutMerge] deviceId = " + value);
+	log(Countly::LogLevel::INFO, "[Countly][changeDeviceIdWithoutMerge] deviceId = '" + value + "'");
 
 	if (!began_session) {
 		log(Countly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithoutMerge] SDK isn't initialized!");

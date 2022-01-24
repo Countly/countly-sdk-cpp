@@ -2,6 +2,7 @@
 * ! Minor breaking change ! Default automatic session update duration changed to 60 seconds.
 * Added a call to change the automatic session update duration.
 * Fixed a bug where session duration was reported wrong.
+* Added new methods to change device id with and without merge.
 
 21.11.0
 * Fixed session duration issue.
