@@ -135,19 +135,86 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string>& val
 	mutex.unlock();
 }
 
+#pragma region User location 
+
 void Countly::setCountry(const std::string& country_code) {
-	session_params["country_code"] = country_code;
+	setLocation(country_code, "", "", "");
 }
 
 void Countly::setCity(const std::string& city_name) {
-	session_params["city"] = city_name;
+	setLocation("", city_name, "", "");
 }
 
 void Countly::setLocation(double lattitude, double longitude) {
 	std::ostringstream location_stream;
 	location_stream << lattitude << ',' << longitude;
-	session_params["location"] = location_stream.str();
+	setLocation("", "", location_stream.str(), "");
 }
+
+void Countly::setLocation(const std::string& countryCode, const std::string& city, const std::string& gpsCoordinates, const std::string& ipAddress) {
+	mutex.lock();
+	log(Countly::LogLevel::INFO, "[Countly][setLocation] SetLocation : countryCode = " + countryCode + ", city = " + city + ", gpsCoordinates = " + gpsCoordinates + ", ipAddress = " + ipAddress);
+
+
+	if ((!countryCode.empty() && city.empty())
+		|| (!city.empty() && countryCode.empty())) {
+		log(Countly::LogLevel::WARNING, "[Countly][setLocation] In \"SetLocation\" both country code and city should be set together");
+	}
+
+	session_params["city"] = city;
+	session_params["ip_address"] = ipAddress;
+	session_params["location"] = gpsCoordinates;
+	session_params["country_code"] = countryCode;
+
+	mutex.unlock();
+
+	if (began_session) {
+		_sendIndependantLocationRequest();
+	}
+}
+
+void Countly::_sendIndependantLocationRequest() {
+	mutex.lock();
+	log(Countly::LogLevel::DEBUG, "[Countly] [_sendIndependantLocationRequest]");
+
+	json location_params;
+
+	/*
+	 * Empty country code, city and IP address can not be sent.
+	 */
+
+	std::map<std::string, std::string> data;
+
+	if (session_params.contains("city") && session_params["city"].is_string() && !session_params["city"].get<std::string>().empty()) {
+		data["city"] = session_params["city"].get<std::string>();
+	}
+
+	if (session_params.contains("location") && session_params["location"].is_string() && !session_params["location"].get<std::string>().empty()) {
+		data["location"] = session_params["location"].get<std::string>();
+	}
+
+	if (session_params.contains("country_code") && session_params["country_code"].is_string() && !session_params["country_code"].get<std::string>().empty()) {
+		data["country_code"] = session_params["country_code"].get<std::string>();
+	}
+
+	if (session_params.contains("ip_address") && session_params["ip_address"].is_string() && !session_params["ip_address"].get<std::string>().empty()) {
+		data["ip_address"] = session_params["ip_address"].get<std::string>();
+	}
+
+	const std::chrono::system_clock::time_point now = Countly::getTimestamp();
+	const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
+
+	if (!data.empty()) {
+		data["app_key"] = session_params["app_key"].get<std::string>();
+		data["device_id"] = session_params["device_id"].get<std::string>();
+		data["timestamp"] = std::to_string(timestamp.count());
+		sendHTTP("/i", Countly::serializeForm(data));
+	}
+	
+	mutex.unlock();
+}
+
+#pragma endregion User location
 
 void Countly::setDeviceID(const std::string& value, bool same_user) {
 	mutex.lock();
@@ -390,18 +457,38 @@ bool Countly::beginSession() {
 		{"sdk_name", COUNTLY_SDK_NAME},
 		{"sdk_version", COUNTLY_API_VERSION},
 		{"timestamp", std::to_string(timestamp.count())},
+		{"app_key", session_params["app_key"].get<std::string>()},
+		{"device_id", session_params["device_id"].get<std::string>()},
 		{"begin_session", "1"}
 	};
 
-	for (auto& element : session_params.items()) {
-		if (element.value().is_string()) {
-			data[element.key()] = element.value().get<std::string>();
-		} else {
-			data[element.key()] = element.value().dump();
-		}
+	if (session_params.contains("city") && session_params["city"].is_string() && !session_params["city"].get<std::string>().empty()) {
+		data["city"] = session_params["city"].get<std::string>();
+	}
+
+	if (session_params.contains("location") && session_params["location"].is_string() && !session_params["location"].get<std::string>().empty()) {
+		data["location"] = session_params["location"].get<std::string>();
+	}
+
+	if (session_params.contains("country_code") && session_params["country_code"].is_string() && !session_params["country_code"].get<std::string>().empty()) {
+		data["country_code"] = session_params["country_code"].get<std::string>();
+	}
+
+	if (session_params.contains("ip_address") && session_params["ip_address"].is_string() && !session_params["ip_address"].get<std::string>().empty()) {
+		data["ip_address"] = session_params["ip_address"].get<std::string>();
+	}
+
+	if (session_params.contains("user_details")) {
+		data["user_details"] = session_params["user_details"].dump();
+		session_params.erase("user_details");
+	}
+
+	if (session_params.contains("metrics")) {
+		data["metrics"] = session_params["metrics"].dump();
 	}
 
 	if (sendHTTP("/i", Countly::serializeForm(data)).success) {
+		session_params.erase("user_details");
 		last_sent_session_request = Countly::getTimestamp();
 		began_session = true;
 	}

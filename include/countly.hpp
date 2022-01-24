@@ -61,11 +61,29 @@ public:
 
 	void setCustomUserDetails(const std::map<std::string, std::string>& value);
 
+	/*
+	setCountry is deprecated, please use void `setLocation(const std::string& countryCode, const std::string& city, const std::string& gpsCoordinates, const std::string& ipAddress)` function instead.
+	*/
 	void setCountry(const std::string& country_code);
 
+	/*
+	setCity is deprecated, please use void `setLocation(const std::string& countryCode, const std::string& city, const std::string& gpsCoordinates, const std::string& ipAddress)` function instead.
+	*/
 	void setCity(const std::string& city_name);
 
+	/*
+	setLocation is deprecated, please use void `setLocation(const std::string& countryCode, const std::string& city, const std::string& gpsCoordinates, const std::string& ipAddress)` function instead.
+	*/
 	void setLocation(double lattitude, double longitude);
+
+	/*
+	Set Country code(ISO Country code), City, Location and IP address to be used for future requests.
+	@param[in] countryCode: ISO Country code for the user's country
+	@param[in] city: Name of the user's city.
+	@param[in] gpsCoordinates: Comma separate latitude and longitude values.For example, `56.42345,123.45325`.
+	@param[in] ipAddress: IpAddress like `192.168.88.33`
+	*/
+	void setLocation(const std::string& countryCode, const std::string& city, const std::string& gpsCoordinates, const std::string& ipAddress);
 
 	void setDeviceID(const std::string& value, bool same_user = false);
 
@@ -213,6 +231,9 @@ public:
 		_auto_session_update_interval = updateInterval;
 	}
 private:
+
+	void _sendIndependantLocationRequest();
+
 	void log(LogLevel level, const std::string& message);
 
 	HTTPResponse sendHTTP(std::string path, std::string data);
