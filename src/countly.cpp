@@ -149,35 +149,82 @@ void Countly::setLocation(double lattitude, double longitude) {
 	session_params["location"] = location_stream.str();
 }
 
+/*To Change device ID with and without merge use 'changeDeviceIdWithMerge' and 'changeDeviceIdWithoutMerge' respectively.*/
 void Countly::setDeviceID(const std::string& value, bool same_user) {
 	mutex.lock();
-	if (session_params.find("device_id") == session_params.end() || (session_params["device_id"].is_string() && session_params["device_id"].get<std::string>() == value)) {
+	log(Countly::LogLevel::INFO, "[Countly][changeDeviceIdWithMerge] setDeviceID = '" + value + "'");
+
+	if (!began_session || session_params.find("device_id") == session_params.end() || (session_params["device_id"].is_string() && session_params["device_id"].get<std::string>() == value)) {
 		session_params["device_id"] = value;
+		mutex.unlock();
+	}
+	else {
+		mutex.unlock();
+		if (same_user) {
+			changeDeviceIdWithMerge(value);
+		}
+		else {
+			changeDeviceIdWithoutMerge(value);
+		}
+	}
+}
+
+/* Change device ID with merge after SDK has been initialized.*/
+void Countly::changeDeviceIdWithMerge(const std::string& value) {
+	mutex.lock();
+	log(Countly::LogLevel::INFO, "[Countly][changeDeviceIdWithMerge] deviceId = '" + value + "'");
+	if (!began_session) {
+		log(Countly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithMerge] SDK isn't initialized!");
 		mutex.unlock();
 		return;
 	}
 
-	if (same_user) {
-		session_params["old_device_id"] = session_params["device_id"];
-		session_params["device_id"] = value;
-		if (began_session) {
-			mutex.unlock();
-			endSession();
-			beginSession();
-			mutex.lock();
-		}
-		session_params.erase("old_device_id");
-	} else {
-		if (began_session) {
-			mutex.unlock();
-			flushEvents();
-			endSession();
-			beginSession();
-			mutex.lock();
-		}
-		session_params["device_id"] = value;
+	if (session_params.find("device_id") == session_params.end() || (session_params["device_id"].is_string() && session_params["device_id"].get<std::string>() == value)) {
+		log(Countly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithMerge] new device id and old device id are same.");
+		mutex.unlock();
+		return;
 	}
+
+	session_params["old_device_id"] = session_params["device_id"];
+	session_params["device_id"] = value;
+
+	const std::chrono::system_clock::time_point now = Countly::getTimestamp();
+	const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
+	std::map<std::string, std::string> data = {
+	{"app_key", session_params["app_key"].get<std::string>()},
+	{"device_id", session_params["device_id"].get<std::string>()},
+	{"old_device_id", session_params["old_device_id"].get<std::string>()},
+	{"timestamp", std::to_string(timestamp.count())},
+	};
+	sendHTTP("/i", Countly::serializeForm(data));
+
+	session_params.erase("old_device_id");
 	mutex.unlock();
+}
+
+/* Change device ID without merge after SDK has been initialized.*/
+void Countly::changeDeviceIdWithoutMerge(const std::string& value) {
+	mutex.lock();
+	log(Countly::LogLevel::INFO, "[Countly][changeDeviceIdWithoutMerge] deviceId = " + value);
+
+	if (!began_session) {
+		log(Countly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithoutMerge] SDK isn't initialized!");
+		mutex.unlock();
+		return;
+	}
+
+	if (session_params.find("device_id") == session_params.end() || (session_params["device_id"].is_string() && session_params["device_id"].get<std::string>() == value)) {
+		log(Countly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithoutMerge] new device id and old device id are same.");
+		mutex.unlock();
+		return;
+	}
+
+	mutex.unlock();
+
+	flushEvents();
+	endSession();
+	beginSession();
+	session_params["device_id"] = value;
 }
 
 void Countly::start(const std::string& app_key, const std::string& host, int port, bool start_thread) {
@@ -186,9 +233,11 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 	this->host = host;
 	if (host.find("http://") == 0) {
 		use_https = false;
-	} else if (host.find("https://") == 0) {
+	}
+	else if (host.find("https://") == 0) {
 		use_https = true;
-	} else {
+	}
+	else {
 		use_https = false;
 		this->host.insert(0, "http://");
 	}

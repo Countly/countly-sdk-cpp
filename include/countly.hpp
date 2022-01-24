@@ -68,6 +68,11 @@ public:
 	void setLocation(double lattitude, double longitude);
 
 	void setDeviceID(const std::string& value, bool same_user = false);
+	
+	void changeDeviceIdWithMerge(const std::string& value);
+
+	void changeDeviceIdWithoutMerge(const std::string& value);
+	
 
 	void start(const std::string& app_key, const std::string& host, int port = -1, bool start_thread = false);
 
