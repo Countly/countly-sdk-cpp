@@ -68,11 +68,6 @@ public:
 	void setLocation(double lattitude, double longitude);
 
 	void setDeviceID(const std::string& value, bool same_user = false);
-	
-	void changeDeviceIdWithMerge(const std::string& value);
-
-	void changeDeviceIdWithoutMerge(const std::string& value);
-	
 
 	void start(const std::string& app_key, const std::string& host, int port = -1, bool start_thread = false);
 
@@ -221,6 +216,10 @@ private:
 	void log(LogLevel level, const std::string& message);
 
 	HTTPResponse sendHTTP(std::string path, std::string data);
+
+	void _changeDeviceIdWithMerge(const std::string& value);
+
+	void _changeDeviceIdWithoutMerge(const std::string& value);
 
 	std::chrono::system_clock::duration getSessionDuration(std::chrono::system_clock::time_point now);
 

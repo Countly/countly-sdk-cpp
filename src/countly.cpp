@@ -149,7 +149,7 @@ void Countly::setLocation(double lattitude, double longitude) {
 	session_params["location"] = location_stream.str();
 }
 
-/*To Change device ID with and without merge use 'changeDeviceIdWithMerge' and 'changeDeviceIdWithoutMerge' respectively.*/
+#pragma region Device Id
 void Countly::setDeviceID(const std::string& value, bool same_user) {
 	mutex.lock();
 	log(Countly::LogLevel::INFO, "[Countly][changeDeviceIdWithMerge] setDeviceID = '" + value + "'");
@@ -161,16 +161,16 @@ void Countly::setDeviceID(const std::string& value, bool same_user) {
 	else {
 		mutex.unlock();
 		if (same_user) {
-			changeDeviceIdWithMerge(value);
+			_changeDeviceIdWithMerge(value);
 		}
 		else {
-			changeDeviceIdWithoutMerge(value);
+			_changeDeviceIdWithoutMerge(value);
 		}
 	}
 }
 
 /* Change device ID with merge after SDK has been initialized.*/
-void Countly::changeDeviceIdWithMerge(const std::string& value) {
+void Countly::_changeDeviceIdWithMerge(const std::string& value) {
 	mutex.lock();
 	log(Countly::LogLevel::INFO, "[Countly][changeDeviceIdWithMerge] deviceId = '" + value + "'");
 	if (!began_session) {
@@ -203,7 +203,7 @@ void Countly::changeDeviceIdWithMerge(const std::string& value) {
 }
 
 /* Change device ID without merge after SDK has been initialized.*/
-void Countly::changeDeviceIdWithoutMerge(const std::string& value) {
+void Countly::_changeDeviceIdWithoutMerge(const std::string& value) {
 	mutex.lock();
 	log(Countly::LogLevel::INFO, "[Countly][changeDeviceIdWithoutMerge] deviceId = '" + value + "'");
 
@@ -226,6 +226,7 @@ void Countly::changeDeviceIdWithoutMerge(const std::string& value) {
 	beginSession();
 	session_params["device_id"] = value;
 }
+#pragma endregion Device Id
 
 void Countly::start(const std::string& app_key, const std::string& host, int port, bool start_thread) {
 	mutex.lock();
