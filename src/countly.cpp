@@ -138,14 +138,18 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string>& val
 #pragma region User location 
 
 void Countly::setCountry(const std::string& country_code) {
+	log(Countly::LogLevel::WARNING, "[Countly][setCountry] 'setCountry' is deprecated, please use 'setLocation(countryCode, city, gpsCoordinates, ipAddress)' method instead.");
 	setLocation(country_code, "", "", "");
 }
 
 void Countly::setCity(const std::string& city_name) {
+	log(Countly::LogLevel::WARNING, "[Countly][setCity] 'setCity' is deprecated, please use 'setLocation(countryCode, city, gpsCoordinates, ipAddress)' method instead.");
 	setLocation("", city_name, "", "");
 }
 
 void Countly::setLocation(double lattitude, double longitude) {
+	log(Countly::LogLevel::WARNING, "[Countly][setLocation] 'setLocation(latitude, longitude)' is deprecated, please use 'setLocation(countryCode, city, gpsCoordinates, ipAddress)' method instead.");
+
 	std::ostringstream location_stream;
 	location_stream << lattitude << ',' << longitude;
 	setLocation("", "", location_stream.str(), "");
