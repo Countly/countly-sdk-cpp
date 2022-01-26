@@ -172,18 +172,7 @@ void Countly::setDeviceID(const std::string& value, bool same_user) {
 /* Change device ID with merge after SDK has been initialized.*/
 void Countly::_changeDeviceIdWithMerge(const std::string& value) {
 	mutex.lock();
-	log(Countly::LogLevel::INFO, "[Countly][changeDeviceIdWithMerge] deviceId = '" + value + "'");
-	if (!began_session) {
-		log(Countly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithMerge] SDK isn't initialized!");
-		mutex.unlock();
-		return;
-	}
-
-	if (session_params.find("device_id") == session_params.end() || (session_params["device_id"].is_string() && session_params["device_id"].get<std::string>() == value)) {
-		log(Countly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithMerge] new device id and old device id are same.");
-		mutex.unlock();
-		return;
-	}
+	log(Countly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithMerge] deviceId = '" + value + "'");
 
 	session_params["old_device_id"] = session_params["device_id"];
 	session_params["device_id"] = value;
@@ -205,19 +194,7 @@ void Countly::_changeDeviceIdWithMerge(const std::string& value) {
 /* Change device ID without merge after SDK has been initialized.*/
 void Countly::_changeDeviceIdWithoutMerge(const std::string& value) {
 	mutex.lock();
-	log(Countly::LogLevel::INFO, "[Countly][changeDeviceIdWithoutMerge] deviceId = '" + value + "'");
-
-	if (!began_session) {
-		log(Countly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithoutMerge] SDK isn't initialized!");
-		mutex.unlock();
-		return;
-	}
-
-	if (session_params.find("device_id") == session_params.end() || (session_params["device_id"].is_string() && session_params["device_id"].get<std::string>() == value)) {
-		log(Countly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithoutMerge] new device id and old device id are same.");
-		mutex.unlock();
-		return;
-	}
+	log(Countly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithoutMerge] deviceId = '" + value + "'");
 
 	mutex.unlock();
 
