@@ -655,10 +655,14 @@ log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: "+ data);
 		data += "checksum256=";
 		data += checksum_stream.str();
 	}
+
+	Countly::HTTPResponse response;
+	response.success = false;
+
 #ifdef COUNTLY_USE_CUSTOM_HTTP
 	if (http_client_function == nullptr) {
 		log(Countly::LogLevel::FATAL, "Missing HTTP client function");
-		return false;
+		return response;
 	}
 
 	return http_client_function(use_post, path, data);
@@ -666,9 +670,6 @@ log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: "+ data);
 	if (http_client_function != nullptr) {
 		return http_client_function(use_post, path, data);
 	}
-
-	Countly::HTTPResponse response;
-	response.success = false;
 #ifdef _WIN32
 	HINTERNET hSession;
 	HINTERNET hConnect;
