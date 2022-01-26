@@ -242,6 +242,7 @@ void Countly::stop() {
 			log(Countly::LogLevel::WARNING, "Could not join thread");
 		}
 		delete thread;
+		thread = nullptr;
 	}
 	if (began_session) {
 		endSession();
