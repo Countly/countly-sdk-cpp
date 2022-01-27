@@ -29,12 +29,14 @@ using json = nlohmann::json;
 #endif
 
 Countly::Countly() : max_events(COUNTLY_MAX_EVENTS_DEFAULT), wait_milliseconds(COUNTLY_KEEPALIVE_INTERVAL) {
+	is_dispose = false;
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_init(CURL_GLOBAL_ALL);
 #endif
 }
 
 Countly::~Countly() {
+	is_dispose = true;
 	stop();
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_cleanup();
@@ -211,7 +213,10 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 			stop_thread = false;
 
 			try {
-				thread = new std::thread(&Countly::updateLoop, this);
+				if (thread == nullptr) {
+					thread = new std::thread(&Countly::updateLoop, this);
+				}
+				
 			} catch(const std::system_error& e) {
 				std::ostringstream log_message;
 				log_message << "Could not create thread: " << e.what();
@@ -232,19 +237,8 @@ void Countly::startOnCloud(const std::string& app_key) {
 }
 
 void Countly::stop() {
-	mutex.lock();
-	stop_thread = true;
-	mutex.unlock();
-	if (thread != nullptr && thread->joinable()) {
-		try {
-			thread->join();
-		} catch(const std::system_error& e) {
-			log(Countly::LogLevel::WARNING, "Could not join thread");
-		}
-		delete thread;
-		thread = nullptr;
-	}
-	if (began_session) {
+	_dispose();
+	if (began_session && !is_dispose) {
 		endSession();
 	}
 }
@@ -913,5 +907,21 @@ void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
 			remote_config[it.key()] = it.value();
 		}
 		mutex.unlock();
+	}
+}
+
+void Countly::_dispose() {
+	mutex.lock();
+	stop_thread = true;
+	mutex.unlock();
+	if (thread != nullptr && thread->joinable()) {
+		try {
+			thread->join();
+		}
+		catch (const std::system_error& e) {
+			log(Countly::LogLevel::WARNING, "Could not join thread");
+		}
+		delete thread;
+		thread = nullptr;
 	}
 }
