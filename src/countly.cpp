@@ -195,7 +195,6 @@ void Countly::_changeDeviceIdWithMerge(const std::string& value) {
 void Countly::_changeDeviceIdWithoutMerge(const std::string& value) {
 	mutex.lock();
 	log(Countly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithoutMerge] deviceId = '" + value + "'");
-
 	mutex.unlock();
 
 	flushEvents();
