@@ -29,6 +29,18 @@ using json = nlohmann::json;
 #endif
 
 Countly::Countly() : max_events(COUNTLY_MAX_EVENTS_DEFAULT), wait_milliseconds(COUNTLY_KEEPALIVE_INTERVAL) {
+	port = 0;
+	running = false;
+	use_https = false;
+	stop_thread = false;
+	began_session = false;
+	always_use_post = false;
+	remote_config_enabled = false;
+	
+	thread = nullptr;
+	logger_function = nullptr;
+	http_client_function = nullptr;
+
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_init(CURL_GLOBAL_ALL);
 #endif
