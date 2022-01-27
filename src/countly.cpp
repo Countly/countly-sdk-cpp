@@ -767,7 +767,7 @@ log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: "+ data);
 
 		if (!use_post) {
 			full_url_stream << '?' << data;
-			curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
+			curl_easy_setopt(curl, CURLOPT_HTTPGET, 1);
 		} else {
 			curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.c_str());
 		}
