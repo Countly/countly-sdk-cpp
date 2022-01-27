@@ -202,8 +202,14 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 	}
 
 	if (!running) {
+
+		mutex.unlock();
+		beginSession();
+		mutex.lock();
+
 		if (start_thread) {
 			stop_thread = false;
+
 			try {
 				thread = new std::thread(&Countly::updateLoop, this);
 			} catch(const std::system_error& e) {
@@ -211,10 +217,6 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 				log_message << "Could not create thread: " << e.what();
 				log(Countly::LogLevel::FATAL, log_message.str());
 			}
-		} else {
-			mutex.unlock();
-			beginSession();
-			mutex.lock();
 		}
 	}
 	mutex.unlock();
@@ -240,6 +242,7 @@ void Countly::stop() {
 			log(Countly::LogLevel::WARNING, "Could not join thread");
 		}
 		delete thread;
+		thread = nullptr;
 	}
 	if (began_session) {
 		endSession();
@@ -400,7 +403,7 @@ bool Countly::beginSession() {
 	}
 
 	if (sendHTTP("/i", Countly::serializeForm(data)).success) {
-		last_sent = Countly::getTimestamp();
+		last_sent_session_request = Countly::getTimestamp();
 		began_session = true;
 	}
 
@@ -415,8 +418,6 @@ bool Countly::beginSession() {
 }
 
 bool Countly::updateSession() {
-	log(Countly::LogLevel::INFO, "[Countly][updateSession]");
-
 	mutex.lock();
 	if (!began_session) {
 		mutex.unlock();
@@ -484,38 +485,34 @@ bool Countly::updateSession() {
 	auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
 	mutex.lock();
 
-	if (no_events) {
-		if (duration.count() > COUNTLY_KEEPALIVE_INTERVAL) {
-			std::map<std::string, std::string> data = {
-				{"app_key", session_params["app_key"].get<std::string>()},
-				{"device_id", session_params["device_id"].get<std::string>()},
-				{"session_duration", std::to_string(duration.count())}
-			};
-			if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
-				mutex.unlock();
-				return false;
-			}
-
-			last_sent += duration;
+	if (duration.count() >= _auto_session_update_interval) {
+		log(Countly::LogLevel::DEBUG, "[Countly][updateSession] sending session update.");
+		std::map<std::string, std::string> data = {
+			{"app_key", session_params["app_key"].get<std::string>()},
+			{"device_id", session_params["device_id"].get<std::string>()},
+			{"session_duration", std::to_string(duration.count())}
+		};
+		if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
+			mutex.unlock();
+			return false;
 		}
 
-		mutex.unlock();
-		return true;
+		last_sent_session_request += duration;
 	}
 
-	std::map<std::string, std::string> data = {
+	if (!no_events) {
+		log(Countly::LogLevel::DEBUG, "[Countly][updateSession] sending event.");
+		std::map<std::string, std::string> data = {
 		{"app_key", session_params["app_key"].get<std::string>()},
 		{"device_id", session_params["device_id"].get<std::string>()},
-		{"session_duration", std::to_string(duration.count())},
 		{"events", events.dump()}
-	};
+		};
 
-	if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
-		mutex.unlock();
-		return false;
+		if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
+			mutex.unlock();
+			return false;
+		}
 	}
-
-	last_sent += duration;
 
 #ifndef COUNTLY_USE_SQLITE
 	event_queue.clear();
@@ -554,7 +551,7 @@ bool Countly::endSession() {
 		{"end_session", "1"}
 	};
 	if (sendHTTP("/i", Countly::serializeForm(data)).success) {
-		last_sent = now;
+		last_sent_session_request = now;
 		began_session = false;
 		mutex.unlock();
 		return true;
@@ -659,10 +656,14 @@ log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: "+ data);
 		data += "checksum256=";
 		data += checksum_stream.str();
 	}
+
+	Countly::HTTPResponse response;
+	response.success = false;
+
 #ifdef COUNTLY_USE_CUSTOM_HTTP
 	if (http_client_function == nullptr) {
 		log(Countly::LogLevel::FATAL, "Missing HTTP client function");
-		return false;
+		return response;
 	}
 
 	return http_client_function(use_post, path, data);
@@ -670,9 +671,6 @@ log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: "+ data);
 	if (http_client_function != nullptr) {
 		return http_client_function(use_post, path, data);
 	}
-
-	Countly::HTTPResponse response;
-	response.success = false;
 #ifdef _WIN32
 	HINTERNET hSession;
 	HINTERNET hConnect;
@@ -804,7 +802,7 @@ log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: "+ data);
 
 std::chrono::system_clock::duration Countly::getSessionDuration(std::chrono::system_clock::time_point now) {
 	mutex.lock();
-	std::chrono::system_clock::duration duration = now - last_sent;
+	std::chrono::system_clock::duration duration = now - last_sent_session_request;
 	mutex.unlock();
 	return duration;
 }
@@ -827,9 +825,8 @@ void Countly::updateLoop() {
 		}
 		size_t last_wait_milliseconds = wait_milliseconds;
 		mutex.unlock();
-		updateSession();
 		std::this_thread::sleep_for(std::chrono::milliseconds(last_wait_milliseconds));
-		
+		updateSession();
 	}
 	mutex.lock();
 	running = false;
