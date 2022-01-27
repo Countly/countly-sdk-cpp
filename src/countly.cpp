@@ -243,6 +243,22 @@ void Countly::stop() {
 	}
 }
 
+void Countly::_dispose() {
+	mutex.lock();
+	stop_thread = true;
+	mutex.unlock();
+	if (thread != nullptr && thread->joinable()) {
+		try {
+			thread->join();
+		}
+		catch (const std::system_error& e) {
+			log(Countly::LogLevel::WARNING, "Could not join thread");
+		}
+		delete thread;
+		thread = nullptr;
+	}
+}
+
 void Countly::setUpdateInterval(size_t milliseconds) {
 	mutex.lock();
 	wait_milliseconds = milliseconds;
@@ -907,21 +923,5 @@ void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
 			remote_config[it.key()] = it.value();
 		}
 		mutex.unlock();
-	}
-}
-
-void Countly::_dispose() {
-	mutex.lock();
-	stop_thread = true;
-	mutex.unlock();
-	if (thread != nullptr && thread->joinable()) {
-		try {
-			thread->join();
-		}
-		catch (const std::system_error& e) {
-			log(Countly::LogLevel::WARNING, "Could not join thread");
-		}
-		delete thread;
-		thread = nullptr;
 	}
 }
