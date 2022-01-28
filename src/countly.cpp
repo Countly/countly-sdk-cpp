@@ -242,6 +242,7 @@ void Countly::stop() {
 			log(Countly::LogLevel::WARNING, "Could not join thread");
 		}
 		delete thread;
+		thread = nullptr;
 	}
 	if (began_session) {
 		endSession();
@@ -655,10 +656,14 @@ log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: "+ data);
 		data += "checksum256=";
 		data += checksum_stream.str();
 	}
+
+	Countly::HTTPResponse response;
+	response.success = false;
+
 #ifdef COUNTLY_USE_CUSTOM_HTTP
 	if (http_client_function == nullptr) {
 		log(Countly::LogLevel::FATAL, "Missing HTTP client function");
-		return false;
+		return response;
 	}
 
 	return http_client_function(use_post, path, data);
@@ -666,9 +671,6 @@ log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: "+ data);
 	if (http_client_function != nullptr) {
 		return http_client_function(use_post, path, data);
 	}
-
-	Countly::HTTPResponse response;
-	response.success = false;
 #ifdef _WIN32
 	HINTERNET hSession;
 	HINTERNET hConnect;
@@ -701,7 +703,8 @@ log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: "+ data);
 	}
 
 	if (hRequest) {
-		bool ok = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, use_post ? (LPVOID)data.data() : WINHTTP_NO_REQUEST_DATA, use_post ? data.size() : 0, 0, 0) != 0;
+		LPCWSTR headers = use_post ? L"content-type:application/x-www-form-urlencoded" : WINHTTP_NO_ADDITIONAL_HEADERS;
+		bool ok = WinHttpSendRequest(hRequest, headers, 0, use_post ? (LPVOID)data.data() : WINHTTP_NO_REQUEST_DATA, use_post ? data.size() : 0, use_post ? data.size() : 0, 0) != 0;
 		if (ok) {
 			ok = WinHttpReceiveResponse(hRequest, NULL);
 			if (ok) {
