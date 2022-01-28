@@ -2,7 +2,8 @@
 * ! Minor breaking change ! Default automatic session update duration changed to 60 seconds.
 * Added a call to change the automatic session update duration.
 * Fixed a bug where session duration was reported wrong.
-* Fixed potential issues while changing device id with and without merge, and reworked its behavior..
+* Fixed bug when changing device id with server merge.
+* Fixed bug when device id was changed without server merge. Previously the new session was started with the old device ID and not the new one.
 
 21.11.0
 * Fixed session duration issue.

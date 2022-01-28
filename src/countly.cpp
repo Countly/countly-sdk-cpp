@@ -154,18 +154,27 @@ void Countly::setDeviceID(const std::string& value, bool same_user) {
 	mutex.lock();
 	log(Countly::LogLevel::INFO, "[Countly][changeDeviceIdWithMerge] setDeviceID = '" + value + "'");
 
-	if (!began_session || session_params.find("device_id") == session_params.end() || (session_params["device_id"].is_string() && session_params["device_id"].get<std::string>() == value)) {
-		session_params["device_id"] = value;
+	//Checking old and new devices ids are same
+	if (session_params.contains("device_id") && session_params["device_id"].get<std::string>() == value) {
+		log(Countly::LogLevel::DEBUG, "[Countly][setDeviceID] new device id and old device id are same.");
 		mutex.unlock();
+		return;
+	}
+
+	if (!session_params.contains("device_id")) {
+		session_params["device_id"] = value;
+		log(Countly::LogLevel::DEBUG, "[Countly][setDeviceID] no device was set, setting device id");
+		mutex.unlock();
+		return;
+	}
+
+	//If code does reach here without sdk init, it will throw an exception.
+	mutex.unlock();
+	if (same_user) {
+		_changeDeviceIdWithMerge(value);
 	}
 	else {
-		mutex.unlock();
-		if (same_user) {
-			_changeDeviceIdWithMerge(value);
-		}
-		else {
-			_changeDeviceIdWithoutMerge(value);
-		}
+		_changeDeviceIdWithoutMerge(value);
 	}
 }
 
@@ -193,14 +202,22 @@ void Countly::_changeDeviceIdWithMerge(const std::string& value) {
 
 /* Change device ID without merge after SDK has been initialized.*/
 void Countly::_changeDeviceIdWithoutMerge(const std::string& value) {
-	mutex.lock();
 	log(Countly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithoutMerge] deviceId = '" + value + "'");
-	mutex.unlock();
 
+	//send all event to server and end current session of old user
 	flushEvents();
-	endSession();
-	beginSession();
-	session_params["device_id"] = value;
+	if (began_session) {
+		endSession();
+		mutex.lock();
+		session_params["device_id"] = value;
+		mutex.unlock();
+		beginSession();
+	}
+	else {
+		mutex.lock();
+		session_params["device_id"] = value;
+		mutex.unlock();
+	}
 }
 #pragma endregion Device Id
 
