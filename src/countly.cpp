@@ -703,7 +703,8 @@ log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: "+ data);
 	}
 
 	if (hRequest) {
-		bool ok = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, use_post ? (LPVOID)data.data() : WINHTTP_NO_REQUEST_DATA, use_post ? data.size() : 0, 0, 0) != 0;
+		LPCWSTR headers = use_post ? L"content-type:application/x-www-form-urlencoded" : WINHTTP_NO_ADDITIONAL_HEADERS;
+		bool ok = WinHttpSendRequest(hRequest, headers, 0, use_post ? (LPVOID)data.data() : WINHTTP_NO_REQUEST_DATA, use_post ? data.size() : 0, use_post ? data.size() : 0, 0) != 0;
 		if (ok) {
 			ok = WinHttpReceiveResponse(hRequest, NULL);
 			if (ok) {
