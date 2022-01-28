@@ -29,14 +29,14 @@ using json = nlohmann::json;
 #endif
 
 Countly::Countly() : max_events(COUNTLY_MAX_EVENTS_DEFAULT), wait_milliseconds(COUNTLY_KEEPALIVE_INTERVAL) {
-	is_dispose = false;
+	is_being_disposed = false;
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_init(CURL_GLOBAL_ALL);
 #endif
 }
 
 Countly::~Countly() {
-	is_dispose = true;
+	is_being_disposed = true;
 	stop();
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_cleanup();
@@ -235,7 +235,7 @@ void Countly::startOnCloud(const std::string& app_key) {
 
 void Countly::stop() {
 	_deleteThread();
-	if (began_session && !is_dispose) {
+	if (began_session) {
 		endSession();
 	}
 }
@@ -557,6 +557,13 @@ bool Countly::endSession() {
 		{"timestamp", std::to_string(timestamp.count())},
 		{"end_session", "1"}
 	};
+
+	if (is_being_disposed) {
+		// if SDK is being destroyed, don't attempt to send the end-session request.
+		mutex.unlock();
+		return;
+	}
+
 	if (sendHTTP("/i", Countly::serializeForm(data)).success) {
 		last_sent_session_request = now;
 		began_session = false;

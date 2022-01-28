@@ -231,7 +231,7 @@ private:
 	int port;
 	bool use_https;
 	bool always_use_post;
-	bool is_dispose;
+	bool is_being_disposed;
 	std::chrono::system_clock::time_point last_sent_session_request;
 	bool began_session;
 
