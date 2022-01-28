@@ -213,7 +213,7 @@ public:
 		_auto_session_update_interval = updateInterval;
 	}
 private:
-	void _dispose();
+	void _deleteThread();
 	void log(LogLevel level, const std::string& message);
 
 	HTTPResponse sendHTTP(std::string path, std::string data);

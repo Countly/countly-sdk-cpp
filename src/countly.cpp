@@ -213,10 +213,7 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 			stop_thread = false;
 
 			try {
-				if (thread == nullptr) {
-					thread = new std::thread(&Countly::updateLoop, this);
-				}
-				
+				thread = new std::thread(&Countly::updateLoop, this);
 			} catch(const std::system_error& e) {
 				std::ostringstream log_message;
 				log_message << "Could not create thread: " << e.what();
