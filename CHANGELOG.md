@@ -3,7 +3,7 @@
 * ! Minor breaking change ! Default automatic session update duration changed to 60 seconds.
 * Added a call to change the automatic session update duration.
 * Fixed a bug where session duration was reported wrong.
-* Fixed a bug that caused an exception on application quit.
+* Fixed a bug that caused an exception when the application quit. This was due to the SDK attempting to send an end session request.
 * Fixed an issue with the custom HTTP client function pointer by setting it's default value.
 * Fixed a bug that caused GET requests to fail on Linux.
 * Fixed bug when changing device id with server merge.
