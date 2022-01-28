@@ -13,7 +13,7 @@ option(COUNTLY_USE_SQLITE "Use SQLite" OFF)
 option(COUNTLY_BUILD_TESTS "Build test programs" OFF)
 option(COUNTLY_BUILD_SAMPLE "Build Sample programs" OFF)
 
-if (NOT WIN32 AND NOT BUILD_SHARED_LIBS AND NOT COUNTLY_CUSTOM_HTTP)
+if (NOT WIN32 AND NOT BUILD_SHARED_LIBS AND NOT COUNTLY_USE_CUSTOM_HTTP)
   message(FATAL_ERROR "You must provide a custom HTTP function when compiling statically.")
 endif()
 
