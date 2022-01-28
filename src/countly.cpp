@@ -37,6 +37,7 @@ Countly::Countly() : max_events(COUNTLY_MAX_EVENTS_DEFAULT), wait_milliseconds(C
 	began_session = false;
 	always_use_post = false;
 	is_being_disposed = false;
+	is_sdk_initialized = false;
 	remote_config_enabled = false;
 	
 	//Petting to null values
@@ -123,15 +124,19 @@ void Countly::setUserDetails(const std::map<std::string, std::string>& value) {
 	mutex.lock();
 	session_params["user_details"] = value;
 
-	if (began_session) {
-		std::map<std::string, std::string> data = {
-			{"app_key", session_params["app_key"].dump()},
-			{"device_id", session_params["device_id"].dump()},
-			{"user_details", session_params["user_details"].dump()}
-		};
-
-		sendHTTP("/i", Countly::serializeForm(data));
+	if (!is_sdk_initialized) {
+		log(Countly::LogLevel::ERROR, "[Countly][setUserDetails] Can not send user detail if the SDK has not been initialized.");
+		mutex.unlock();
+		return;
 	}
+
+	std::map<std::string, std::string> data = {
+			{"app_key", session_params["app_key"].get<std::string>()},
+			{"device_id", session_params["device_id"].get<std::string>()},
+			{"user_details", session_params["user_details"].dump()}
+	};
+
+	sendHTTP("/i", Countly::serializeForm(data));
 	mutex.unlock();
 }
 
@@ -139,31 +144,104 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string>& val
 	mutex.lock();
 	session_params["user_details"]["custom"] = value;
 
-	if (began_session) {
-		std::map<std::string, std::string> data = {
-			{"app_key", session_params["app_key"].dump()},
-			{"device_id", session_params["device_id"].dump()},
-			{"user_details", session_params["user_details"].dump()}
-		};
-
-		sendHTTP("/i", Countly::serializeForm(data));
+	if (!is_sdk_initialized) {
+		log(Countly::LogLevel::ERROR, "[Countly][setCustomUserDetails] Can not send user detail if the SDK has not been initialized.");
+		mutex.unlock();
+		return;
 	}
+
+	std::map<std::string, std::string> data = {
+			{"app_key", session_params["app_key"].get<std::string>()},
+			{"device_id", session_params["device_id"].get<std::string>()},
+			{"user_details", session_params["user_details"].dump()}
+	};
+
+	sendHTTP("/i", Countly::serializeForm(data));
 	mutex.unlock();
 }
 
+#pragma region User location 
+
 void Countly::setCountry(const std::string& country_code) {
-	session_params["country_code"] = country_code;
+	log(Countly::LogLevel::WARNING, "[Countly][setCountry] 'setCountry' is deprecated, please use 'setLocation(countryCode, city, gpsCoordinates, ipAddress)' method instead.");
+	setLocation(country_code, "", "", "");
 }
 
 void Countly::setCity(const std::string& city_name) {
-	session_params["city"] = city_name;
+	log(Countly::LogLevel::WARNING, "[Countly][setCity] 'setCity' is deprecated, please use 'setLocation(countryCode, city, gpsCoordinates, ipAddress)' method instead.");
+	setLocation("", city_name, "", "");
 }
 
 void Countly::setLocation(double lattitude, double longitude) {
+	log(Countly::LogLevel::WARNING, "[Countly][setLocation] 'setLocation(latitude, longitude)' is deprecated, please use 'setLocation(countryCode, city, gpsCoordinates, ipAddress)' method instead.");
+
 	std::ostringstream location_stream;
 	location_stream << lattitude << ',' << longitude;
-	session_params["location"] = location_stream.str();
+	setLocation("", "", location_stream.str(), "");
 }
+
+void Countly::setLocation(const std::string& countryCode, const std::string& city, const std::string& gpsCoordinates, const std::string& ipAddress) {
+	mutex.lock();
+	log(Countly::LogLevel::INFO, "[Countly][setLocation] SetLocation : countryCode = " + countryCode + ", city = " + city + ", gpsCoordinates = " + gpsCoordinates + ", ipAddress = " + ipAddress);
+
+
+	if ((!countryCode.empty() && city.empty())
+		|| (!city.empty() && countryCode.empty())) {
+		log(Countly::LogLevel::WARNING, "[Countly][setLocation] In \"SetLocation\" both country code and city should be set together");
+	}
+
+	session_params["city"] = city;
+	session_params["ip_address"] = ipAddress;
+	session_params["location"] = gpsCoordinates;
+	session_params["country_code"] = countryCode;
+
+	mutex.unlock();
+
+	if (is_sdk_initialized) {
+		_sendIndependantLocationRequest();
+	}
+}
+
+void Countly::_sendIndependantLocationRequest() {
+	mutex.lock();
+	log(Countly::LogLevel::DEBUG, "[Countly] [_sendIndependantLocationRequest]");
+
+	/*
+	 * Empty country code, city and IP address can not be sent.
+	 */
+
+	std::map<std::string, std::string> data;
+
+	if (session_params.contains("city") && session_params["city"].is_string() && !session_params["city"].get<std::string>().empty()) {
+		data["city"] = session_params["city"].get<std::string>();
+	}
+
+	if (session_params.contains("location") && session_params["location"].is_string() && !session_params["location"].get<std::string>().empty()) {
+		data["location"] = session_params["location"].get<std::string>();
+	}
+
+	if (session_params.contains("country_code") && session_params["country_code"].is_string() && !session_params["country_code"].get<std::string>().empty()) {
+		data["country_code"] = session_params["country_code"].get<std::string>();
+	}
+
+	if (session_params.contains("ip_address") && session_params["ip_address"].is_string() && !session_params["ip_address"].get<std::string>().empty()) {
+		data["ip_address"] = session_params["ip_address"].get<std::string>();
+	}
+
+	const std::chrono::system_clock::time_point now = Countly::getTimestamp();
+	const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
+
+	if (!data.empty()) {
+		data["app_key"] = session_params["app_key"].get<std::string>();
+		data["device_id"] = session_params["device_id"].get<std::string>();
+		data["timestamp"] = std::to_string(timestamp.count());
+		sendHTTP("/i", Countly::serializeForm(data));
+	}
+	
+	mutex.unlock();
+}
+
+#pragma endregion User location
 
 #pragma region Device Id
 void Countly::setDeviceID(const std::string& value, bool same_user) {
@@ -184,8 +262,12 @@ void Countly::setDeviceID(const std::string& value, bool same_user) {
 		return;
 	}
 
-	//If code does reach here without sdk init, it will throw an exception.
 	mutex.unlock();
+	if (!is_sdk_initialized) {
+		log(Countly::LogLevel::ERROR, "[Countly][setDeviceID] Can not change the device id if the SDK has not been initialized.");
+		return;
+	}
+	
 	if (same_user) {
 		_changeDeviceIdWithMerge(value);
 	}
@@ -259,6 +341,8 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 	} else {
 		this->port = port;
 	}
+
+	is_sdk_initialized = true; // after this point SDK is initialized.
 
 	if (!running) {
 
@@ -455,18 +539,38 @@ bool Countly::beginSession() {
 		{"sdk_name", COUNTLY_SDK_NAME},
 		{"sdk_version", COUNTLY_API_VERSION},
 		{"timestamp", std::to_string(timestamp.count())},
+		{"app_key", session_params["app_key"].get<std::string>()},
+		{"device_id", session_params["device_id"].get<std::string>()},
 		{"begin_session", "1"}
 	};
 
-	for (auto& element : session_params.items()) {
-		if (element.value().is_string()) {
-			data[element.key()] = element.value().get<std::string>();
-		} else {
-			data[element.key()] = element.value().dump();
-		}
+	if (session_params.contains("city") && session_params["city"].is_string() && !session_params["city"].get<std::string>().empty()) {
+		data["city"] = session_params["city"].get<std::string>();
+	}
+
+	if (session_params.contains("location") && session_params["location"].is_string() && !session_params["location"].get<std::string>().empty()) {
+		data["location"] = session_params["location"].get<std::string>();
+	}
+
+	if (session_params.contains("country_code") && session_params["country_code"].is_string() && !session_params["country_code"].get<std::string>().empty()) {
+		data["country_code"] = session_params["country_code"].get<std::string>();
+	}
+
+	if (session_params.contains("ip_address") && session_params["ip_address"].is_string() && !session_params["ip_address"].get<std::string>().empty()) {
+		data["ip_address"] = session_params["ip_address"].get<std::string>();
+	}
+
+	if (session_params.contains("user_details")) {
+		data["user_details"] = session_params["user_details"].dump();
+		session_params.erase("user_details");
+	}
+
+	if (session_params.contains("metrics")) {
+		data["metrics"] = session_params["metrics"].dump();
 	}
 
 	if (sendHTTP("/i", Countly::serializeForm(data)).success) {
+		session_params.erase("user_details");
 		last_sent_session_request = Countly::getTimestamp();
 		began_session = true;
 	}
