@@ -29,12 +29,28 @@ using json = nlohmann::json;
 #endif
 
 Countly::Countly() : max_events(COUNTLY_MAX_EVENTS_DEFAULT), wait_milliseconds(COUNTLY_KEEPALIVE_INTERVAL) {
+	//Setting the default values
+	port = 0;
+	running = false;
+	use_https = false;
+	stop_thread = false;
+	began_session = false;
+	always_use_post = false;
+	is_being_disposed = false;
+	remote_config_enabled = false;
+	
+	//Petting to null values
+	thread = nullptr;
+	logger_function = nullptr;
+	http_client_function = nullptr;
+
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_init(CURL_GLOBAL_ALL);
 #endif
 }
 
 Countly::~Countly() {
+	is_being_disposed = true;
 	stop();
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_cleanup();
@@ -220,36 +236,77 @@ void Countly::_sendIndependantLocationRequest() {
 
 #pragma endregion User location
 
+#pragma region Device Id
 void Countly::setDeviceID(const std::string& value, bool same_user) {
 	mutex.lock();
-	if (session_params.find("device_id") == session_params.end() || (session_params["device_id"].is_string() && session_params["device_id"].get<std::string>() == value)) {
-		session_params["device_id"] = value;
+	log(Countly::LogLevel::INFO, "[Countly][changeDeviceIdWithMerge] setDeviceID = '" + value + "'");
+
+	//Checking old and new devices ids are same
+	if (session_params.contains("device_id") && session_params["device_id"].get<std::string>() == value) {
+		log(Countly::LogLevel::DEBUG, "[Countly][setDeviceID] new device id and old device id are same.");
 		mutex.unlock();
 		return;
 	}
 
-	if (same_user) {
-		session_params["old_device_id"] = session_params["device_id"];
+	if (!session_params.contains("device_id")) {
 		session_params["device_id"] = value;
-		if (began_session) {
-			mutex.unlock();
-			endSession();
-			beginSession();
-			mutex.lock();
-		}
-		session_params.erase("old_device_id");
-	} else {
-		if (began_session) {
-			mutex.unlock();
-			flushEvents();
-			endSession();
-			beginSession();
-			mutex.lock();
-		}
-		session_params["device_id"] = value;
+		log(Countly::LogLevel::DEBUG, "[Countly][setDeviceID] no device was set, setting device id");
+		mutex.unlock();
+		return;
 	}
+
+	//If code does reach here without sdk init, it will throw an exception.
+	mutex.unlock();
+	if (same_user) {
+		_changeDeviceIdWithMerge(value);
+	}
+	else {
+		_changeDeviceIdWithoutMerge(value);
+	}
+}
+
+/* Change device ID with merge after SDK has been initialized.*/
+void Countly::_changeDeviceIdWithMerge(const std::string& value) {
+	mutex.lock();
+	log(Countly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithMerge] deviceId = '" + value + "'");
+
+	session_params["old_device_id"] = session_params["device_id"];
+	session_params["device_id"] = value;
+
+	const std::chrono::system_clock::time_point now = Countly::getTimestamp();
+	const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
+	std::map<std::string, std::string> data = {
+	{"app_key", session_params["app_key"].get<std::string>()},
+	{"device_id", session_params["device_id"].get<std::string>()},
+	{"old_device_id", session_params["old_device_id"].get<std::string>()},
+	{"timestamp", std::to_string(timestamp.count())},
+	};
+	sendHTTP("/i", Countly::serializeForm(data));
+
+	session_params.erase("old_device_id");
 	mutex.unlock();
 }
+
+/* Change device ID without merge after SDK has been initialized.*/
+void Countly::_changeDeviceIdWithoutMerge(const std::string& value) {
+	log(Countly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithoutMerge] deviceId = '" + value + "'");
+
+	//send all event to server and end current session of old user
+	flushEvents();
+	if (began_session) {
+		endSession();
+		mutex.lock();
+		session_params["device_id"] = value;
+		mutex.unlock();
+		beginSession();
+	}
+	else {
+		mutex.lock();
+		session_params["device_id"] = value;
+		mutex.unlock();
+	}
+}
+#pragma endregion Device Id
 
 void Countly::start(const std::string& app_key, const std::string& host, int port, bool start_thread) {
 	mutex.lock();
@@ -257,9 +314,11 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 	this->host = host;
 	if (host.find("http://") == 0) {
 		use_https = false;
-	} else if (host.find("https://") == 0) {
+	}
+	else if (host.find("https://") == 0) {
 		use_https = true;
-	} else {
+	}
+	else {
 		use_https = false;
 		this->host.insert(0, "http://");
 	}
@@ -303,20 +362,25 @@ void Countly::startOnCloud(const std::string& app_key) {
 }
 
 void Countly::stop() {
+	_deleteThread();
+	if (began_session) {
+		endSession();
+	}
+}
+
+void Countly::_deleteThread() {
 	mutex.lock();
 	stop_thread = true;
 	mutex.unlock();
 	if (thread != nullptr && thread->joinable()) {
 		try {
 			thread->join();
-		} catch(const std::system_error& e) {
+		}
+		catch (const std::system_error& e) {
 			log(Countly::LogLevel::WARNING, "Could not join thread");
 		}
 		delete thread;
 		thread = nullptr;
-	}
-	if (began_session) {
-		endSession();
 	}
 }
 
@@ -641,6 +705,13 @@ bool Countly::endSession() {
 		{"timestamp", std::to_string(timestamp.count())},
 		{"end_session", "1"}
 	};
+
+	if (is_being_disposed) {
+		// if SDK is being destroyed, don't attempt to send the end-session request.
+		mutex.unlock();
+		return false;
+	}
+
 	if (sendHTTP("/i", Countly::serializeForm(data)).success) {
 		last_sent_session_request = now;
 		began_session = false;
@@ -859,7 +930,7 @@ log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: "+ data);
 
 		if (!use_post) {
 			full_url_stream << '?' << data;
-			curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
+			curl_easy_setopt(curl, CURLOPT_HTTPGET, 1);
 		} else {
 			curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.c_str());
 		}
