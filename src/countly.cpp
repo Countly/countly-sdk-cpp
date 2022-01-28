@@ -29,6 +29,7 @@ using json = nlohmann::json;
 #endif
 
 Countly::Countly() : max_events(COUNTLY_MAX_EVENTS_DEFAULT), wait_milliseconds(COUNTLY_KEEPALIVE_INTERVAL) {
+	//Setting the default values
 	port = 0;
 	running = false;
 	use_https = false;
@@ -37,6 +38,7 @@ Countly::Countly() : max_events(COUNTLY_MAX_EVENTS_DEFAULT), wait_milliseconds(C
 	always_use_post = false;
 	remote_config_enabled = false;
 	
+	//Petting to null values
 	thread = nullptr;
 	logger_function = nullptr;
 	http_client_function = nullptr;
