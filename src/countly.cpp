@@ -237,13 +237,13 @@ void Countly::startOnCloud(const std::string& app_key) {
 }
 
 void Countly::stop() {
-	_dispose();
+	_deleteThread();
 	if (began_session && !is_dispose) {
 		endSession();
 	}
 }
 
-void Countly::_dispose() {
+void Countly::_deleteThread() {
 	mutex.lock();
 	stop_thread = true;
 	mutex.unlock();
