@@ -217,6 +217,10 @@ private:
 
 	HTTPResponse sendHTTP(std::string path, std::string data);
 
+	void _changeDeviceIdWithMerge(const std::string& value);
+
+	void _changeDeviceIdWithoutMerge(const std::string& value);
+
 	std::chrono::system_clock::duration getSessionDuration(std::chrono::system_clock::time_point now);
 
 	std::chrono::system_clock::duration getSessionDuration();
