@@ -200,7 +200,7 @@ public:
 		Event event(key, count);
 
 		for (auto key_value: segmentation) {
-			event.addSegmentation(key_value.first, json::parse(key_value.second));
+			event.addSegmentation(key_value.first, key_value.second);
 		}
 
 		addEvent(event);
@@ -210,7 +210,7 @@ public:
 		Event event(key, count, sum);
 
 		for (auto key_value: segmentation) {
-			event.addSegmentation(key_value.first, json::parse(key_value.second));
+			event.addSegmentation(key_value.first, key_value.second);
 		}
 
 		addEvent(event);
@@ -220,7 +220,7 @@ public:
 		Event event(key, count, sum, duration);
 
 		for (auto key_value: segmentation) {
-			event.addSegmentation(key_value.first, json::parse(key_value.second));
+			event.addSegmentation(key_value.first, key_value.second);
 		}
 
 		addEvent(event);
