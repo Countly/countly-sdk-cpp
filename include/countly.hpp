@@ -231,12 +231,15 @@ public:
 		_auto_session_update_interval = updateInterval;
 	}
 private:
-
+	void _deleteThread();
 	void _sendIndependantLocationRequest();
-
 	void log(LogLevel level, const std::string& message);
 
 	HTTPResponse sendHTTP(std::string path, std::string data);
+
+	void _changeDeviceIdWithMerge(const std::string& value);
+
+	void _changeDeviceIdWithoutMerge(const std::string& value);
 
 	std::chrono::system_clock::duration getSessionDuration(std::chrono::system_clock::time_point now);
 
@@ -251,6 +254,7 @@ private:
 	int port;
 	bool use_https;
 	bool always_use_post;
+	bool is_being_disposed;
 	std::chrono::system_clock::time_point last_sent_session_request;
 	bool began_session;
 
