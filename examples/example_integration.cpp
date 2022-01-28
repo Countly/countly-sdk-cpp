@@ -120,7 +120,7 @@ int main() {
 			string longitude = "-95.220255";
 			string ipAddress = "192.168.0.1";
 
-			//ct.setLocation(countryCode, city, latitude + "," + longitude, ipAddress);
+			ct.setLocation(countryCode, city, latitude + "," + longitude, ipAddress);
 		}
 			break;
 		case 0:
