@@ -46,7 +46,7 @@ int main() {
 	// OS, OS_version, device, resolution, carrier, app_version);
 	ct.SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Carrier", "1.0");
 	// Server and port
-	ct.start("8c1d653f8f474be24958b282d5e9b4c4209ee552", "https://master.count.ly", 443, true);
+	ct.start("APP_KEY", "https://try.count.ly", 443, true);
 	ct.SetMaxEventsPerMessage(10);
 	ct.setAutomaticSessionUpdateInterval(5);
 
