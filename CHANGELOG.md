@@ -3,6 +3,7 @@
 * ! Minor breaking change ! Default automatic session update duration changed to 60 seconds.
 * Added a call to change the automatic session update duration.
 * Fixed a bug where session duration was reported wrong.
+* Fixed an issue with the custom HTTP client function pointer by setting it's default value.
 * Fixed a bug that caused GET requests to fail on Linux.
 * Fixed bug when changing device id with server merge.
 * Fixed bug when device id was changed without server merge. Previously the new session was started with the old device ID and not the new one.
