@@ -2,6 +2,7 @@
 * ! Minor breaking change ! Default automatic session update duration changed to 60 seconds.
 * Added a call to change the automatic session update duration.
 * Fixed a bug where session duration was reported wrong.
+* Fixed a typing mistake in 'COUNTLY_CUSTOM_HTTP' that caused print a wrong error message in the log.
 
 21.11.0
 * Fixed session duration issue.
