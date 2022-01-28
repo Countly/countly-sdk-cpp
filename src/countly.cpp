@@ -37,6 +37,7 @@ Countly::Countly() : max_events(COUNTLY_MAX_EVENTS_DEFAULT), wait_milliseconds(C
 	began_session = false;
 	always_use_post = false;
 	is_being_disposed = false;
+	is_sdk_initialized = false;
 	remote_config_enabled = false;
 	
 	//Petting to null values
@@ -123,15 +124,19 @@ void Countly::setUserDetails(const std::map<std::string, std::string>& value) {
 	mutex.lock();
 	session_params["user_details"] = value;
 
-	if (began_session) {
-		std::map<std::string, std::string> data = {
-			{"app_key", session_params["app_key"].dump()},
-			{"device_id", session_params["device_id"].dump()},
-			{"user_details", session_params["user_details"].dump()}
-		};
-
-		sendHTTP("/i", Countly::serializeForm(data));
+	if (!is_sdk_initialized) {
+		log(Countly::LogLevel::ERROR, "[Countly][setUserDetails] Can not send user detail if the SDK has not been initialized.");
+		mutex.unlock();
+		return;
 	}
+
+	std::map<std::string, std::string> data = {
+			{"app_key", session_params["app_key"].get<std::string>()},
+			{"device_id", session_params["device_id"].get<std::string>()},
+			{"user_details", session_params["user_details"].dump()}
+	};
+
+	sendHTTP("/i", Countly::serializeForm(data));
 	mutex.unlock();
 }
 
@@ -139,15 +144,19 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string>& val
 	mutex.lock();
 	session_params["user_details"]["custom"] = value;
 
-	if (began_session) {
-		std::map<std::string, std::string> data = {
-			{"app_key", session_params["app_key"].dump()},
-			{"device_id", session_params["device_id"].dump()},
-			{"user_details", session_params["user_details"].dump()}
-		};
-
-		sendHTTP("/i", Countly::serializeForm(data));
+	if (!is_sdk_initialized) {
+		log(Countly::LogLevel::ERROR, "[Countly][setCustomUserDetails] Can not send user detail if the SDK has not been initialized.");
+		mutex.unlock();
+		return;
 	}
+
+	std::map<std::string, std::string> data = {
+			{"app_key", session_params["app_key"].get<std::string>()},
+			{"device_id", session_params["device_id"].get<std::string>()},
+			{"user_details", session_params["user_details"].dump()}
+	};
+
+	sendHTTP("/i", Countly::serializeForm(data));
 	mutex.unlock();
 }
 
@@ -188,7 +197,7 @@ void Countly::setLocation(const std::string& countryCode, const std::string& cit
 
 	mutex.unlock();
 
-	if (began_session) {
+	if (is_sdk_initialized) {
 		_sendIndependantLocationRequest();
 	}
 }
@@ -196,8 +205,6 @@ void Countly::setLocation(const std::string& countryCode, const std::string& cit
 void Countly::_sendIndependantLocationRequest() {
 	mutex.lock();
 	log(Countly::LogLevel::DEBUG, "[Countly] [_sendIndependantLocationRequest]");
-
-	json location_params;
 
 	/*
 	 * Empty country code, city and IP address can not be sent.
@@ -255,8 +262,12 @@ void Countly::setDeviceID(const std::string& value, bool same_user) {
 		return;
 	}
 
-	//If code does reach here without sdk init, it will throw an exception.
 	mutex.unlock();
+	if (!is_sdk_initialized) {
+		log(Countly::LogLevel::ERROR, "[Countly][setDeviceID] Can not change the device id if the SDK has not been initialized.");
+		return;
+	}
+	
 	if (same_user) {
 		_changeDeviceIdWithMerge(value);
 	}
@@ -330,6 +341,8 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 	} else {
 		this->port = port;
 	}
+
+	is_sdk_initialized = true; // after this point SDK is initialized.
 
 	if (!running) {
 

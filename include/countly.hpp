@@ -251,13 +251,17 @@ private:
 	HTTPResponse (*http_client_function)(bool is_post, const std::string& url, const std::string& data);
 
 	std::string host;
+
 	int port;
 	bool use_https;
 	bool always_use_post;
-	bool is_being_disposed;
-	std::chrono::system_clock::time_point last_sent_session_request;
-	bool began_session;
 
+	bool began_session;
+	bool is_being_disposed;
+	bool is_sdk_initialized;
+
+	std::chrono::system_clock::time_point last_sent_session_request;
+	
 	json session_params;
 	std::string salt;
 
