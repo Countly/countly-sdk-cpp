@@ -1,5 +1,5 @@
 21.11.2
-* Fixed a bug while deleting events stored locally.
+* Fixed a bug while deleting events locally.
 
 21.11.1
 * !! Major breaking change !! Fixed a bug that triggered when providing segmentation to the "RecordEvent" call. Previously, by mistake, every segmentation value was parsed as a JSON and threw an exception when it wasn't a valid JSON string. Now this will not be the case and every String value can be provided. This is marked as a "major breaking change" in case some integrations were adding workarounds to this issue.
