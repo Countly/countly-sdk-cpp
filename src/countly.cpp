@@ -686,6 +686,7 @@ bool Countly::updateSession() {
 	event_queue.clear();
 #else
 	if (!event_ids.empty()) {
+		//we attempt to clear the events in the database only if there were any events collected previously
 		return_value = sqlite3_open(database_path.c_str(), &database);
 		if (return_value == SQLITE_OK) {
 			std::ostringstream sql_statement_stream;
