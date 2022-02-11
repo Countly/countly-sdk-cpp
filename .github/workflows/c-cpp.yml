@@ -1,0 +1,31 @@
+name: C/C++ Analysis
+
+on:
+  push:
+    branches: [ sdk-669 ]
+  pull_request:
+    branches: [ sdk-669 ]
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+jobs:
+  analysis:
+    name: Analysis
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        language: [ 'cpp' ]
+
+    steps:
+    - name: Checkout repository
+      id: checkout_repo
+      uses: actions/checkout@v2
+    - name: Init Codeql
+      id: init_codeql
+      uses: github/codeql-action/init@v1
+      with:
+        languages: ${{ matrix.language }}
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v1
+    
