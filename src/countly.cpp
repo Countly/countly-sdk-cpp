@@ -685,19 +685,22 @@ bool Countly::updateSession() {
 #ifndef COUNTLY_USE_SQLITE
 	event_queue.clear();
 #else
-	return_value = sqlite3_open(database_path.c_str(), &database);
-	if (return_value == SQLITE_OK) {
-		std::ostringstream sql_statement_stream;
-		sql_statement_stream << "DELETE FROM events WHERE evtid IN " << event_ids << ';';
-		std::string sql_statement = sql_statement_stream.str();
+	if (!event_ids.empty()) {
+		//we attempt to clear the events in the database only if there were any events collected previously
+		return_value = sqlite3_open(database_path.c_str(), &database);
+		if (return_value == SQLITE_OK) {
+			std::ostringstream sql_statement_stream;
+			sql_statement_stream << "DELETE FROM events WHERE evtid IN " << event_ids << ';';
+			std::string sql_statement = sql_statement_stream.str();
 
-		return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
-		if (return_value != SQLITE_OK) {
-			log(Countly::LogLevel::ERROR, error_message);
-			sqlite3_free(error_message);
+			return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
+			if (return_value != SQLITE_OK) {
+				log(Countly::LogLevel::ERROR, error_message);
+				sqlite3_free(error_message);
+			}
 		}
+		sqlite3_close(database);
 	}
-	sqlite3_close(database);
 #endif
 
 	mutex.unlock();
