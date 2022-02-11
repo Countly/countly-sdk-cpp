@@ -809,32 +809,38 @@ static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n
 	return data_size;
 }
 
+std::string Countly::calculateChecksum(const std::string& salt, const std::string& data) {
+	unsigned char checksum[SHA256_DIGEST_LENGTH];
+	std::string salted_data = data + salt;
+	SHA256_CTX sha256;
+
+	SHA256_Init(&sha256);
+	SHA256_Update(&sha256, salted_data.c_str(), salted_data.size());
+	SHA256_Final(checksum, &sha256);
+
+	std::ostringstream checksum_stream;
+	for (size_t index = 0; index < SHA256_DIGEST_LENGTH; index++) {
+		checksum_stream << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(checksum[index]);
+	}
+
+	std::string calcualtedChecksum = checksum_stream.str();
+
+	return calcualtedChecksum;
+}
+
 Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 	bool use_post = always_use_post || (data.size() > COUNTLY_POST_THRESHOLD);
-
-log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: "+ data);
+	log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: "+ data);
 	if (!salt.empty()) {
-		unsigned char checksum[SHA256_DIGEST_LENGTH];
-		std::string salted_data = data + salt;
-		SHA256_CTX sha256;
-
-		SHA256_Init(&sha256);
-		SHA256_Update(&sha256, salted_data.c_str(), salted_data.size());
-		SHA256_Final(checksum, &sha256);
-
-		std::ostringstream checksum_stream;
-		for (size_t index = 0; index < SHA256_DIGEST_LENGTH; index++) {
-			checksum_stream << std::setw(2) << std::hex << checksum[index];
-		}
-
+		std::string checksum = calculateChecksum(salt, data);
 		if (!data.empty()) {
 			data += '&';
 		}
 
-		data += "checksum256=";
-		data += checksum_stream.str();
+		data += "checksum256=" + checksum;
+		log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] with checksum, data: " + data);
 	}
-
+	
 	Countly::HTTPResponse response;
 	response.success = false;
 
