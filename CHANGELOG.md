@@ -1,5 +1,6 @@
 21.11.2
 * Fixed a bug that occured after trying to erase events from the sqlite database when there were none.
+* Fixed a bug with the checksum calculation.
 
 21.11.1
 * !! Major breaking change !! Fixed a bug that triggered when providing segmentation to the "RecordEvent" call. Previously, by mistake, every segmentation value was parsed as a JSON and threw an exception when it wasn't a valid JSON string. Now this will not be the case and every String value can be provided. This is marked as a "major breaking change" in case some integrations were adding workarounds to this issue.

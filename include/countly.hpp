@@ -125,6 +125,8 @@ public:
 
 	static std::string serializeForm(const std::map<std::string, std::string> data);
 
+	static std::string calculateChecksum(const std::string& salt, const std::string& data);
+
 #ifdef COUNTLY_USE_SQLITE
 	void setDatabasePath(const std::string& path);
 #endif
