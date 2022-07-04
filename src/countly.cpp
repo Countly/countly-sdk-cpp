@@ -6,7 +6,9 @@
 #include <iostream>
 #include <system_error>
 
+#ifndef COUNTLY_USE_CUSTOM_SHA256
 #include "openssl/sha.h"
+#endif
 
 #include "countly.hpp"
 
@@ -84,6 +86,12 @@ void Countly::setLogger(void (*fun)(Countly::LogLevel level, const std::string& 
 void Countly::setHTTPClient(Countly::HTTPResponse (*fun)(bool use_post, const std::string& url, const std::string& data)) {
 	mutex.lock();
 	http_client_function = fun;
+	mutex.unlock();
+}
+
+void Countly::setSha256(std::string (*fun)(const std::string& data)) {
+	mutex.lock();
+	sha256_function = fun;
 	mutex.unlock();
 }
 
@@ -810,8 +818,16 @@ static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n
 }
 
 std::string Countly::calculateChecksum(const std::string& salt, const std::string& data) {
-	unsigned char checksum[SHA256_DIGEST_LENGTH];
 	std::string salted_data = data + salt;
+#ifdef COUNTLY_USE_CUSTOM_SHA256
+	if (sha256_function == nullptr) {
+		log(Countly::LogLevel::FATAL, "Missing SHA 256 function");
+		return {};
+	}
+
+	return sha256_function(salted_data);
+#else
+	unsigned char checksum[SHA256_DIGEST_LENGTH];
 	SHA256_CTX sha256;
 
 	SHA256_Init(&sha256);
@@ -823,9 +839,8 @@ std::string Countly::calculateChecksum(const std::string& salt, const std::strin
 		checksum_stream << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(checksum[index]);
 	}
 
-	std::string calcualtedChecksum = checksum_stream.str();
-
-	return calcualtedChecksum;
+	return checksum_stream.str();
+#endif
 }
 
 Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {

@@ -54,6 +54,7 @@ public:
 	};
 
 	void setHTTPClient(HTTPResponse (*fun)(bool use_post, const std::string& url, const std::string& data));
+	void setSha256(std::string (*fun)(const std::string& data));
 
 	void setMetrics(const std::string& os, const std::string& os_version, const std::string& device, const std::string& resolution, const std::string& carrier, const std::string& app_version);
 
@@ -125,7 +126,7 @@ public:
 
 	static std::string serializeForm(const std::map<std::string, std::string> data);
 
-	static std::string calculateChecksum(const std::string& salt, const std::string& data);
+	std::string calculateChecksum(const std::string& salt, const std::string& data);
 
 #ifdef COUNTLY_USE_SQLITE
 	void setDatabasePath(const std::string& path);
@@ -251,6 +252,7 @@ private:
 
 	void (*logger_function)(LogLevel level, const std::string& message);
 	HTTPResponse (*http_client_function)(bool is_post, const std::string& url, const std::string& data);
+	std::string (*sha256_function)(const std::string& data) = nullptr;
 
 	std::string host;
 
