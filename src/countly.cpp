@@ -59,13 +59,13 @@ void Countly::setSalt(const std::string& value) {
 	mutex.unlock();
 }
 
-void Countly::setLogger(void (*fun)(Countly::LogLevel level, const std::string& message)) {
+void Countly::setLogger(LoggerFunction fun) {
 	mutex.lock();
 	logger_function = fun;
 	mutex.unlock();
 }
 
-void Countly::setHTTPClient(Countly::HTTPResponse (*fun)(bool use_post, const std::string& url, const std::string& data)) {
+void Countly::setHTTPClient(HTTPClientFunction fun) {
 	mutex.lock();
 	http_client_function = fun;
 	mutex.unlock();
@@ -781,7 +781,7 @@ void Countly::setDatabasePath(const std::string& path) {
 #endif
 
 void Countly::log(Countly::LogLevel level, const std::string& message) {
-	if (logger_function != nullptr) {
+	if (logger_function) {
 		logger_function(level, message);
 	}
 }
@@ -828,14 +828,14 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 	response.success = false;
 
 #ifdef COUNTLY_USE_CUSTOM_HTTP
-	if (http_client_function == nullptr) {
+	if (!http_client_function) {
 		log(Countly::LogLevel::FATAL, "Missing HTTP client function");
 		return response;
 	}
 
 	return http_client_function(use_post, path, data);
 #else
-	if (http_client_function != nullptr) {
+	if (http_client_function) {
 		return http_client_function(use_post, path, data);
 	}
 #ifdef _WIN32
