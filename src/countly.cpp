@@ -338,7 +338,7 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 			stop_thread = false;
 
 			try {
-				thread = new std::thread(&Countly::updateLoop, this);
+				thread.reset(new std::thread(&Countly::updateLoop, this));
 			} catch(const std::system_error& e) {
 				std::ostringstream log_message;
 				log_message << "Could not create thread: " << e.what();
@@ -369,15 +369,14 @@ void Countly::_deleteThread() {
 	mutex.lock();
 	stop_thread = true;
 	mutex.unlock();
-	if (thread != nullptr && thread->joinable()) {
+	if (thread && thread->joinable()) {
 		try {
 			thread->join();
 		}
 		catch (const std::system_error& e) {
 			log(Countly::LogLevel::WARNING, "Could not join thread");
 		}
-		delete thread;
-		thread = nullptr;
+		thread.reset();
 	}
 }
 

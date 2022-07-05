@@ -1,12 +1,13 @@
 #ifndef COUNTLY_HPP_
 #define COUNTLY_HPP_
 
-#include <iterator>
 #include <chrono>
+#include <iterator>
+#include <map>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
-#include <mutex>
-#include <map>
 
 #ifndef COUNTLY_USE_SQLITE
 #include <deque>
@@ -267,7 +268,7 @@ private:
 	json session_params;
 	std::string salt;
 
-	std::thread *thread = nullptr;
+	std::unique_ptr<std::thread> thread;
 	std::mutex mutex;
 	bool stop_thread = false;
 	bool running = false;
