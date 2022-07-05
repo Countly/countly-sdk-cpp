@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0)
 
-file(READ ${CMAKE_CURRENT_SOURCE_DIR}/include/countly.hpp COUNTLY_HPP_CONTENTS)
+file(READ ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/constants.hpp COUNTLY_HPP_CONTENTS)
 string(REGEX MATCH "#define COUNTLY_SDK_VERSION \"[^\"]+\"" COUNTLY_SDK_VERSION ${COUNTLY_HPP_CONTENTS})
 string(REGEX REPLACE "#define COUNTLY_SDK_VERSION \"([^\"]+)\"" "\\1" COUNTLY_SDK_VERSION ${COUNTLY_SDK_VERSION})
 
