@@ -1,6 +1,8 @@
 #ifndef COUNTLY_HPP_
 #define COUNTLY_HPP_
 
+#include "countly/constants.hpp"
+
 #include <iterator>
 #include <chrono>
 #include <string>
@@ -18,13 +20,6 @@ using json = nlohmann::json;
 #ifdef _WIN32
 #undef ERROR
 #endif
-
-#define COUNTLY_SDK_NAME "cpp-native-unknown"
-#define COUNTLY_SDK_VERSION "0.1.0"
-#define COUNTLY_API_VERSION "21.11.2"
-#define COUNTLY_POST_THRESHOLD 2000
-#define COUNTLY_KEEPALIVE_INTERVAL 3000
-#define COUNTLY_MAX_EVENTS_DEFAULT 200
 
 class Countly {
 public:
