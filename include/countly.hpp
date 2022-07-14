@@ -4,6 +4,7 @@
 #include "countly/constants.hpp"
 
 #include <chrono>
+#include <functional>
 #include <iterator>
 #include <map>
 #include <memory>
@@ -42,14 +43,16 @@ public:
 
 	enum LogLevel {DEBUG, INFO, WARNING, ERROR, FATAL};
 
-	void setLogger(void (*fun)(LogLevel level, const std::string& message));
+	using LoggerFunction = std::function<void(LogLevel, const std::string&)>;
+	void setLogger(LoggerFunction fun);
 
 	struct HTTPResponse {
 		bool success;
 		json data;
 	};
 
-	void setHTTPClient(HTTPResponse (*fun)(bool use_post, const std::string& url, const std::string& data));
+	using HTTPClientFunction = std::function<HTTPResponse(bool, const std::string&, const std::string&)>;
+	void setHTTPClient(HTTPClientFunction fun);
 
 	void setMetrics(const std::string& os, const std::string& os_version, const std::string& device, const std::string& resolution, const std::string& carrier, const std::string& app_version);
 
@@ -245,8 +248,8 @@ private:
 
 	void updateLoop();
 
-	void (*logger_function)(LogLevel level, const std::string& message) = nullptr;
-	HTTPResponse (*http_client_function)(bool is_post, const std::string& url, const std::string& data) = nullptr;
+	LoggerFunction logger_function;
+	HTTPClientFunction http_client_function;
 
 	std::string host;
 
@@ -259,7 +262,7 @@ private:
 	bool is_sdk_initialized = false;
 
 	std::chrono::system_clock::time_point last_sent_session_request;
-	
+
 	json session_params;
 	std::string salt;
 

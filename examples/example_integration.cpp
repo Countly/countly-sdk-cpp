@@ -40,7 +40,7 @@ int main() {
 	ct.alwaysUsePost(true);
 	ct.setDeviceID("test-device-id");
 
-	void (*logger_function)(Countly::LogLevel level, const std::string & message);
+	Countly::LoggerFunction logger_function;
 	logger_function = printLog;
 	ct.setLogger(logger_function);
 	// OS, OS_version, device, resolution, carrier, app_version);
