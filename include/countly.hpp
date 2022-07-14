@@ -3,12 +3,13 @@
 
 #include "countly/constants.hpp"
 
-#include <iterator>
 #include <chrono>
+#include <iterator>
+#include <map>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
-#include <mutex>
-#include <map>
 
 #ifndef COUNTLY_USE_SQLITE
 #include <deque>
@@ -244,39 +245,39 @@ private:
 
 	void updateLoop();
 
-	void (*logger_function)(LogLevel level, const std::string& message);
-	HTTPResponse (*http_client_function)(bool is_post, const std::string& url, const std::string& data);
+	void (*logger_function)(LogLevel level, const std::string& message) = nullptr;
+	HTTPResponse (*http_client_function)(bool is_post, const std::string& url, const std::string& data) = nullptr;
 
 	std::string host;
 
-	int port;
-	bool use_https;
-	bool always_use_post;
+	int port = 0;
+	bool use_https = false;
+	bool always_use_post = false;
 
-	bool began_session;
-	bool is_being_disposed;
-	bool is_sdk_initialized;
+	bool began_session = false;
+	bool is_being_disposed = false;
+	bool is_sdk_initialized = false;
 
 	std::chrono::system_clock::time_point last_sent_session_request;
 	
 	json session_params;
 	std::string salt;
 
-	std::thread *thread;
+	std::unique_ptr<std::thread> thread;
 	std::mutex mutex;
-	bool stop_thread;
-	bool running;
-	size_t wait_milliseconds;
+	bool stop_thread = false;
+	bool running = false;
+	size_t wait_milliseconds = COUNTLY_KEEPALIVE_INTERVAL;
 	unsigned short _auto_session_update_interval = 60; // value is in seconds;
 
-	size_t max_events;
+	size_t max_events = COUNTLY_MAX_EVENTS_DEFAULT;
 #ifndef COUNTLY_USE_SQLITE
 	std::deque<std::string> event_queue;
 #else
 	std::string database_path;
 #endif
 
-	bool remote_config_enabled;
+	bool remote_config_enabled = false;
 	json remote_config;
 };
 

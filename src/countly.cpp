@@ -28,23 +28,7 @@ using json = nlohmann::json;
 #include "sqlite3.h"
 #endif
 
-Countly::Countly() : max_events(COUNTLY_MAX_EVENTS_DEFAULT), wait_milliseconds(COUNTLY_KEEPALIVE_INTERVAL) {
-	//Setting the default values
-	port = 0;
-	running = false;
-	use_https = false;
-	stop_thread = false;
-	began_session = false;
-	always_use_post = false;
-	is_being_disposed = false;
-	is_sdk_initialized = false;
-	remote_config_enabled = false;
-	
-	//Petting to null values
-	thread = nullptr;
-	logger_function = nullptr;
-	http_client_function = nullptr;
-
+Countly::Countly() {
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_init(CURL_GLOBAL_ALL);
 #endif
@@ -354,7 +338,7 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 			stop_thread = false;
 
 			try {
-				thread = new std::thread(&Countly::updateLoop, this);
+				thread.reset(new std::thread(&Countly::updateLoop, this));
 			} catch(const std::system_error& e) {
 				std::ostringstream log_message;
 				log_message << "Could not create thread: " << e.what();
@@ -385,15 +369,14 @@ void Countly::_deleteThread() {
 	mutex.lock();
 	stop_thread = true;
 	mutex.unlock();
-	if (thread != nullptr && thread->joinable()) {
+	if (thread && thread->joinable()) {
 		try {
 			thread->join();
 		}
 		catch (const std::system_error& e) {
 			log(Countly::LogLevel::WARNING, "Could not join thread");
 		}
-		delete thread;
-		thread = nullptr;
+		thread.reset();
 	}
 }
 
