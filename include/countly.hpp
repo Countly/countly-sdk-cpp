@@ -250,7 +250,7 @@ private:
 
 	void updateLoop();
 
-	void (*logger_function)(LogLevel level, const std::string& message) = logger_function;
+	void (*logger_function)(LogLevel level, const std::string& message) = nullptr;
 	HTTPResponse (*http_client_function)(bool is_post, const std::string& url, const std::string& data) = nullptr;
 
 	std::string host;
