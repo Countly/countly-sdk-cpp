@@ -1,4 +1,7 @@
 21.11.2
+* Added functionality to set custom SHA256.
+
+21.11.2
 * Fixed a bug that occurred after trying to erase events from the SQLite database when there were none.
 * Fixed a bug with the checksum calculation.
 
