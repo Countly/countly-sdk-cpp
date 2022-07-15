@@ -1,12 +1,16 @@
 #ifndef COUNTLY_HPP_
 #define COUNTLY_HPP_
 
-#include <iterator>
+#include "countly/constants.hpp"
+
 #include <chrono>
+#include <functional>
+#include <iterator>
+#include <map>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
-#include <mutex>
-#include <map>
 
 #ifndef COUNTLY_USE_SQLITE
 #include <deque>
@@ -18,13 +22,6 @@ using json = nlohmann::json;
 #ifdef _WIN32
 #undef ERROR
 #endif
-
-#define COUNTLY_SDK_NAME "cpp-native-unknown"
-#define COUNTLY_SDK_VERSION "0.1.0"
-#define COUNTLY_API_VERSION "21.11.2"
-#define COUNTLY_POST_THRESHOLD 2000
-#define COUNTLY_KEEPALIVE_INTERVAL 3000
-#define COUNTLY_MAX_EVENTS_DEFAULT 200
 
 class Countly {
 public:
@@ -46,15 +43,20 @@ public:
 
 	enum LogLevel {DEBUG, INFO, WARNING, ERROR, FATAL};
 
-	void setLogger(void (*fun)(LogLevel level, const std::string& message));
+	using LoggerFunction = std::function<void(LogLevel, const std::string&)>;
+	void setLogger(LoggerFunction fun);
 
 	struct HTTPResponse {
 		bool success;
 		json data;
 	};
 
-	void setHTTPClient(HTTPResponse (*fun)(bool use_post, const std::string& url, const std::string& data));
-	void setSha256(std::string (*fun)(const std::string& data));
+	using SHA256Function = std::function<std::string(const std::string&)>;
+	void setSha256(SHA256Function fun);
+
+	using HTTPClientFunction = std::function<HTTPResponse(bool, const std::string&, const std::string&)>;
+	void setHTTPClient(HTTPClientFunction fun);
+
 
 	void setMetrics(const std::string& os, const std::string& os_version, const std::string& device, const std::string& resolution, const std::string& carrier, const std::string& app_version);
 
@@ -163,7 +165,7 @@ public:
 #ifdef COUNTLY_USE_SQLITE
 		setDatabasePath(path);
 #elif defined _WIN32
-		UNREFERENCED_PARAMETER(path);
+		//UNREFERENCED_PARAMETER(path);
 #endif
 	}
 
@@ -250,40 +252,40 @@ private:
 
 	void updateLoop();
 
-	void (*logger_function)(LogLevel level, const std::string& message);
-	HTTPResponse (*http_client_function)(bool is_post, const std::string& url, const std::string& data);
-	std::string (*sha256_function)(const std::string& data) = nullptr;
+	SHA256Function sha256_function;
+	LoggerFunction logger_function;
+	HTTPClientFunction http_client_function;
 
 	std::string host;
 
-	int port;
-	bool use_https;
-	bool always_use_post;
+	int port = 0;
+	bool use_https = false;
+	bool always_use_post = false;
 
-	bool began_session;
-	bool is_being_disposed;
-	bool is_sdk_initialized;
+	bool began_session = false;
+	bool is_being_disposed = false;
+	bool is_sdk_initialized = false;
 
 	std::chrono::system_clock::time_point last_sent_session_request;
-	
+
 	json session_params;
 	std::string salt;
 
-	std::thread *thread;
+	std::unique_ptr<std::thread> thread;
 	std::mutex mutex;
-	bool stop_thread;
-	bool running;
-	size_t wait_milliseconds;
+	bool stop_thread = false;
+	bool running = false;
+	size_t wait_milliseconds = COUNTLY_KEEPALIVE_INTERVAL;
 	unsigned short _auto_session_update_interval = 60; // value is in seconds;
 
-	size_t max_events;
+	size_t max_events = COUNTLY_MAX_EVENTS_DEFAULT;
 #ifndef COUNTLY_USE_SQLITE
 	std::deque<std::string> event_queue;
 #else
 	std::string database_path;
 #endif
 
-	bool remote_config_enabled;
+	bool remote_config_enabled = false;
 	json remote_config;
 };
 

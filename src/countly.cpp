@@ -30,23 +30,7 @@ using json = nlohmann::json;
 #include "sqlite3.h"
 #endif
 
-Countly::Countly() : max_events(COUNTLY_MAX_EVENTS_DEFAULT), wait_milliseconds(COUNTLY_KEEPALIVE_INTERVAL) {
-	//Setting the default values
-	port = 0;
-	running = false;
-	use_https = false;
-	stop_thread = false;
-	began_session = false;
-	always_use_post = false;
-	is_being_disposed = false;
-	is_sdk_initialized = false;
-	remote_config_enabled = false;
-	
-	//Petting to null values
-	thread = nullptr;
-	logger_function = nullptr;
-	http_client_function = nullptr;
-
+Countly::Countly() {
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_init(CURL_GLOBAL_ALL);
 #endif
@@ -77,19 +61,19 @@ void Countly::setSalt(const std::string& value) {
 	mutex.unlock();
 }
 
-void Countly::setLogger(void (*fun)(Countly::LogLevel level, const std::string& message)) {
+void Countly::setLogger(LoggerFunction fun) {
 	mutex.lock();
 	logger_function = fun;
 	mutex.unlock();
 }
 
-void Countly::setHTTPClient(Countly::HTTPResponse (*fun)(bool use_post, const std::string& url, const std::string& data)) {
+void Countly::setHTTPClient(HTTPClientFunction fun) {
 	mutex.lock();
 	http_client_function = fun;
 	mutex.unlock();
 }
 
-void Countly::setSha256(std::string (*fun)(const std::string& data)) {
+void Countly::setSha256(SHA256Function fun) {
 	mutex.lock();
 	sha256_function = fun;
 	mutex.unlock();
@@ -362,7 +346,7 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 			stop_thread = false;
 
 			try {
-				thread = new std::thread(&Countly::updateLoop, this);
+				thread.reset(new std::thread(&Countly::updateLoop, this));
 			} catch(const std::system_error& e) {
 				std::ostringstream log_message;
 				log_message << "Could not create thread: " << e.what();
@@ -393,15 +377,14 @@ void Countly::_deleteThread() {
 	mutex.lock();
 	stop_thread = true;
 	mutex.unlock();
-	if (thread != nullptr && thread->joinable()) {
+	if (thread && thread->joinable()) {
 		try {
 			thread->join();
 		}
 		catch (const std::system_error& e) {
 			log(Countly::LogLevel::WARNING, "Could not join thread");
 		}
-		delete thread;
-		thread = nullptr;
+		thread.reset();
 	}
 }
 
@@ -806,7 +789,7 @@ void Countly::setDatabasePath(const std::string& path) {
 #endif
 
 void Countly::log(Countly::LogLevel level, const std::string& message) {
-	if (logger_function != nullptr) {
+	if (logger_function) {
 		logger_function(level, message);
 	}
 }
@@ -860,14 +843,14 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 	response.success = false;
 
 #ifdef COUNTLY_USE_CUSTOM_HTTP
-	if (http_client_function == nullptr) {
+	if (!http_client_function) {
 		log(Countly::LogLevel::FATAL, "Missing HTTP client function");
 		return response;
 	}
 
 	return http_client_function(use_post, path, data);
 #else
-	if (http_client_function != nullptr) {
+	if (http_client_function) {
 		return http_client_function(use_post, path, data);
 	}
 #ifdef _WIN32
