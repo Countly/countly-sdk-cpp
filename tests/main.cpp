@@ -116,7 +116,9 @@ long getUnixTimestamp() {
 }
 
 std::string customChecksumCalculator(const std::string& data) {
-	return data + "-custom_sha";
+	std::string result = data.c_str();
+	result += "-custom_sha";
+	return result;
 }
 
 HTTPCall popHTTPCall() {
