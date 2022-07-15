@@ -115,6 +115,10 @@ long getUnixTimestamp() {
 	return timestamp.count();
 }
 
+std::string customChecksumCalculator(const std::string& data) {
+	return data + "-custom_sha";
+}
+
 HTTPCall popHTTPCall() {
 	CHECK(!http_call_queue.empty());
 	HTTPCall oldest_call = http_call_queue.front();
@@ -128,15 +132,35 @@ TEST_CASE("urlencoding is correct") {
 	//CHECK(Countly::encodeURL("测试") == "%E6%B5%8B%E8%AF%95"); // UTF-8 TODO: Needs to be fixed. This is throwing an exception.
 }
 
-TEST_CASE("checksum function validation") {
+#ifdef COUNTLY_USE_CUSTOM_SHA256
+TEST_CASE("custom sha256 function validation") {
+	Countly& countly = Countly::getInstance();
+
 	std::string salt = "test-salt";
-	std::string checksum = Countly::calculateChecksum(salt, "hello world");
+	std::string checksum = countly.calculateChecksum(salt, "hello world:");
+	CHECK(checksum == ""); // when customSha256 isn't set.
+
+	countly.setSha256(customChecksumCalculator);
+	salt = "test-salt";
+	checksum = countly.calculateChecksum(salt, "hello world:");
+	CHECK(checksum == "hello world:test-salt-custom_sha");
+
+	salt = "š ūļ ķ";
+	checksum = countly.calculateChecksum(salt, "测试:");
+	CHECK(checksum == "测试:š ūļ ķ-custom_sha");
+}
+#else
+TEST_CASE("checksum function validation") {
+	Countly& countly = Countly::getInstance();
+	std::string salt = "test-salt";
+	std::string checksum = countly.calculateChecksum(salt, "hello world");
 	CHECK(checksum == "aaf992c81357b0ed1bb404826e01825568126ebeb004c3bc690d3d8e0766a3cc");
 
 	salt = "š ūļ ķ";
-	checksum = Countly::calculateChecksum(salt, "测试");
+	checksum = countly.calculateChecksum(salt, "测试");
 	CHECK(checksum == "f51d24b0cb938e2f40b1f8609c62bf2508e24bcaa3b6b1a7fbf108d3c7f2f073");
 }
+#endif
 
 TEST_CASE("forms are serialized correctly") {
 	CHECK(Countly::serializeForm(std::map<std::string, std::string>({{"key1", "value1"}, {"key2", "value2"}})) == "key1=value1&key2=value2");
