@@ -1,4 +1,4 @@
-21.11.2
+21.11.3
 * Added functionality to set custom SHA256.
 
 21.11.2
