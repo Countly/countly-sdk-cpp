@@ -85,3 +85,8 @@ make
 ./countly-tests
 ```
 
+To run unit tests associated with 'SQLITE' and 'Custome SHA-256' build executable with the options `COUNTLY_BUILD_TESTS` and `COUNTLY_BUILD_TESTS`:
+
+``` shell
+cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=1 -DCOUNTLY_USE_CUSTOM_SHA256=1 -B build
+```
