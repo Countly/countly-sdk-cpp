@@ -22,6 +22,7 @@ using json = nlohmann::json;
 #ifdef _WIN32
 #undef ERROR
 #endif
+#include "view.hpp"
 
 class Countly {
 public:
@@ -231,6 +232,12 @@ public:
 	inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) {
 		_auto_session_update_interval = updateInterval;
 	}
+
+#pragma region Views
+	void openView(const std::string& name) {
+		View view(name);
+	}
+#pragma endregion Views
 private:
 	void _deleteThread();
 	void _sendIndependantLocationRequest();
