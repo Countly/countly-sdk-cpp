@@ -15,7 +15,7 @@ void Views::recordOpenView(const std::string& name, std::map<std::string, std::s
 		_viewsStartTime["name"] = 5.0;
 	}
 
-	Countly::Event event(CLY_VIEW_KEY, 1);
+	Event event(CLY_VIEW_KEY, 1);
 
 	event.addSegmentation("name", name);
 	event.addSegmentation("segment", "cpp");

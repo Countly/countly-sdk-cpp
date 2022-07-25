@@ -1,6 +1,7 @@
 #ifndef COUNTLY_HPP_
 #define COUNTLY_HPP_
 
+#include "countly/event.hpp"
 #include "countly/constants.hpp"
 
 #include <chrono>
@@ -96,8 +97,6 @@ public:
 
 	void setUpdateInterval(size_t milliseconds);
 
-	class Event;
-
 	void addEvent(const Event& event);
 
 	void setMaxEvents(size_t value);
@@ -131,33 +130,6 @@ public:
 #ifdef COUNTLY_USE_SQLITE
 	void setDatabasePath(const std::string& path);
 #endif
-
-	class Event {
-	public:
-		Event(const std::string& key, size_t count = 1);
-		Event(const std::string& key, size_t count, double sum);
-		Event(const std::string& key, size_t count, double sum, double duration);
-
-		void setTimestamp();
-
-		void startTimer();
-		void stopTimer();
-
-		template<typename T>
-		void addSegmentation(const std::string& key, T value) {
-			if (object.find("segmentation") == object.end()) {
-				object["segmentation"] = json::object();
-			}
-
-			object["segmentation"][key] = value;
-		}
-
-		std::string serialize() const;
-	private:
-		json object;
-		bool timer_running;
-		std::chrono::system_clock::time_point timestamp;
-	};
 
 	void SetPath(const std::string& path) {
 #ifdef COUNTLY_USE_SQLITE
