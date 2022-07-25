@@ -19,10 +19,11 @@
 #include "nlohmann/json.hpp"
 using json = nlohmann::json;
 
+#include "countly/views.hpp"
+
 #ifdef _WIN32
 #undef ERROR
 #endif
-#include "view.hpp"
 
 class Countly {
 public:
@@ -162,7 +163,7 @@ public:
 #ifdef COUNTLY_USE_SQLITE
 		setDatabasePath(path);
 #elif defined _WIN32
-		UNREFERENCED_PARAMETER(path);
+		//UNREFERENCED_PARAMETER(path);
 #endif
 	}
 
@@ -233,11 +234,13 @@ public:
 		_auto_session_update_interval = updateInterval;
 	}
 
-#pragma region Views
-	void openView(const std::string& name) {
-		View view(name);
-	}
-#pragma endregion Views
+
+	void recordOpenView(const std::string& name, std::map<std::string, std::string> segmentation);
+
+	void recordCloseView(const std::string& name);
+
+	void recordAction(const std::string& type, int x, int y, int width, int height);
+
 private:
 	void _deleteThread();
 	void _sendIndependantLocationRequest();
@@ -255,6 +258,7 @@ private:
 
 	void updateLoop();
 
+	Views view;
 	LoggerFunction logger_function;
 	HTTPClientFunction http_client_function;
 
