@@ -2,6 +2,8 @@
 #include <iostream>
 #include <map>
 
+#include "countly/logger_module.hpp"
+
 
 #define CLY_VIEW_KEY "[CLY]_view"
 

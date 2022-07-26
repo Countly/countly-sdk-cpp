@@ -19,6 +19,7 @@
 
 #include "nlohmann/json.hpp"
 #include "countly/views_module.hpp"
+#include "countly/logger_module.hpp"
 //#include "countly/views_module.hpp"
 using json = nlohmann::json;
 
@@ -48,8 +49,7 @@ public:
 
 	enum LogLevel {DEBUG, INFO, WARNING, ERROR, FATAL};
 
-	using LoggerFunction = std::function<void(LogLevel, const std::string&)>;
-	void setLogger(LoggerFunction fun);
+	void setLogger(LoggerModule::LoggerFunction fun);
 
 	struct HTTPResponse {
 		bool success;
@@ -232,8 +232,6 @@ private:
 
 	void updateLoop();
 
-	
-	LoggerFunction logger_function;
 	HTTPClientFunction http_client_function;
 
 	std::string host;
@@ -251,6 +249,8 @@ private:
 	json session_params;
 	std::string salt;
 	std::unique_ptr<ViewsModule> views;
+	std::unique_ptr<LoggerModule> logger = std::make_unique<LoggerModule>();
+
 	std::unique_ptr<std::thread> thread;
 	std::mutex mutex;
 	bool stop_thread = false;

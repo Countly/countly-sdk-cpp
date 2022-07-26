@@ -59,9 +59,9 @@ void Countly::setSalt(const std::string& value) {
 	mutex.unlock();
 }
 
-void Countly::setLogger(LoggerFunction fun) {
+void Countly::setLogger(LoggerModule::LoggerFunction fun) {
 	mutex.lock();
-	logger_function = fun;
+	logger->setLogger(fun);
 	mutex.unlock();
 }
 
@@ -785,9 +785,7 @@ void Countly::setDatabasePath(const std::string& path) {
 #endif
 
 void Countly::log(Countly::LogLevel level, const std::string& message) {
-	if (logger_function) {
-		logger_function(level, message);
-	}
+	logger->log(level, message);
 }
 
 static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n_bytes, std::string *body) {
