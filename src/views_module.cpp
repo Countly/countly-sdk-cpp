@@ -2,32 +2,44 @@
 #include <iostream>
 #include <map>
 
-#include "countly/logger_module.hpp"
-
 
 #define CLY_VIEW_KEY "[CLY]_view"
 
 
-class ViewsModule :: ViewModuleImpl {
-	
+class ViewsModule::ViewModuleImpl {
+
 public:
+	ViewModuleImpl() {
+		mLogger = nullptr;
+	}
+
+	ViewModuleImpl(LoggerModule* logger) : mLogger{ logger }
+	{
+	}
+
+
 	bool _isFirstView = true;
+	LoggerModule* mLogger;
 	std::map<std::string, double> _viewsStartTime;
-	
-	
+
 };
 
 
-ViewsModule::ViewsModule() : impl{ std::make_unique<ViewsModule::ViewModuleImpl>() }
+ViewsModule::ViewsModule(LoggerModule* logger) : impl{ std::make_unique<ViewModuleImpl>(logger) }
 {
-	
+	impl->mLogger->log(0, "ViewsModule:: Initialized");
+}
+
+ViewsModule::ViewsModule() : impl{ std::make_unique<ViewModuleImpl>() }
+{
+	impl->mLogger->log(0, "ViewsModule:: Initialized");
 }
 
 ViewsModule::~ViewsModule() {
 }
 
 void ViewsModule::foo(const std::string& name) {
-	std::cout << "ViewsModule::foo " + name << std::endl;
+	impl->mLogger->log(0, "ViewsModule:: foo()");
 }
 //
 //Event Views::recordOpenView(const std::string& name, std::map<std::string, std::string> segmentation) {

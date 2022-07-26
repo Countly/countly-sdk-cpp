@@ -6,7 +6,9 @@
 
 using namespace std;
 
-void printLog(Countly::LogLevel level, const string& msg) {
+
+
+void printLog(int level, const string& msg) {
 	string lvl = "[DEBUG]";
 	switch (level) {
 	case Countly::LogLevel::DEBUG:
@@ -32,23 +34,31 @@ void printLog(Countly::LogLevel level, const string& msg) {
 	cout << lvl << msg << endl;
 }
 
+string customChecksumCalculator(const std::string& data) {
+	printLog(Countly::LogLevel::DEBUG, "calculateChecksum: " + data);
+	return data;
+}
+
 
 
 int main() {
 	cout << "Sample App" << endl;
 	Countly& ct = Countly::getInstance();
+	Countly* c = &Countly::getInstance();
+	ct.setSalt("test-salt");
 	ct.alwaysUsePost(true);
 	ct.setDeviceID("test-device-id");
 
-	Countly::LoggerFunction logger_function;
-	logger_function = printLog;
-	ct.setLogger(logger_function);
+	ct.setLogger(printLog);
+	//ct.setSha256(customChecksumCalculator);
 	// OS, OS_version, device, resolution, carrier, app_version);
 	ct.SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Carrier", "1.0");
 	// Server and port
-	ct.start("APP_KEY", "https://try.count.ly", 443, true);
+	ct.start("8c1d653f8f474be24958b282d5e9b4c4209ee552", "https://master.count.ly", 443, true);
 	ct.SetMaxEventsPerMessage(10);
 	ct.setAutomaticSessionUpdateInterval(5);
+
+	//ct.view().foo("");
 
 	bool flag = true;
 	while (flag) {
@@ -67,15 +77,18 @@ int main() {
 		int a;
 		cin >> a;
 		switch (a) {
-		case 1:
-			ct.RecordEvent("[CLY]_view", 123);
+		case 1: {
+			std::map<std::string, std::string> segmentation;
+			//ct.recordOpenView("[CLY]_view", segmentation);
 			break;
+		}
 		case 2:
 			ct.RecordEvent("Event with count and sum", 644, 13.3);
 			break;
 		case 3: {
-			Countly::Event event("Event with sum, count, duration", 1, 10, 60.5);
-			ct.addEvent(event);
+			/*Countly::Event event("Event with sum, count, duration", 1, 10, 60.5);
+			ct.addEvent(event);*/
+		//	ct.views()
 			break;
 		}
 		case 4: {
@@ -103,6 +116,9 @@ int main() {
 				{"byear", "1991"},
 				{"organization", "Organization"},
 			};
+
+			userdetail.count("");
+
 
 			ct.getInstance().setUserDetails(userdetail);
 		}

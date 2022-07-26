@@ -49,7 +49,7 @@ public:
 
 	enum LogLevel {DEBUG, INFO, WARNING, ERROR, FATAL};
 
-	void setLogger(LoggerModule::LoggerFunction fun);
+	void setLogger(std::function<void(int, const std::string&)> fun);
 
 	struct HTTPResponse {
 		bool success;

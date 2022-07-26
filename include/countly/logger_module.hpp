@@ -5,10 +5,14 @@
 #include <memory>
 #include <functional>
 
-
+//template<class T>
 class LoggerModule{
 	public:
+		//template<class T>
 		using LoggerFunction = std::function<void(int, const std::string&)>;
+		
+		//using LoggerFunction = std::function<void(T, const std::string&)>;
+
 		LoggerModule();
 		~LoggerModule();
 		void setLogger(LoggerFunction logger);

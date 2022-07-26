@@ -3,6 +3,7 @@
 #define VIEWS_MODULE_HPP_
 #include <string>
 #include <memory>
+#include "countly/logger_module.hpp"
 class ViewsInterface {
 public:
 	virtual void foo(const std::string& name) = 0;
@@ -15,6 +16,7 @@ public:
 class ViewsModule{
 	public:
 		ViewsModule();
+		ViewsModule(LoggerModule* logger);
 		~ViewsModule();
 		
 		void foo(const std::string& name);

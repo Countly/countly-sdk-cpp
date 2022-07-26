@@ -59,7 +59,9 @@ void Countly::setSalt(const std::string& value) {
 	mutex.unlock();
 }
 
-void Countly::setLogger(LoggerModule::LoggerFunction fun) {
+
+
+void Countly::setLogger(std::function<void(int, const std::string&)> fun) {
 	mutex.lock();
 	logger->setLogger(fun);
 	mutex.unlock();
@@ -327,7 +329,7 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 	}
 
 
-	views = std::make_unique<ViewsModule>();
+	views = std::make_unique<ViewsModule>(logger.get());
 
 	views->foo("test");
 	is_sdk_initialized = true; // after this point SDK is initialized.
