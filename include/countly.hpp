@@ -1,8 +1,8 @@
 #ifndef COUNTLY_HPP_
 #define COUNTLY_HPP_
 
-#include "countly/event.hpp"
 #include "countly/constants.hpp"
+#include "countly/event.hpp"
 
 #include <chrono>
 #include <functional>
@@ -18,13 +18,15 @@
 #endif
 
 #include "nlohmann/json.hpp"
+#include "countly/views_module.hpp"
+//#include "countly/views_module.hpp"
 using json = nlohmann::json;
 
-#include "countly/views.hpp"
 
 #ifdef _WIN32
 #undef ERROR
 #endif
+
 
 class Countly {
 public:
@@ -230,7 +232,7 @@ private:
 
 	void updateLoop();
 
-	Views view;
+	
 	LoggerFunction logger_function;
 	HTTPClientFunction http_client_function;
 
@@ -248,7 +250,7 @@ private:
 
 	json session_params;
 	std::string salt;
-
+	std::unique_ptr<ViewsModule> views;
 	std::unique_ptr<std::thread> thread;
 	std::mutex mutex;
 	bool stop_thread = false;

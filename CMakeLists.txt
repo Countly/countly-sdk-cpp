@@ -20,7 +20,7 @@ endif()
 add_library(countly
   ${CMAKE_CURRENT_SOURCE_DIR}/src/countly.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/event.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/views.cpp)
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/views_module.cpp)
 
 target_include_directories(countly
   PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

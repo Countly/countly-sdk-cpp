@@ -326,6 +326,10 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 		this->port = port;
 	}
 
+
+	views = std::make_unique<ViewsModule>();
+
+	views->foo("test");
 	is_sdk_initialized = true; // after this point SDK is initialized.
 
 	if (!running) {
@@ -1063,7 +1067,7 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
 void Countly::recordOpenView(const std::string& name, std::map<std::string, std::string> segmentation) {
 	log(Countly::LogLevel::INFO, "Countly::recordOpenView name = ");
 
-	Views::getInstance();
+	//Views::getInstance();
 	/*Event e = views.recordOpenView(name, segmentation);
 	addEvent(e);*/
 }

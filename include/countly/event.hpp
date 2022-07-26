@@ -1,6 +1,11 @@
 #ifndef EVENT_HPP_
 #define EVENT_HPP_
 
+#include "nlohmann/json.hpp"
+using json = nlohmann::json;
+
+#include <chrono>
+
 class Event {
 	public:
 		Event(const std::string& key, size_t count = 1);
