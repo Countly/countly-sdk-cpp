@@ -115,12 +115,6 @@ long getUnixTimestamp() {
 	return timestamp.count();
 }
 
-std::string customChecksumCalculator(const std::string& data) {
-	std::string result = data.c_str();
-	result.append("-custom_sha");
-	return result;
-}
-
 HTTPCall popHTTPCall() {
 	CHECK(!http_call_queue.empty());
 	HTTPCall oldest_call = http_call_queue.front();
@@ -135,6 +129,12 @@ TEST_CASE("urlencoding is correct") {
 }
 
 #ifdef COUNTLY_USE_CUSTOM_SHA256
+std::string customChecksumCalculator(const std::string& data) {
+	std::string result = data.c_str();
+	result.append("-custom_sha");
+	return result;
+}
+
 TEST_CASE("custom sha256 function validation") {
 	Countly& countly = Countly::getInstance();
 

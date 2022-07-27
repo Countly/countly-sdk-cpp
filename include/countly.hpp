@@ -23,6 +23,8 @@ using json = nlohmann::json;
 #undef ERROR
 #endif
 
+using namespace::countly_sdk;
+
 class Countly {
 public:
 	Countly();
@@ -50,13 +52,11 @@ public:
 		bool success;
 		json data;
 	};
-
-	using SHA256Function = std::function<std::string(const std::string&)>;
+	
 	void setSha256(SHA256Function fun);
 
 	using HTTPClientFunction = std::function<HTTPResponse(bool, const std::string&, const std::string&)>;
 	void setHTTPClient(HTTPClientFunction fun);
-
 
 	void setMetrics(const std::string& os, const std::string& os_version, const std::string& device, const std::string& resolution, const std::string& carrier, const std::string& app_version);
 
