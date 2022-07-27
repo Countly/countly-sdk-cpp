@@ -208,12 +208,7 @@ public:
 		_auto_session_update_interval = updateInterval;
 	}
 
-
-	void recordOpenView(const std::string& name, std::map<std::string, std::string> segmentation);
-
-	void recordCloseView(const std::string& name);
-
-	void recordAction(const std::string& type, int x, int y, int width, int height);
+	ViewsModule& views() const;
 
 private:
 	void _deleteThread();
@@ -248,7 +243,7 @@ private:
 
 	json session_params;
 	std::string salt;
-	std::unique_ptr<ViewsModule> views;
+	std::unique_ptr<ViewsModule> views_ptr = nullptr;
 	std::unique_ptr<LoggerModule> logger = std::make_unique<LoggerModule>();
 
 	std::unique_ptr<std::thread> thread;

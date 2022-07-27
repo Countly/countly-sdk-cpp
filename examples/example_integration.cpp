@@ -79,7 +79,7 @@ int main() {
 		switch (a) {
 		case 1: {
 			std::map<std::string, std::string> segmentation;
-			//ct.recordOpenView("[CLY]_view", segmentation);
+			ct.views().recordOpenView("First view", segmentation);
 			break;
 		}
 		case 2:

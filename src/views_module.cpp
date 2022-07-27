@@ -1,7 +1,4 @@
 #include "countly/views_module.hpp"
-#include <iostream>
-#include <map>
-
 
 #define CLY_VIEW_KEY "[CLY]_view"
 
@@ -16,7 +13,6 @@ public:
 	ViewModuleImpl(LoggerModule* logger) : mLogger{ logger }
 	{
 	}
-
 
 	bool _isFirstView = true;
 	LoggerModule* mLogger;
@@ -41,54 +37,37 @@ ViewsModule::~ViewsModule() {
 void ViewsModule::foo(const std::string& name) {
 	impl->mLogger->log(0, "ViewsModule:: foo()");
 }
-//
-//Event Views::recordOpenView(const std::string& name, std::map<std::string, std::string> segmentation) {
-//	
-//
-//	if (_viewsStartTime.find(name) == _viewsStartTime.end()) {
-//		_viewsStartTime["name"] = 5.0;
-//	}
-//
-//	Event event(CLY_VIEW_KEY, 1);
-//
-//	event.addSegmentation("name", name);
-//	event.addSegmentation("segment", "cpp");
-//	event.addSegmentation("visit", 1);
-//	event.addSegmentation("start", _isFirstView ? 1 : 0);
-//
-//	for (auto key_value : segmentation) {
-//		event.addSegmentation(key_value.first, key_value.second);
-//	}
-//
-//	//return event;
-//}
-//
-//Event Views::recordCloseView(const std::string& name) {
-//	if (_viewsStartTime.find(name) != _viewsStartTime.end()) {
-//		double duration = _viewsStartTime[name];
-//
-//		Countly::Event event(CLY_VIEW_KEY, 1, 0, duration);
-//
-//		event.addSegmentation("name", name);
-//		event.addSegmentation("segment", "cpp");
-//
-//		_viewsStartTime.erase(name);
-//
-//		//return event;
-//	}
-//
-//	//return nullptr;
-//	
-//}
-//
-//Event Views::recordAction(const std::string& type, int x, int y, int width, int height) {
-//	Countly::Event event(CLY_VIEW_KEY, 1);
-//	
-//	event.addSegmentation("x", x);
-//	event.addSegmentation("y", y);
-//	event.addSegmentation("type", type);
-//	event.addSegmentation("width", width);
-//	event.addSegmentation("height", height);
-//
-//	//return event;
-//}
+
+void ViewsModule::recordOpenView(const std::string& name, std::map<std::string, std::string> segmentation) {
+	if (impl->_viewsStartTime.find(name) == impl->_viewsStartTime.end()) {
+		impl->_viewsStartTime["name"] = 5.0;
+	}
+
+	Event event(CLY_VIEW_KEY, 1);
+
+	event.addSegmentation("name", name);
+	event.addSegmentation("segment", "cpp");
+	event.addSegmentation("visit", 1);
+	event.addSegmentation("start", impl->_isFirstView ? 1 : 0);
+
+	for (auto key_value : segmentation) {
+		event.addSegmentation(key_value.first, key_value.second);
+	}
+
+	impl->mLogger->log(0, "ViewsModule:: recordOpenView event: " + event.serialize());
+}
+
+void ViewsModule::recordCloseView(const std::string& name) {
+	if (impl->_viewsStartTime.find(name) != impl->_viewsStartTime.end()) {
+		double duration = impl->_viewsStartTime[name];
+
+		Event event(CLY_VIEW_KEY, 1, 0, duration);
+
+		event.addSegmentation("name", name);
+		event.addSegmentation("segment", "cpp");
+
+		impl->_viewsStartTime.erase(name);
+		impl->mLogger->log(0, "ViewsModule:: recordCloseView event: " + event.serialize());
+	}
+
+}

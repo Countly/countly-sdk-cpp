@@ -329,9 +329,8 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 	}
 
 
-	views = std::make_unique<ViewsModule>(logger.get());
+	views_ptr = std::make_unique<ViewsModule>(logger.get());
 
-	views->foo("test");
 	is_sdk_initialized = true; // after this point SDK is initialized.
 
 	if (!running) {
@@ -1063,25 +1062,9 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
 	}
 }
 
-#pragma region Views
-void Countly::recordOpenView(const std::string& name, std::map<std::string, std::string> segmentation) {
-	log(Countly::LogLevel::INFO, "Countly::recordOpenView name = ");
-
-	//Views::getInstance();
-	/*Event e = views.recordOpenView(name, segmentation);
-	addEvent(e);*/
+ViewsModule& Countly::views() const{
+	return *views_ptr.get();
 }
-
-void Countly::recordCloseView(const std::string& name) {
-	/*Event e = views.recordCloseView(name);
-	addEvent(e);*/
-}
-
-void Countly::recordAction(const std::string& type, int x, int y, int width, int height) {
-	/*Event e = views.recordAction(type, x, y, width, height);
-	addEvent(e);*/
-}
-#pragma endregion Views
 
 void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
 	std::map<std::string, std::string> data = {
