@@ -5,6 +5,7 @@
 #include <map>
 #include "countly/logger_module.hpp"
 #include "countly/event.hpp"
+#include "countly/database_helper.hpp"
 
 class ViewsInterface {
 public:
@@ -18,7 +19,7 @@ public:
 class ViewsModule {
 public:
 	ViewsModule();
-	ViewsModule(LoggerModule* logger);
+	ViewsModule(LoggerModule* logger, DatabaseHelper* databaseHelper);
 
 	~ViewsModule();
 

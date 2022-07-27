@@ -37,6 +37,11 @@ Countly::Countly() {
 Countly::~Countly() {
 	is_being_disposed = true;
 	stop();
+	
+	logger.release();
+	views_ptr.release();
+	db_helper_ptr.release();
+
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_cleanup();
 #endif
@@ -329,7 +334,12 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 	}
 
 
-	views_ptr = std::make_unique<ViewsModule>(logger.get());
+	// C++14
+	/*db_helper_ptr = std::make_unique<DatabaseHelper>(logger.get()); 
+	views_ptr = std::make_unique<ViewsModule>(logger.get(), db_helper_ptr.get());*/
+
+	db_helper_ptr.reset(new DatabaseHelper(logger.get()));
+	views_ptr.reset(new ViewsModule(logger.get(), db_helper_ptr.get()));
 
 	is_sdk_initialized = true; // after this point SDK is initialized.
 

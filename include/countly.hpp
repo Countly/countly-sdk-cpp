@@ -244,6 +244,7 @@ private:
 	json session_params;
 	std::string salt;
 	std::unique_ptr<ViewsModule> views_ptr = nullptr;
+	std::unique_ptr<DatabaseHelper> db_helper_ptr = nullptr;
 	std::unique_ptr<LoggerModule> logger = std::make_unique<LoggerModule>();
 
 	std::unique_ptr<std::thread> thread;

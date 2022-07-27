@@ -8,20 +8,23 @@ class ViewsModule::ViewModuleImpl {
 public:
 	ViewModuleImpl() {
 		mLogger = nullptr;
+		mDatabaseHelper = nullptr;
 	}
 
-	ViewModuleImpl(LoggerModule* logger) : mLogger{ logger }
+	ViewModuleImpl(LoggerModule* logger, DatabaseHelper* databaseHelper) : mLogger{ logger }, mDatabaseHelper{ databaseHelper }
 	{
 	}
 
 	bool _isFirstView = true;
-	LoggerModule* mLogger;
 	std::map<std::string, double> _viewsStartTime;
+
+	LoggerModule* mLogger;
+	DatabaseHelper* mDatabaseHelper;
 
 };
 
 
-ViewsModule::ViewsModule(LoggerModule* logger) : impl{ std::make_unique<ViewModuleImpl>(logger) }
+ViewsModule::ViewsModule(LoggerModule* logger, DatabaseHelper* databaseHelper) : impl{ std::make_unique<ViewModuleImpl>(logger, databaseHelper) }
 {
 	impl->mLogger->log(0, "ViewsModule:: Initialized");
 }
@@ -55,6 +58,7 @@ void ViewsModule::recordOpenView(const std::string& name, std::map<std::string, 
 	}
 
 	impl->mLogger->log(0, "ViewsModule:: recordOpenView event: " + event.serialize());
+	impl->mDatabaseHelper->storeEvent(event);
 }
 
 void ViewsModule::recordCloseView(const std::string& name) {
