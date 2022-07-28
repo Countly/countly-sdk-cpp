@@ -5,7 +5,7 @@
 #include <functional>
 
 namespace cly {
-	enum LogLevel { DEBUG = 1, INFO = 2, WARNING = 3, ERROR = 4, FATAL = 5 };
+	enum class LogLevel { DEBUG = 1, INFO = 2, WARNING = 3, ERROR = 4, FATAL = 5 };
 	using LoggerFunction = std::function<void(LogLevel, const std::string&)>;
 
 	class LoggerModule {

@@ -31,8 +31,8 @@ using json = nlohmann::json;
 #endif
 
 Countly::Countly() {
-
 	logger.reset(new cly::LoggerModule());
+
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_init(CURL_GLOBAL_ALL);
 #endif
@@ -41,8 +41,8 @@ Countly::Countly() {
 Countly::~Countly() {
 	is_being_disposed = true;
 	stop();
-
 	logger.release();
+
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_cleanup();
 #endif
@@ -66,8 +66,7 @@ void Countly::setSalt(const std::string& value) {
 }
 
 void temp_log(cly::LogLevel level, const std::string& msg) {
-	Countly::LogLevel l = Countly::LogLevel(level);
-	Countly::getInstance().getLogger()(l, msg);
+	Countly::getInstance().getLogger()(Countly::LogLevel(level), msg);
 }
 
 void Countly::setLogger(void (*fun)(Countly::LogLevel level, const std::string& message)) {
@@ -134,7 +133,7 @@ void Countly::setUserDetails(const std::map<std::string, std::string>& value) {
 	session_params["user_details"] = value;
 
 	if (!is_sdk_initialized) {
-		logger->log(cly::LogLevel::ERROR, "[Countly][setUserDetails] Can not send user detail if the SDK has not been initialized.");
+		log(Countly::LogLevel::ERROR, "[Countly][setUserDetails] Can not send user detail if the SDK has not been initialized.");
 		mutex.unlock();
 		return;
 	}
@@ -154,7 +153,7 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string>& val
 	session_params["user_details"]["custom"] = value;
 
 	if (!is_sdk_initialized) {
-		logger->log(cly::LogLevel::ERROR, "[Countly][setCustomUserDetails] Can not send user detail if the SDK has not been initialized.");
+		log(Countly::LogLevel::ERROR, "[Countly][setCustomUserDetails] Can not send user detail if the SDK has not been initialized.");
 		mutex.unlock();
 		return;
 	}
@@ -172,17 +171,17 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string>& val
 #pragma region User location 
 
 void Countly::setCountry(const std::string& country_code) {
-	logger->log(cly::LogLevel::WARNING, "[Countly][setCountry] 'setCountry' is deprecated, please use 'setLocation(countryCode, city, gpsCoordinates, ipAddress)' method instead.");
+	log(Countly::LogLevel::WARNING, "[Countly][setCountry] 'setCountry' is deprecated, please use 'setLocation(countryCode, city, gpsCoordinates, ipAddress)' method instead.");
 	setLocation(country_code, "", "", "");
 }
 
 void Countly::setCity(const std::string& city_name) {
-	logger->log(cly::LogLevel::WARNING, "[Countly][setCity] 'setCity' is deprecated, please use 'setLocation(countryCode, city, gpsCoordinates, ipAddress)' method instead.");
+	log(Countly::LogLevel::WARNING, "[Countly][setCity] 'setCity' is deprecated, please use 'setLocation(countryCode, city, gpsCoordinates, ipAddress)' method instead.");
 	setLocation("", city_name, "", "");
 }
 
 void Countly::setLocation(double lattitude, double longitude) {
-	logger->log(cly::LogLevel::WARNING, "[Countly][setLocation] 'setLocation(latitude, longitude)' is deprecated, please use 'setLocation(countryCode, city, gpsCoordinates, ipAddress)' method instead.");
+	log(Countly::LogLevel::WARNING, "[Countly][setLocation] 'setLocation(latitude, longitude)' is deprecated, please use 'setLocation(countryCode, city, gpsCoordinates, ipAddress)' method instead.");
 
 	std::ostringstream location_stream;
 	location_stream << lattitude << ',' << longitude;
@@ -191,12 +190,12 @@ void Countly::setLocation(double lattitude, double longitude) {
 
 void Countly::setLocation(const std::string& countryCode, const std::string& city, const std::string& gpsCoordinates, const std::string& ipAddress) {
 	mutex.lock();
-	logger->log(cly::LogLevel::INFO, "[Countly][setLocation] SetLocation : countryCode = " + countryCode + ", city = " + city + ", gpsCoordinates = " + gpsCoordinates + ", ipAddress = " + ipAddress);
+	log(Countly::LogLevel::INFO, "[Countly][setLocation] SetLocation : countryCode = " + countryCode + ", city = " + city + ", gpsCoordinates = " + gpsCoordinates + ", ipAddress = " + ipAddress);
 
 
 	if ((!countryCode.empty() && city.empty())
 		|| (!city.empty() && countryCode.empty())) {
-		logger->log(cly::LogLevel::WARNING, "[Countly][setLocation] In \"SetLocation\" both country code and city should be set together");
+		log(Countly::LogLevel::WARNING, "[Countly][setLocation] In \"SetLocation\" both country code and city should be set together");
 	}
 
 	session_params["city"] = city;
@@ -213,7 +212,7 @@ void Countly::setLocation(const std::string& countryCode, const std::string& cit
 
 void Countly::_sendIndependantLocationRequest() {
 	mutex.lock();
-	logger->log(cly::LogLevel::DEBUG, "[Countly] [_sendIndependantLocationRequest]");
+	log(Countly::LogLevel::DEBUG, "[Countly] [_sendIndependantLocationRequest]");
 
 	/*
 	 * Empty country code, city and IP address can not be sent.
@@ -255,25 +254,25 @@ void Countly::_sendIndependantLocationRequest() {
 #pragma region Device Id
 void Countly::setDeviceID(const std::string& value, bool same_user) {
 	mutex.lock();
-	logger->log(cly::LogLevel::INFO, "[Countly][changeDeviceIdWithMerge] setDeviceID = '" + value + "'");
+	log(Countly::LogLevel::INFO, "[Countly][changeDeviceIdWithMerge] setDeviceID = '" + value + "'");
 
 	//Checking old and new devices ids are same
 	if (session_params.contains("device_id") && session_params["device_id"].get<std::string>() == value) {
-		logger->log(cly::LogLevel::DEBUG, "[Countly][setDeviceID] new device id and old device id are same.");
+		log(Countly::LogLevel::DEBUG, "[Countly][setDeviceID] new device id and old device id are same.");
 		mutex.unlock();
 		return;
 	}
 
 	if (!session_params.contains("device_id")) {
 		session_params["device_id"] = value;
-		logger->log(cly::LogLevel::DEBUG, "[Countly][setDeviceID] no device was set, setting device id");
+		log(Countly::LogLevel::DEBUG, "[Countly][setDeviceID] no device was set, setting device id");
 		mutex.unlock();
 		return;
 	}
 
 	mutex.unlock();
 	if (!is_sdk_initialized) {
-		logger->log(cly::LogLevel::ERROR, "[Countly][setDeviceID] Can not change the device id if the SDK has not been initialized.");
+		log(Countly::LogLevel::ERROR, "[Countly][setDeviceID] Can not change the device id if the SDK has not been initialized.");
 		return;
 	}
 	
@@ -288,7 +287,7 @@ void Countly::setDeviceID(const std::string& value, bool same_user) {
 /* Change device ID with merge after SDK has been initialized.*/
 void Countly::_changeDeviceIdWithMerge(const std::string& value) {
 	mutex.lock();
-	logger->log(cly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithMerge] deviceId = '" + value + "'");
+	log(Countly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithMerge] deviceId = '" + value + "'");
 
 	session_params["old_device_id"] = session_params["device_id"];
 	session_params["device_id"] = value;
@@ -309,7 +308,7 @@ void Countly::_changeDeviceIdWithMerge(const std::string& value) {
 
 /* Change device ID without merge after SDK has been initialized.*/
 void Countly::_changeDeviceIdWithoutMerge(const std::string& value) {
-	logger->log(cly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithoutMerge] deviceId = '" + value + "'");
+	log(Countly::LogLevel::DEBUG, "[Countly][changeDeviceIdWithoutMerge] deviceId = '" + value + "'");
 
 	//send all event to server and end current session of old user
 	flushEvents();
@@ -330,7 +329,7 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string& value) {
 
 void Countly::start(const std::string& app_key, const std::string& host, int port, bool start_thread) {
 	mutex.lock();
-	logger->log(cly::LogLevel::INFO, "[Countly][start]");
+	log(Countly::LogLevel::INFO, "[Countly][start]");
 	this->host = host;
 	if (host.find("http://") == 0) {
 		use_https = false;
@@ -367,7 +366,7 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 			} catch(const std::system_error& e) {
 				std::ostringstream log_message;
 				log_message << "Could not create thread: " << e.what();
-				logger->log(cly::LogLevel::FATAL, log_message.str());
+				log(Countly::LogLevel::FATAL, log_message.str());
 			}
 		}
 	}
@@ -379,7 +378,7 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
  * startOnCloud is deprecated and this is going to be removed in the future.
  */
 void Countly::startOnCloud(const std::string& app_key) {
-	logger->log(cly::LogLevel::WARNING, "[Countly][startOnCloud] 'startOnCloud' is deprecated, this is going to be removed in the future.");
+	log(Countly::LogLevel::WARNING, "[Countly][startOnCloud] 'startOnCloud' is deprecated, this is going to be removed in the future.");
 	this->start(app_key, "https://cloud.count.ly", 443);
 }
 
@@ -399,7 +398,7 @@ void Countly::_deleteThread() {
 			thread->join();
 		}
 		catch (const std::system_error& e) {
-			logger->log(cly::LogLevel::WARNING, "Could not join thread");
+			log(Countly::LogLevel::WARNING, "Could not join thread");
 		}
 		thread.reset();
 	}
@@ -415,14 +414,14 @@ void Countly::addEvent(const Event& event) {
 	mutex.lock();
 #ifndef COUNTLY_USE_SQLITE
 	if (event_queue.size() == max_events) {
-		logger->log(cly::LogLevel::WARNING, "Event queue is full, dropping the oldest event to insert a new one");
+		log(Countly::LogLevel::WARNING, "Event queue is full, dropping the oldest event to insert a new one");
 		event_queue.pop_front();
 	}
 	event_queue.push_back(event.serialize());
 #else
 	if (database_path.empty()) {
 		mutex.unlock();
-		logger->log(cly::LogLevel::FATAL, "Cannot add event, sqlite database path is not set");
+		log(Countly::LogLevel::FATAL, "Cannot add event, sqlite database path is not set");
 		return;
 	}
 
@@ -439,7 +438,7 @@ void Countly::addEvent(const Event& event) {
 
 		return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
 		if (return_value != SQLITE_OK) {
-			logger->log(cly::LogLevel::ERROR, error_message);
+			log(Countly::LogLevel::ERROR, error_message);
 			sqlite3_free(error_message);
 		}
 	}
@@ -453,7 +452,7 @@ void Countly::setMaxEvents(size_t value) {
 	max_events = value;
 #ifndef COUNTLY_USE_SQLITE
 	if (event_queue.size() > value) {
-		logger->log(cly::LogLevel::WARNING, "New event queue size is smaller than the old one, dropping the oldest events to fit");
+		log(Countly::LogLevel::WARNING, "New event queue size is smaller than the old one, dropping the oldest events to fit");
 		event_queue.resize(value);
 	}
 #endif
@@ -477,7 +476,7 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
 		mutex.lock();
 		if (database_path.empty()) {
 			mutex.unlock();
-			logger->log(cly::LogLevel::FATAL, "Cannot flush events, sqlite database path is not set");
+			log(Countly::LogLevel::FATAL, "Cannot flush events, sqlite database path is not set");
 			return;
 		}
 
@@ -498,7 +497,7 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
 					update_failed = !updateSession();
 				}
 			} else {
-				logger->log(cly::LogLevel::ERROR, error_message);
+				log(Countly::LogLevel::ERROR, error_message);
 				sqlite3_free(error_message);
 			}
 			sqlite3_free_table(table);
@@ -524,7 +523,7 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
 	if (return_value == SQLITE_OK) {
 		return_value = sqlite3_exec(database, "DELETE FROM events;", nullptr, nullptr, &error_message);
 		if (return_value != SQLITE_OK) {
-			logger->log(cly::LogLevel::FATAL, error_message);
+			log(Countly::LogLevel::FATAL, error_message);
 			sqlite3_free(error_message);
 		}
 	}
@@ -534,7 +533,7 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
 
 bool Countly::beginSession() {
 	mutex.lock();
-	logger->log(cly::LogLevel::INFO, "[Countly][beginSession]");
+	log(Countly::LogLevel::INFO, "[Countly][beginSession]");
 	if (began_session) {
 		mutex.unlock();
 		return true;
@@ -618,7 +617,7 @@ bool Countly::updateSession() {
 #else
 	if (database_path.empty()) {
 		mutex.unlock();
-		logger->log(cly::LogLevel::FATAL, "Cannot fetch events, sqlite database path is not set");
+		log(Countly::LogLevel::FATAL, "Cannot fetch events, sqlite database path is not set");
 		return false;
 	}
 
@@ -649,7 +648,7 @@ bool Countly::updateSession() {
 			event_id_stream << ')';
 			event_ids = event_id_stream.str();
 		} else if (return_value != SQLITE_OK) {
-			logger->log(cly::LogLevel::ERROR, error_message);
+			log(Countly::LogLevel::ERROR, error_message);
 			sqlite3_free(error_message);
 		}
 		sqlite3_free_table(table);
@@ -662,7 +661,7 @@ bool Countly::updateSession() {
 	mutex.lock();
 
 	if (duration.count() >= _auto_session_update_interval) {
-		logger->log(cly::LogLevel::DEBUG, "[Countly][updateSession] sending session update.");
+		log(Countly::LogLevel::DEBUG, "[Countly][updateSession] sending session update.");
 		std::map<std::string, std::string> data = {
 			{"app_key", session_params["app_key"].get<std::string>()},
 			{"device_id", session_params["device_id"].get<std::string>()},
@@ -677,7 +676,7 @@ bool Countly::updateSession() {
 	}
 
 	if (!no_events) {
-		logger->log(cly::LogLevel::DEBUG, "[Countly][updateSession] sending event.");
+		log(Countly::LogLevel::DEBUG, "[Countly][updateSession] sending event.");
 		std::map<std::string, std::string> data = {
 		{"app_key", session_params["app_key"].get<std::string>()},
 		{"device_id", session_params["device_id"].get<std::string>()},
@@ -703,7 +702,7 @@ bool Countly::updateSession() {
 
 			return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
 			if (return_value != SQLITE_OK) {
-				logger->log(cly::LogLevel::ERROR, error_message);
+				log(Countly::LogLevel::ERROR, error_message);
 				sqlite3_free(error_message);
 			}
 		}
@@ -716,7 +715,7 @@ bool Countly::updateSession() {
 }
 
 bool Countly::endSession() {
-	logger->log(cly::LogLevel::INFO, "[Countly][endSession]");
+	log(Countly::LogLevel::INFO, "[Countly][endSession]");
 	const std::chrono::system_clock::time_point now = Countly::getTimestamp();
 	const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
 	const auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration(now));
@@ -792,11 +791,11 @@ void Countly::setDatabasePath(const std::string& path) {
 	if (return_value == SQLITE_OK) {
 		return_value = sqlite3_exec(database, "CREATE TABLE IF NOT EXISTS events (evtid INTEGER PRIMARY KEY, event TEXT)", nullptr, nullptr, &error_message);
 		if (return_value != SQLITE_OK) {
-			logger->log(cly::LogLevel::ERROR, error_message);
+			log(Countly::LogLevel::ERROR, error_message);
 			sqlite3_free(error_message);
 		}
 	} else {
-		logger->log(cly::LogLevel::ERROR, "Failed to open sqlite database");
+		log(Countly::LogLevel::ERROR, "Failed to open sqlite database");
 		sqlite3_free(error_message);
 		database_path.clear();
 	}
@@ -804,6 +803,10 @@ void Countly::setDatabasePath(const std::string& path) {
 	mutex.unlock();
 }
 #endif
+
+void Countly::log(Countly::LogLevel level, const std::string& message) {
+	logger->log(cly::LogLevel(level), message);
+}
 
 static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n_bytes, std::string *body) {
 	size_t data_size = byte_size * n_bytes;
@@ -815,7 +818,7 @@ std::string Countly::calculateChecksum(const std::string& salt, const std::strin
 	std::string salted_data = data + salt;
 #ifdef COUNTLY_USE_CUSTOM_SHA256
 	if (sha256_function == nullptr) {
-		logger->log(cly::LogLevel::FATAL, "Missing SHA 256 function");
+		log(LogLevel::FATAL, "Missing SHA 256 function");
 		return {};
 	}
 
@@ -839,7 +842,7 @@ std::string Countly::calculateChecksum(const std::string& salt, const std::strin
 
 Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 	bool use_post = always_use_post || (data.size() > COUNTLY_POST_THRESHOLD);
-	logger->log(cly::LogLevel::DEBUG, "[Countly][sendHTTP] data: "+ data);
+	log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: "+ data);
 	if (!salt.empty()) {
 		std::string checksum = calculateChecksum(salt, data);
 		if (!data.empty()) {
@@ -847,7 +850,7 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 		}
 
 		data += "checksum256=" + checksum;
-		logger->log(cly::LogLevel::DEBUG, "[Countly][sendHTTP] with checksum, data: " + data);
+		log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] with checksum, data: " + data);
 	}
 	
 	Countly::HTTPResponse response;
@@ -855,7 +858,7 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 
 #ifdef COUNTLY_USE_CUSTOM_HTTP
 	if (!http_client_function) {
-		logger->log(cly::LogLevel::FATAL, "Missing HTTP client function");
+		log(Countly::LogLevel::FATAL, "Missing HTTP client function");
 		return response;
 	}
 
@@ -966,7 +969,7 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 			curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.c_str());
 		}
 
-		logger->log(cly::LogLevel::DEBUG, "[Countly][sendHTTP] request: " + full_url_stream.str());
+		log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] request: " + full_url_stream.str());
 
 		std::string full_url = full_url_stream.str();
 		curl_easy_setopt(curl, CURLOPT_URL, full_url.c_str());
@@ -988,7 +991,7 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 		curl_easy_cleanup(curl);
 	}
 #endif
-	logger->log(cly::LogLevel::DEBUG, "[Countly][sendHTTP] response: " + response.data.dump());
+	log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] response: " + response.data.dump());
 	return response;
 #endif
 
@@ -1006,7 +1009,7 @@ std::chrono::system_clock::duration Countly::getSessionDuration() {
 }
 
 void Countly::updateLoop() {
-	logger->log(cly::LogLevel::DEBUG, "[Countly][updateLoop]");
+	log(Countly::LogLevel::DEBUG, "[Countly][updateLoop]");
 	mutex.lock();
 	running = true;
 	mutex.unlock();
@@ -1035,7 +1038,7 @@ void Countly::enableRemoteConfig() {
 
 void Countly::updateRemoteConfig() {
 	if (!session_params["app_key"].is_string() || !session_params["device_id"].is_string()) {
-		logger->log(cly::LogLevel::ERROR, "Error updating remote config, app key or device id is missing");
+		log(Countly::LogLevel::ERROR, "Error updating remote config, app key or device id is missing");
 		return;
 	}
 
