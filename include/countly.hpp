@@ -51,6 +51,8 @@ public:
 		bool success;
 		json data;
 	};
+	
+	void setSha256(cly::SHA256Function fun);
 
 	using HTTPClientFunction = std::function<HTTPResponse(bool, const std::string&, const std::string&)>;
 	void setHTTPClient(HTTPClientFunction fun);
@@ -125,7 +127,7 @@ public:
 
 	static std::string serializeForm(const std::map<std::string, std::string> data);
 
-	static std::string calculateChecksum(const std::string& salt, const std::string& data);
+	std::string calculateChecksum(const std::string& salt, const std::string& data);
 
 #ifdef COUNTLY_USE_SQLITE
 	void setDatabasePath(const std::string& path);
@@ -248,8 +250,9 @@ private:
 
 	void updateLoop();
 
-	void (*logger_function)(LogLevel level, const std::string& message) = nullptr;
+	cly::SHA256Function sha256_function;
 	HTTPClientFunction http_client_function;
+	void (*logger_function)(LogLevel level, const std::string& message) = nullptr;
 
 	std::string host;
 
