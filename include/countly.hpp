@@ -237,7 +237,7 @@ public:
 private:
 	void _deleteThread();
 	void _sendIndependantLocationRequest();
-	void log(Countly::LogLevel level, const std::string& message);
+	void log(LogLevel level, const std::string& message);
 
 	HTTPResponse sendHTTP(std::string path, std::string data);
 

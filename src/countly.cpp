@@ -804,7 +804,7 @@ void Countly::setDatabasePath(const std::string& path) {
 }
 #endif
 
-void Countly::log(Countly::LogLevel level, const std::string& message) {
+void Countly::log(LogLevel level, const std::string& message) {
 	logger->log(cly::LogLevel(level), message);
 }
 
