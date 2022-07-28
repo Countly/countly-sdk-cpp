@@ -22,6 +22,7 @@ using json = nlohmann::json;
 #ifdef _WIN32
 #undef ERROR
 #endif
+#include "countly/logger_module.hpp"
 
 class Countly {
 public:
@@ -41,10 +42,10 @@ public:
 
 	void setSalt(const std::string& value);
 
-	enum LogLevel {DEBUG, INFO, WARNING, ERROR, FATAL};
+	enum LogLevel { DEBUG = 1, INFO = 2, WARNING = 3, ERROR = 4, FATAL = 5 };
 
-	using LoggerFunction = std::function<void(LogLevel, const std::string&)>;
-	void setLogger(LoggerFunction fun);
+	void setLogger(void (*fun)(LogLevel level, const std::string& message));
+	inline std::function<void(LogLevel, const std::string&)> getLogger() { return logger_function; }
 
 	struct HTTPResponse {
 		bool success;
@@ -234,7 +235,6 @@ public:
 private:
 	void _deleteThread();
 	void _sendIndependantLocationRequest();
-	void log(LogLevel level, const std::string& message);
 
 	HTTPResponse sendHTTP(std::string path, std::string data);
 
@@ -248,7 +248,7 @@ private:
 
 	void updateLoop();
 
-	LoggerFunction logger_function;
+	void (*logger_function)(LogLevel level, const std::string& message) = nullptr;
 	HTTPClientFunction http_client_function;
 
 	std::string host;
@@ -267,6 +267,8 @@ private:
 	std::string salt;
 
 	std::unique_ptr<std::thread> thread;
+	std::unique_ptr<cly::LoggerModule> logger;
+
 	std::mutex mutex;
 	bool stop_thread = false;
 	bool running = false;
