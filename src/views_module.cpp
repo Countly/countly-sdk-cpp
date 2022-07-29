@@ -2,76 +2,78 @@
 
 #define CLY_VIEW_KEY "[CLY]_view"
 
+namespace countly_sdk {
+	class ViewsModule::ViewModuleImpl {
 
-class ViewsModule::ViewModuleImpl {
+	public:
 
-public:
-	ViewModuleImpl() {
-		mLogger = nullptr;
-		mDatabaseHelper = nullptr;
+		ViewModuleImpl(CountlyDelegates* cly, LoggerModule* logger) : mCly{ cly }, mLogger{ logger } {
+		}
+
+		bool _isFirstView = true;
+		std::map<std::string, double> _viewsStartTime;
+
+		LoggerModule* mLogger;
+		CountlyDelegates* mCly;
+	};
+
+
+	ViewsModule::ViewsModule(CountlyDelegates* cly, LoggerModule* logger) {
+		impl.reset(new ViewModuleImpl(cly, logger));
+		//impl->mLogger;->log(0, "ViewsModule:: Initialized");
 	}
 
-	ViewModuleImpl(LoggerModule* logger, DatabaseHelper* databaseHelper) : mLogger{ logger }, mDatabaseHelper{ databaseHelper }
-	{
+	ViewsModule::~ViewsModule() {
 	}
 
-	bool _isFirstView = true;
-	std::map<std::string, double> _viewsStartTime;
+	void ViewsModule::recordOpenView(const std::string& name, std::map<std::string, std::string> segmentation) {
+		if (impl->_viewsStartTime.find(name) == impl->_viewsStartTime.end()) {
+			impl->_viewsStartTime["name"] = 5.0;
+		}
+		
 
-	LoggerModule* mLogger;
-	DatabaseHelper* mDatabaseHelper;
+		std::map<std::string, std::string> viewSegments;
 
-};
+		viewSegments["name"] = name;
+		viewSegments["segment"] = "cpp";
+		viewSegments["visit"] = 1;
+		viewSegments["start"] = impl->_isFirstView ? 1 : 0;
 
+		for (auto key_value : segmentation) {
 
-ViewsModule::ViewsModule(LoggerModule* logger, DatabaseHelper* databaseHelper) : impl{ std::make_unique<ViewModuleImpl>(logger, databaseHelper) }
-{
-	impl->mLogger->log(0, "ViewsModule:: Initialized");
-}
+			auto itr = viewSegments.find(key_value.first);
+			if (itr != viewSegments.end()) {
+				(*itr).second = key_value.second;
+			}
+			else {
+				viewSegments[key_value.first] = key_value.second;
+			}
+		}
 
-ViewsModule::ViewsModule() : impl{ std::make_unique<ViewModuleImpl>() }
-{
-	impl->mLogger->log(0, "ViewsModule:: Initialized");
-}
+		impl->mCly->recordEventInternal(CLY_VIEW_KEY, viewSegments);
 
-ViewsModule::~ViewsModule() {
-}
+		
 
-void ViewsModule::foo(const std::string& name) {
-	impl->mLogger->log(0, "ViewsModule:: foo()");
-}
+		//impl->mLogger->log(0, "ViewsModule:: recordOpenView event: " + event.serialize());
 
-void ViewsModule::recordOpenView(const std::string& name, std::map<std::string, std::string> segmentation) {
-	if (impl->_viewsStartTime.find(name) == impl->_viewsStartTime.end()) {
-		impl->_viewsStartTime["name"] = 5.0;
 	}
 
-	Event event(CLY_VIEW_KEY, 1);
+	void ViewsModule::recordCloseView(const std::string& name) {
+		if (impl->_viewsStartTime.find(name) != impl->_viewsStartTime.end()) {
+			double duration = impl->_viewsStartTime[name];
 
-	event.addSegmentation("name", name);
-	event.addSegmentation("segment", "cpp");
-	event.addSegmentation("visit", 1);
-	event.addSegmentation("start", impl->_isFirstView ? 1 : 0);
+			std::map<std::string, std::string> viewSegments;
 
-	for (auto key_value : segmentation) {
-		event.addSegmentation(key_value.first, key_value.second);
+			viewSegments["name"] = name;
+			viewSegments["segment"] = "cpp";
+
+			impl->mCly->recordEventInternal(CLY_VIEW_KEY, viewSegments);
+			impl->_viewsStartTime.erase(name);
+		}
+		else {
+			//Print error
+			//impl->mLogger->log(0, "ViewsModule:: recordOpenView event: " + event.serialize());
+		}
+
 	}
-
-	impl->mLogger->log(0, "ViewsModule:: recordOpenView event: " + event.serialize());
-	impl->mDatabaseHelper->storeEvent(event);
-}
-
-void ViewsModule::recordCloseView(const std::string& name) {
-	if (impl->_viewsStartTime.find(name) != impl->_viewsStartTime.end()) {
-		double duration = impl->_viewsStartTime[name];
-
-		Event event(CLY_VIEW_KEY, 1, 0, duration);
-
-		event.addSegmentation("name", name);
-		event.addSegmentation("segment", "cpp");
-
-		impl->_viewsStartTime.erase(name);
-		impl->mLogger->log(0, "ViewsModule:: recordCloseView event: " + event.serialize());
-	}
-
 }

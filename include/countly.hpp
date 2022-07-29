@@ -25,7 +25,7 @@ using json = nlohmann::json;
 
 using namespace::countly_sdk;
 
-class Countly {
+class Countly : public CountlyDelegates {
 public:
 	Countly();
 

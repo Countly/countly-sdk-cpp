@@ -1,8 +1,10 @@
 #ifndef COUNTLY_CONSTANTS_HPP_
 #define COUNTLY_CONSTANTS_HPP_
 
+#include <map>
 #include <string>
 #include <functional>
+
 
 #define COUNTLY_SDK_NAME "cpp-native-unknown"
 #define COUNTLY_SDK_VERSION "0.1.0"
@@ -13,6 +15,10 @@
 
 namespace countly_sdk {
 	using SHA256Function = std::function<std::string(const std::string&)>;
+
+	class CountlyDelegates {
+	public:
+	};
 }
 
 #endif

@@ -3,32 +3,24 @@
 #include <string>
 #include <memory>
 #include <map>
-#include "countly/logger_module.hpp"
-#include "countly/event.hpp"
-#include "countly/database_helper.hpp"
+#include "countly/constants.hpp"
+//#include "countly/logger_module.hpp"
+//#include "countly/event.hpp"
 
-class ViewsInterface {
-public:
-	virtual void foo(const std::string& name) = 0;
-	/*void recordCloseView(const std::string& name);
-	void recordAction(const std::string& type, int x, int y, int width, int height);
-	void recordOpenView(const std::string& name, std::map<std::string, std::string> segmentation);*/
-};
+namespace countly_sdk {
+	class ViewsModule {
+	public:
+		class Event;
+		class LoggerModule;
+		~ViewsModule();
+		ViewsModule(CountlyDelegates* cly, LoggerModule* logger);
 
-
-class ViewsModule {
-public:
-	ViewsModule();
-	ViewsModule(LoggerModule* logger, DatabaseHelper* databaseHelper);
-
-	~ViewsModule();
-
-	void foo(const std::string& name);
-	void recordCloseView(const std::string& name);
-	void recordOpenView(const std::string& name, std::map<std::string, std::string> segmentation);
-private:
-	class ViewModuleImpl;
-	std::unique_ptr<ViewModuleImpl> impl;
-};
+		void recordCloseView(const std::string& name);
+		void recordOpenView(const std::string& name, std::map<std::string, std::string> segmentation);
+	private:
+		class ViewModuleImpl;
+		std::unique_ptr<ViewModuleImpl> impl;
+	};
+}
 #endif
 
