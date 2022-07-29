@@ -31,6 +31,8 @@ using json = nlohmann::json;
 #endif
 
 Countly::Countly() {
+	logger.reset(new cly::LoggerModule());
+
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_init(CURL_GLOBAL_ALL);
 #endif
@@ -39,6 +41,8 @@ Countly::Countly() {
 Countly::~Countly() {
 	is_being_disposed = true;
 	stop();
+	logger.reset();
+
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_cleanup();
 #endif
@@ -61,9 +65,21 @@ void Countly::setSalt(const std::string& value) {
 	mutex.unlock();
 }
 
-void Countly::setLogger(LoggerFunction fun) {
+void temp_log(cly::LogLevel level, const std::string& msg) {
+	Countly::getInstance().getLogger()(Countly::LogLevel(level), msg);
+}
+
+void Countly::setLogger(void (*fun)(Countly::LogLevel level, const std::string& message)) {
 	mutex.lock();
+
 	logger_function = fun;
+	if (fun == nullptr) {
+		logger->setLogger(nullptr);
+	}
+	else {
+		logger->setLogger(temp_log);
+	}
+	
 	mutex.unlock();
 }
 
@@ -73,7 +89,7 @@ void Countly::setHTTPClient(HTTPClientFunction fun) {
 	mutex.unlock();
 }
 
-void Countly::setSha256(SHA256Function fun) {
+void Countly::setSha256(cly::SHA256Function fun) {
 	mutex.lock();
 	sha256_function = fun;
 	mutex.unlock();
@@ -788,10 +804,8 @@ void Countly::setDatabasePath(const std::string& path) {
 }
 #endif
 
-void Countly::log(Countly::LogLevel level, const std::string& message) {
-	if (logger_function) {
-		logger_function(level, message);
-	}
+void Countly::log(LogLevel level, const std::string& message) {
+	logger->log(cly::LogLevel(level), message);
 }
 
 static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n_bytes, std::string *body) {
@@ -804,7 +818,7 @@ std::string Countly::calculateChecksum(const std::string& salt, const std::strin
 	std::string salted_data = data + salt;
 #ifdef COUNTLY_USE_CUSTOM_SHA256
 	if (sha256_function == nullptr) {
-		log(Countly::LogLevel::FATAL, "Missing SHA 256 function");
+		log(LogLevel::FATAL, "Missing SHA 256 function");
 		return {};
 	}
 

@@ -11,7 +11,7 @@
 #define COUNTLY_KEEPALIVE_INTERVAL 3000
 #define COUNTLY_MAX_EVENTS_DEFAULT 200
 
-namespace countly_sdk {
+namespace cly {
 	using SHA256Function = std::function<std::string(const std::string&)>;
 }
 
