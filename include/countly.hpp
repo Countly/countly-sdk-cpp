@@ -23,8 +23,9 @@ using json = nlohmann::json;
 #undef ERROR
 #endif
 #include "countly/logger_module.hpp"
+#include "countly/views_module.hpp"
 
-class Countly : public CountlyDelegates {
+class Countly : public cly::CountlyDelegates {
 public:
 	Countly();
 
@@ -197,6 +198,10 @@ public:
 		stop();
 	}
 
+	inline cly::ViewsModule& views() const {
+		return *views_module.get();
+	}
+
 	void RecordEvent(const std::string key, int count) {
 		addEvent(Event(key, count));
 	}
@@ -276,6 +281,7 @@ private:
 	std::string salt;
 
 	std::unique_ptr<std::thread> thread;
+	std::unique_ptr<cly::ViewsModule> views_module;
 	std::unique_ptr<cly::LoggerModule> logger;
 
 	std::mutex mutex;

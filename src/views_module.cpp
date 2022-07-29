@@ -2,31 +2,34 @@
 
 #define CLY_VIEW_KEY "[CLY]_view"
 
-namespace countly_sdk {
+namespace cly {
 	class ViewsModule::ViewModuleImpl {
 
 	public:
 
-		ViewModuleImpl(CountlyDelegates* cly, LoggerModule* logger) : mCly{ cly }, mLogger{ logger } {
+		ViewModuleImpl(cly::CountlyDelegates* cly, cly::LoggerModule* logger) : _cly{ cly }, _logger{ logger } {
 		}
 
 		bool _isFirstView = true;
 		std::map<std::string, double> _viewsStartTime;
 
-		LoggerModule* mLogger;
-		CountlyDelegates* mCly;
+		cly::LoggerModule* _logger;
+		cly::CountlyDelegates* _cly;
 	};
 
 
-	ViewsModule::ViewsModule(CountlyDelegates* cly, LoggerModule* logger) {
+	ViewsModule::ViewsModule(cly::CountlyDelegates* cly, cly::LoggerModule* logger) {
 		impl.reset(new ViewModuleImpl(cly, logger));
-		//impl->mLogger;->log(0, "ViewsModule:: Initialized");
+
+		impl->_logger->log(cly::LogLevel::DEBUG, cly::Utils::format("[ViewsModule] Initialized"));
 	}
 
 	ViewsModule::~ViewsModule() {
 	}
 
 	void ViewsModule::recordOpenView(const std::string& name, std::map<std::string, std::string> segmentation) {
+		impl->_logger->log(cly::LogLevel::INFO, cly::Utils::format("[ViewsModule] recordOpenView:  name = {}, segmentation = {}", name, segmentation));
+
 		if (impl->_viewsStartTime.find(name) == impl->_viewsStartTime.end()) {
 			impl->_viewsStartTime["name"] = 5.0;
 		}
@@ -50,11 +53,7 @@ namespace countly_sdk {
 			}
 		}
 
-		impl->mCly->recordEventInternal(CLY_VIEW_KEY, viewSegments);
-
-		
-
-		//impl->mLogger->log(0, "ViewsModule:: recordOpenView event: " + event.serialize());
+		impl->_cly->RecordEvent(CLY_VIEW_KEY, viewSegments, 1);
 
 	}
 
@@ -67,12 +66,11 @@ namespace countly_sdk {
 			viewSegments["name"] = name;
 			viewSegments["segment"] = "cpp";
 
-			impl->mCly->recordEventInternal(CLY_VIEW_KEY, viewSegments);
+			impl->_cly->RecordEvent(CLY_VIEW_KEY, viewSegments, 1);
 			impl->_viewsStartTime.erase(name);
 		}
 		else {
-			//Print error
-			//impl->mLogger->log(0, "ViewsModule:: recordOpenView event: " + event.serialize());
+			impl->_logger->log(cly::LogLevel::INFO, cly::Utils::format("[ViewsModule] recordOpenView:  name = {}", name));
 		}
 
 	}
