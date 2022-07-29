@@ -45,6 +45,11 @@ public:
 	enum LogLevel { DEBUG = 1, INFO = 2, WARNING = 3, ERROR = 4, FATAL = 5 };
 
 	void setLogger(void (*fun)(LogLevel level, const std::string& message));
+	
+	/*
+	This function should not be used as it will be removed in a future release. It is
+	currently added as a temporary workaround.
+	*/
 	inline std::function<void(LogLevel, const std::string&)> getLogger() { return logger_function; }
 
 	struct HTTPResponse {
