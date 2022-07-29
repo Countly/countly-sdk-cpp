@@ -41,7 +41,7 @@ Countly::Countly() {
 Countly::~Countly() {
 	is_being_disposed = true;
 	stop();
-	logger.release();
+	logger.reset();
 
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
 	curl_global_cleanup();
