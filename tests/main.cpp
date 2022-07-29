@@ -135,6 +135,24 @@ std::string customChecksumCalculator(const std::string& data) {
 	return result;
 }
 
+void printLog(Countly::LogLevel level, const std::string& msg) {
+	CHECK(msg == "message");
+	CHECK(level == Countly::LogLevel::DEBUG);
+}
+
+TEST_CASE("Logger function validation") {
+	Countly& countly = Countly::getInstance();
+
+	CHECK(countly.getLogger() == nullptr);
+	countly.setLogger(printLog);
+	CHECK(countly.getLogger() != nullptr);
+	
+	countly.getLogger()(Countly::LogLevel::DEBUG, "message");
+
+	countly.setLogger(nullptr);
+	CHECK(countly.getLogger() == nullptr);
+}
+
 TEST_CASE("custom sha256 function validation") {
 	Countly& countly = Countly::getInstance();
 

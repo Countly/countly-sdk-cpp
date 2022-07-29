@@ -12,12 +12,28 @@ namespace cly {
 	public:
 		LoggerModule();
 		~LoggerModule();
+
+		/**
+		* Set custom logger function.
+		*
+		* @param logger pointer to function.
+		*/
 		void setLogger(LoggerFunction logger);
+
+		/**
+		* Print important information.
+		*
+		* @param level importance and urgency of the message.
+		* @param message description of log.
+		*/
 		void log(LogLevel level, const std::string& message);
+
 	private:
 		class LoggerModuleImpl;
 		std::unique_ptr<LoggerModuleImpl> impl;
 	};
+
+
 }
 #endif
 
