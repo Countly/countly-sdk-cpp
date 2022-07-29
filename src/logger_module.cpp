@@ -20,7 +20,7 @@ namespace cly {
 	}
 
 	void LoggerModule::log(LogLevel level, const std::string& message) {
-		if (impl->logger_function) {
+		if (impl->logger_function != nullptr) {
 			impl->logger_function(level, message);
 		}
 	}
