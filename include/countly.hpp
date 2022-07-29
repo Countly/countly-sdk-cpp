@@ -22,8 +22,7 @@ using json = nlohmann::json;
 #ifdef _WIN32
 #undef ERROR
 #endif
-
-using namespace::countly_sdk;
+#include "countly/logger_module.hpp"
 
 class Countly : public CountlyDelegates {
 public:
@@ -43,17 +42,22 @@ public:
 
 	void setSalt(const std::string& value);
 
-	enum LogLevel {DEBUG, INFO, WARNING, ERROR, FATAL};
+	enum LogLevel { DEBUG = 1, INFO = 2, WARNING = 3, ERROR = 4, FATAL = 5 };
 
-	using LoggerFunction = std::function<void(LogLevel, const std::string&)>;
-	void setLogger(LoggerFunction fun);
+	void setLogger(void (*fun)(LogLevel level, const std::string& message));
+	
+	/*
+	This function should not be used as it will be removed in a future release. It is
+	currently added as a temporary workaround.
+	*/
+	inline std::function<void(LogLevel, const std::string&)> getLogger() { return logger_function; }
 
 	struct HTTPResponse {
 		bool success;
 		json data;
 	};
 	
-	void setSha256(SHA256Function fun);
+	void setSha256(cly::SHA256Function fun);
 
 	using HTTPClientFunction = std::function<HTTPResponse(bool, const std::string&, const std::string&)>;
 	void setHTTPClient(HTTPClientFunction fun);
@@ -252,9 +256,9 @@ private:
 
 	void updateLoop();
 
-	SHA256Function sha256_function;
-	LoggerFunction logger_function;
+	cly::SHA256Function sha256_function;
 	HTTPClientFunction http_client_function;
+	void (*logger_function)(LogLevel level, const std::string& message) = nullptr;
 
 	std::string host;
 
@@ -272,6 +276,8 @@ private:
 	std::string salt;
 
 	std::unique_ptr<std::thread> thread;
+	std::unique_ptr<cly::LoggerModule> logger;
+
 	std::mutex mutex;
 	bool stop_thread = false;
 	bool running = false;

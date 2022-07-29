@@ -40,9 +40,7 @@ int main() {
 	ct.alwaysUsePost(true);
 	ct.setDeviceID("test-device-id");
 
-	Countly::LoggerFunction logger_function;
-	logger_function = printLog;
-	ct.setLogger(logger_function);
+	ct.setLogger(printLog);
 	// OS, OS_version, device, resolution, carrier, app_version);
 	ct.SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Carrier", "1.0");
 	// Server and port
