@@ -282,7 +282,7 @@ private:
 
 	std::unique_ptr<std::thread> thread;
 	std::unique_ptr<cly::ViewsModule> views_module;
-	std::unique_ptr<cly::LoggerModule> logger;
+	std::shared_ptr<cly::LoggerModule> logger;
 
 	std::mutex mutex;
 	bool stop_thread = false;

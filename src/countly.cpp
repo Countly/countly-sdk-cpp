@@ -353,7 +353,7 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 	}
 
 
-	views_module.reset(new cly::ViewsModule(this, logger.get()));
+	views_module.reset(new cly::ViewsModule(this, logger));
 	
 	is_sdk_initialized = true; // after this point SDK is initialized.
 
