@@ -19,7 +19,7 @@ public:
 
   void closeViewWithID(const std::string &uuid);
   void closeViewWithName(const std::string &name);
-  void openView(const std::string &name,
+  std::string openView(const std::string &name,
                 std::map<std::string, std::string> segmentation = {});
 
 private:

@@ -8,6 +8,8 @@
 #include <stdarg.h>
 #include <stdexcept>
 #include <string>
+#include <cassert>
+
 #define COUNTLY_SDK_NAME "cpp-native-unknown"
 #define COUNTLY_SDK_VERSION "0.1.0"
 #define COUNTLY_API_VERSION "21.11.2"
@@ -42,17 +44,31 @@ class Utils {
 public:
   template <typename... Args>
   static std::string format(const std::string &format, Args... args) {
-    int size_s = std::snprintf(nullptr, 0, format.c_str(), args...) +
-                 1; // Extra space for '\0'
-    if (size_s <= 0) {
-      throw std::runtime_error("Error during formatting.");
-    }
-    auto size = static_cast<size_t>(size_s);
-    std::unique_ptr<char[]> buf(new char[size]);
-    std::snprintf(buf.get(), size, format.c_str(), args...);
+    int length = std::snprintf(nullptr, 0, format.c_str(), args...);
+    assert(length >= 0);
 
-    return std::string(buf.get(),
-                       buf.get() + size - 1); // We don't want the '\0' inside
+    char *buf = new char[length + 1];
+    std::snprintf(buf, length + 1, format.c_str(), args...);
+
+    std::string str(buf);
+    delete[] buf;
+    return str;
+  }
+
+  static std::string map_to_string(std::map<std::string, std::string> &m) {
+    std::string output = "";
+    std::string convrt = "";
+    std::string result = "";
+
+    for (auto it = m.cbegin(); it != m.cend(); it++) {
+
+      convrt = it->second;
+      output += (it->first) + ":" + (convrt) + ", ";
+    }
+
+    result = output.substr(0, output.size() - 2);
+
+    return "{" + result + "}";
   }
 
   static std::string generateUUID() {
