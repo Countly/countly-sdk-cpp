@@ -9,6 +9,7 @@
 
 namespace cly {
 class ViewsModule {
+
 public:
   class Event;
   class LoggerModule;
@@ -16,9 +17,10 @@ public:
   ViewsModule(cly::CountlyDelegates *cly,
               std::shared_ptr<cly::LoggerModule> logger);
 
-  void recordCloseView(const std::string &name);
-  void recordOpenView(const std::string &name,
-                      std::map<std::string, std::string> segmentation = {});
+  void closeViewWithID(const std::string &uuid);
+  void closeViewWithName(const std::string &name);
+  void openView(const std::string &name,
+                std::map<std::string, std::string> segmentation = {});
 
 private:
   class ViewModuleImpl;
