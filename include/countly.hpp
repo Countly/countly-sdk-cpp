@@ -244,6 +244,17 @@ public:
 	inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) {
 		_auto_session_update_interval = updateInterval;
 	}
+
+	/**
+     * Convert event queue into list.
+     *
+     * @return a vector object containing events.
+     */
+	const std::vector<std::string> debugReturnStateOfEQ() {
+          std::vector<std::string> v(event_queue.begin(), event_queue.end());
+          return v;
+	}
+
 private:
 	void _deleteThread();
 	void _sendIndependantLocationRequest();

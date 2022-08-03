@@ -14,13 +14,29 @@ public:
   class Event;
   class LoggerModule;
   ~ViewsModule();
-  ViewsModule(cly::CountlyDelegates *cly,
-              std::shared_ptr<cly::LoggerModule> logger);
+  ViewsModule(cly::CountlyDelegates *cly, std::shared_ptr<cly::LoggerModule> logger);
 
+  /**
+   * Close view a with id.
+   *
+   * @param uuid: id of the view.
+   */
   void closeViewWithID(const std::string &uuid);
+
+  /**
+   * Close view a with name.
+   *
+   * @param name: name of the view.
+   */
   void closeViewWithName(const std::string &name);
-  std::string openView(const std::string &name,
-                std::map<std::string, std::string> segmentation = {});
+
+  /**
+   * Close view a with name.
+   *
+   * @param name: name of the view.
+   * @param segmentation: custom data you want to set.
+   */
+  std::string openView(const std::string &name, std::map<std::string, std::string> segmentation = {});
 
 private:
   class ViewModuleImpl;
