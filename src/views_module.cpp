@@ -57,7 +57,7 @@ std::string ViewsModule::openView(const std::string &name, std::map<std::string,
   std::map<std::string, std::string> viewSegments;
 
   viewSegments["name"] = name;
-  viewSegments["segment"] = "cpp";
+  //viewSegments["segment"] = "cpp";
   viewSegments["visit"] = "1";
   viewSegments["_idv"] = uuid;
   viewSegments["start"] = impl->_isFirstView ? "1" : "0";
