@@ -93,16 +93,7 @@ void ViewsModule::closeViewWithName(const std::string &name) {
     return;
   }
 
-  std::chrono::system_clock::duration duration = std::chrono::system_clock::now() - impl->_viewsStartTime[uuid].startTime;
-
-  std::map<std::string, std::string> viewSegments;
-
-  viewSegments["name"] = name;
-  viewSegments["_idv"] = uuid;
-  // viewSegments["segment"] = "cpp";
-
-  impl->_cly->RecordEvent(CLY_VIEW_KEY, viewSegments, 1, 0, duration.count());
-  impl->_viewsStartTime.erase(name);
+  _closeView(uuid);
 }
 
 void ViewsModule::closeViewWithID(const std::string &uuid) {
@@ -120,14 +111,16 @@ void ViewsModule::closeViewWithID(const std::string &uuid) {
     return;
   }
 
-  std::chrono::system_clock::duration duration = std::chrono::system_clock::now() - impl->_viewsStartTime[uuid].startTime;
+  _closeView(uuid);
+}
+
+void ViewsModule::_closeView(std::string eventID) {
+  std::chrono::system_clock::duration duration = std::chrono::system_clock::now() - impl->_viewsStartTime[eventID].startTime;
   std::map<std::string, std::string> viewSegments;
 
-  viewSegments["_idv"] = uuid;
-  viewSegments["name"] = impl->_viewsStartTime[uuid].name;
-  // viewSegments["segment"] = "cpp";
-
+  viewSegments["_idv"] = eventID;
+  viewSegments["name"] = impl->_viewsStartTime[eventID].name;
   impl->_cly->RecordEvent(CLY_VIEW_KEY, viewSegments, 1, 0, duration.count());
-  impl->_viewsStartTime.erase(uuid);
+  impl->_viewsStartTime.erase(eventID);
 }
 } // namespace cly

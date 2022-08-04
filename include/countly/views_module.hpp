@@ -39,6 +39,7 @@ public:
   std::string openView(const std::string &name, std::map<std::string, std::string> segmentation = {});
 
 private:
+  void _closeView(std::string eventID);
   class ViewModuleImpl;
   std::unique_ptr<ViewModuleImpl> impl;
 };
