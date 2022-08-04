@@ -247,7 +247,7 @@ public:
 
 	/**
      * Convert event queue into list.
-     *
+     * Warning: This method is for debugging purposes, and it is going to be removed in the future.
      * @return a vector object containing events.
      */
 	const std::vector<std::string> debugReturnStateOfEQ() {

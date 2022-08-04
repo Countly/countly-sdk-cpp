@@ -2,6 +2,7 @@
 #define COUNTLY_CONSTANTS_HPP_
 
 #include <cassert>
+#include <chrono>
 #include <cstdlib>
 #include <functional>
 #include <map>
@@ -47,19 +48,16 @@ template <typename... Args> static std::string format(const std::string &format,
  * @return a string object holding content of map.
  */
 static std::string mapToString(std::map<std::string, std::string> &m) {
-  std::string output = "";
-  std::string convert = "";
+  std::string holder = "{";
   std::string result = "";
 
   for (auto it = m.cbegin(); it != m.cend(); it++) {
-
-    convert = it->second;
-    output += (it->first) + ":" + (convert) + ", ";
+    holder += (it->first) + ":" + (it->second) + ", ";
   }
 
-  result = output.substr(0, output.size() - 2);
+  result = holder.substr(0, holder.size() - 2) + "}";
 
-  return "{" + result + "}";
+  return result;
 }
 
 /**
@@ -90,7 +88,10 @@ static std::string generateEventID() {
       uuid[i] = CHARS[(i == 19) ? ((rnd & 0xf) & 0x3) | 0x8 : rnd & 0xf];
     }
   }
-  return uuid;
+
+  std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
+  const auto timestamp = now.time_since_epoch();
+  return uuid + "-" + std::to_string(timestamp.count());
 }
 } // namespace utils
 

@@ -19,9 +19,9 @@ public:
   /**
    * Close view a with id.
    *
-   * @param uuid: id of the view.
+   * @param viewId: id of the view.
    */
-  void closeViewWithID(const std::string &uuid);
+  void closeViewWithID(const std::string &viewId);
 
   /**
    * Close view a with name.
@@ -39,7 +39,7 @@ public:
   std::string openView(const std::string &name, std::map<std::string, std::string> segmentation = {});
 
 private:
-  void _closeView(std::string eventID);
+  void _recordView(std::string eventID);
   class ViewModuleImpl;
   std::unique_ptr<ViewModuleImpl> impl;
 };

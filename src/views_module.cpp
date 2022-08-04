@@ -13,7 +13,7 @@ public:
   };
 
   ViewModuleImpl(cly::CountlyDelegates *cly, std::shared_ptr<cly::LoggerModule> logger) : _cly{cly}, _logger{logger} {}
-  std::string findViewUUIDByName(const std::string &name) {
+  std::string findViewIdByName(const std::string &name) {
     for (auto const &x : _viewsStartTime) {
       if (x.second.name == name) {
         return x.first;
@@ -21,6 +21,38 @@ public:
     }
 
     return {};
+  }
+
+  ~ViewModuleImpl() { _logger.reset(); }
+
+  void _recordView(const std::string &eventID, std::map<std::string, std::string> segmentation = {}, bool isOpenView = false) {
+    ViewInfo &v = _viewsStartTime[eventID];
+    std::chrono::system_clock::duration duration = std::chrono::system_clock::now() - v.startTime;
+    std::map<std::string, std::string> viewSegments;
+
+    viewSegments["_idv"] = eventID;
+    viewSegments["name"] = v.name;
+
+    if (isOpenView) {
+      viewSegments["visit"] = "1";
+      viewSegments["start"] = _isFirstView ? "1" : "0";
+
+      for (auto key_value : segmentation) {
+        auto itr = viewSegments.find(key_value.first);
+        if (itr != viewSegments.end()) {
+          (*itr).second = key_value.second;
+        } else {
+          viewSegments[key_value.first] = key_value.second;
+        }
+      }
+    }
+
+    _cly->RecordEvent(CLY_VIEW_KEY, viewSegments, 1, 0, duration.count());
+    if (isOpenView) {
+      _isFirstView = false;
+    } else {
+      _viewsStartTime.erase(eventID);
+    }
   }
 
   bool _isFirstView = true;
@@ -36,7 +68,7 @@ ViewsModule::ViewsModule(cly::CountlyDelegates *cly, std::shared_ptr<cly::Logger
   impl->_logger->log(cly::LogLevel::DEBUG, cly::utils::format("[ViewsModule] Initialized"));
 }
 
-ViewsModule::~ViewsModule() { impl->_logger.reset(); }
+ViewsModule::~ViewsModule() { impl.reset(); }
 
 std::string ViewsModule::openView(const std::string &name, std::map<std::string, std::string> segmentation) {
 
@@ -47,80 +79,53 @@ std::string ViewsModule::openView(const std::string &name, std::map<std::string,
     return {};
   }
 
-  std::string &uuid = cly::utils::generateEventID();
+  std::string &viewId = cly::utils::generateEventID();
   ViewModuleImpl::ViewInfo v;
   v.name = name;
   v.startTime = std::chrono::system_clock::now();
 
-  impl->_viewsStartTime[uuid] = v;
+  impl->_viewsStartTime[viewId] = v;
 
   std::map<std::string, std::string> viewSegments;
 
-  viewSegments["name"] = name;
-  //viewSegments["segment"] = "cpp";
-  viewSegments["visit"] = "1";
-  viewSegments["_idv"] = uuid;
-  viewSegments["start"] = impl->_isFirstView ? "1" : "0";
-
-  for (auto key_value : segmentation) {
-    auto itr = viewSegments.find(key_value.first);
-    if (itr != viewSegments.end()) {
-      (*itr).second = key_value.second;
-    } else {
-      viewSegments[key_value.first] = key_value.second;
-    }
-  }
-
-  impl->_cly->RecordEvent(CLY_VIEW_KEY, viewSegments, 1);
-
-  impl->_isFirstView = false;
-  return uuid;
+  impl->_recordView(viewId, segmentation, true);
+  return viewId;
 }
 
 void ViewsModule::closeViewWithName(const std::string &name) {
-  cly::LogLevel::INFO, cly::utils::format("[ViewsModule] closeViewWithName:  name = %s", name.c_str());
+  impl->_logger->log(cly::LogLevel::INFO, cly::utils::format("[ViewsModule] closeViewWithName:  name = %s", name.c_str()));
 
   if (name.empty()) {
     impl->_logger->log(cly::LogLevel::WARNING, "[ViewsModule] closeViewWithName: view name can not be null or empty!");
     return;
   }
 
-  std::string &uuid = impl->findViewUUIDByName(name);
-  if (uuid.empty()) {
+  std::string &viewId = impl->findViewIdByName(name);
+  if (viewId.empty()) {
     cly::LogLevel::INFO, cly::utils::format("[ViewsModule] closeViewWithName:  Couldn't found "
                                             "view with name = %s",
                                             name.c_str());
     return;
   }
 
-  _closeView(uuid);
+  impl->_recordView(viewId);
 }
 
-void ViewsModule::closeViewWithID(const std::string &uuid) {
-  cly::LogLevel::INFO, cly::utils::format("[ViewsModule] closeViewWithID:  uuid = %s", uuid.c_str());
+void ViewsModule::closeViewWithID(const std::string &viewId) {
+  impl->_logger->log(cly::LogLevel::INFO, cly::utils::format("[ViewsModule] closeViewWithID:  viewId = %s", viewId.c_str()));
 
-  if (uuid.empty()) {
-    impl->_logger->log(cly::LogLevel::WARNING, "[ViewsModule] closeViewWithID: uuid can not be null or empty!");
+  if (viewId.empty()) {
+    impl->_logger->log(cly::LogLevel::WARNING, "[ViewsModule] closeViewWithID: viewId can not be null or empty!");
     return;
   }
 
-  if (impl->_viewsStartTime.find(uuid) == impl->_viewsStartTime.end()) {
+  if (impl->_viewsStartTime.find(viewId) == impl->_viewsStartTime.end()) {
     cly::LogLevel::INFO, cly::utils::format("[ViewsModule] closeViewWithID:  Couldn't found "
-                                            "view with uuid = %s",
-                                            uuid.c_str());
+                                            "view with viewId = %s",
+                                            viewId.c_str());
     return;
   }
 
-  _closeView(uuid);
-}
-
-void ViewsModule::_closeView(std::string eventID) {
-  std::chrono::system_clock::duration duration = std::chrono::system_clock::now() - impl->_viewsStartTime[eventID].startTime;
-  std::map<std::string, std::string> viewSegments;
-
-  viewSegments["_idv"] = eventID;
-  viewSegments["name"] = impl->_viewsStartTime[eventID].name;
-  impl->_cly->RecordEvent(CLY_VIEW_KEY, viewSegments, 1, 0, duration.count());
-  impl->_viewsStartTime.erase(eventID);
+  impl->_recordView(viewId);
 }
 } // namespace cly
