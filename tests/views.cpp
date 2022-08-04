@@ -1,91 +1,112 @@
 #include "countly.hpp"
 #include "doctest.h"
 
-//{\"count\":3,\"key\":\"lose\",\"segmentation\":{\"points\":-144}}
-
-TEST_CASE("events are serialized correctly") {
+TEST_CASE("views are serialized correctly") {
+  Countly &ct = Countly::getInstance();
   SUBCASE("open view") {
     SUBCASE("without segmentation") {
-      Countly &ct = Countly::getInstance();
-      ct.views().openView("view1");
+      std::string eid = ct.views().openView("view1");
       std::vector<std::string> events = ct.debugReturnStateOfEQ();
       std::string event = events.front();
       json e = json::parse(event);
       json s = e["segmentation"].get<json>();
 
-      
       CHECK(e["key"].get<std::string>() == "[CLY]_view");
       CHECK(e["count"].get<int>() == 1);
 
       CHECK(s["visit"].get<std::string>() == "1");
-      CHECK(s["_idv"].get<std::string>() != "");
+      CHECK(s["_idv"].get<std::string>() == eid);
       CHECK(s["start"].get<std::string>() == "1");
       CHECK(s["name"].get<std::string>() == "view1");
-      
     }
 
     SUBCASE("with segmentation") {
+      SUBCASE("validate 'start' field in segmentation") {
+        std::map<std::string, std::string> segmentation = {
+            {"platform", "ubuntu"},
+            {"time", "60"},
+        };
 
-	    
-      std::map<std::string, std::string> segmentation = {
-          {"platform", "ubuntu"},
-          {"time", "60"},
-      };
+        std::string eid = ct.views().openView("view2", segmentation);
+        std::vector<std::string> events = ct.debugReturnStateOfEQ();
 
-      Countly &ct = Countly::getInstance();
+        std::string event = events.at(1);
+        json e = json::parse(event);
+        json s = e["segmentation"].get<json>();
+
+        CHECK(e["key"].get<std::string>() == "[CLY]_view");
+        CHECK(e["count"].get<int>() == 1);
+
+        CHECK(s["name"].get<std::string>() == "view2");
+        CHECK(s["visit"].get<std::string>() == "1");
+        CHECK(s["_idv"].get<std::string>() == eid);
+        CHECK(s["start"].get<std::string>() == "0");
+        CHECK(s["platform"].get<std::string>() == "ubuntu");
+        CHECK(s["time"].get<std::string>() == "60");
+      }
+
+      SUBCASE("override view name") {
+        std::map<std::string, std::string> segmentation = {
+            {"platform", "ubuntu"},
+            {"time", "60"},
+            {"name", "view4"},
+
+        };
+
+        std::string eid = ct.views().openView("view3", segmentation);
+        std::vector<std::string> events = ct.debugReturnStateOfEQ();
+
+        std::string event = events.at(2);
+        json e = json::parse(event);
+        json s = e["segmentation"].get<json>();
+
+        CHECK(e["key"].get<std::string>() == "[CLY]_view");
+        CHECK(e["count"].get<int>() == 1);
+
+        CHECK(s["name"].get<std::string>() == "view4");
+        CHECK(s["visit"].get<std::string>() == "1");
+        CHECK(s["_idv"].get<std::string>() == eid);
+        CHECK(s["start"].get<std::string>() == "0");
+        CHECK(s["platform"].get<std::string>() == "ubuntu");
+        CHECK(s["time"].get<std::string>() == "60");
+      }
+    }
+  }
+
+  SUBCASE("close view") {
+    SUBCASE("close view with name") {
+      ct.views().closeViewWithName("view1");
+
       std::vector<std::string> events = ct.debugReturnStateOfEQ();
-      events.clear();
-
-      ct.views().openView("view2", segmentation);
       events = ct.debugReturnStateOfEQ();
-      
-      std::string event = events.at(0);
+
+      std::string event = events.at(3);
       json e = json::parse(event);
       json s = e["segmentation"].get<json>();
 
       CHECK(e["key"].get<std::string>() == "[CLY]_view");
       CHECK(e["count"].get<int>() == 1);
 
-      CHECK(s["name"].get<std::string>() == "view2");
-      CHECK(s["visit"].get<std::string>() == "1");
+      CHECK(s["name"].get<std::string>() == "view1");
       CHECK(s["_idv"].get<std::string>() != "");
-      CHECK(s["start"].get<std::string>() == "1");
-      CHECK(s["platform"].get<std::string>() == "ubuntu");
-      CHECK(s["time"].get<std::string>() == "60");
+    }
 
-      segmentation.clear();
-      segmentation = {
-          {"platform", "ubuntu"},
-          {"time", "60"},
-      };
-      ct.views().openView("view3", segmentation);
+    SUBCASE("close view with id") {
+      std::string eid = ct.views().openView("view-test");
+      ct.views().closeViewWithID(eid);
+
+      std::vector<std::string> events = ct.debugReturnStateOfEQ();
       events = ct.debugReturnStateOfEQ();
-      event = events.at(1);
-      e = json::parse(event);
-      s = e["segmentation"].get<json>();
+
+      std::string event = events.at(5);
+      json e = json::parse(event);
+      json s = e["segmentation"].get<json>();
 
       CHECK(e["key"].get<std::string>() == "[CLY]_view");
       CHECK(e["count"].get<int>() == 1);
 
-      CHECK(s["name"].get<std::string>() == "view3");
-      CHECK(s["visit"].get<std::string>() == "1");
-      CHECK(s["_idv"].get<std::string>() != "");
-      CHECK(s["start"].get<std::string>() == "0");
-      CHECK(s["platform"].get<std::string>() == "ubuntu");
-      CHECK(s["time"].get<std::string>() == "60");
-    }
-  }
-
-  SUBCASE("close view") {
-    SUBCASE("without segmentation") {
-      Countly &ct = Countly::getInstance();
-      ct.views().closeViewWithName("view1");
-    //  CHECK(event.serialize() == "{\"count\":1,\"key\":\"win\"}");
-    }
-
-    SUBCASE("with segmentation") {
-      Countly &ct = Countly::getInstance();
-      ct.views().closeViewWithName("view2");
+      CHECK(s["name"].get<std::string>() == "view-test");
+      CHECK(s["_idv"].get<std::string>() == eid);
     }
   }
 }
