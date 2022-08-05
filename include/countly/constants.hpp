@@ -10,6 +10,8 @@
 #include <stdarg.h>
 #include <stdexcept>
 #include <string>
+#include <stdio.h>
+#include <random>
 
 #define COUNTLY_SDK_NAME "cpp-native-unknown"
 #define COUNTLY_SDK_VERSION "0.1.0"
@@ -21,7 +23,10 @@
 namespace cly {
 using SHA256Function = std::function<std::string(const std::string &)>;
 namespace utils {
-static const std::string CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const std::default_random_engine generator;
+const std::uniform_int_distribution<int> distribution(1, INT_MAX);
+const auto dice = std::bind(distribution, generator);
+const std::string CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 /**
  * Convert map into a string.
  *
@@ -59,39 +64,17 @@ static std::string mapToString(std::map<std::string, std::string> &m) {
 
   return result;
 }
-
-/**
+    /**
  * Generate a random UUID.
  *
  * @return a string object holding a UUID.
  */
 static std::string generateEventID() {
-
-  //*Adapted from https://gist.github.com/ne-sachirou/882192
-  std::string uuid = std::string(36, ' ');
-  int rnd = 0;
-  int r = 0;
-
-  uuid[8] = '-';
-  uuid[13] = '-';
-  uuid[18] = '-';
-  uuid[23] = '-';
-
-  uuid[14] = '4';
-
-  for (int i = 0; i < 36; i++) {
-    if (i != 8 && i != 13 && i != 18 && i != 14 && i != 23) {
-      if (rnd <= 0x02) {
-        rnd = 0x2000000 + (std::rand() * 0x1000000) | 0;
-      }
-      rnd >>= 4;
-      uuid[i] = CHARS[(i == 19) ? ((rnd & 0xf) & 0x3) | 0x8 : rnd & 0xf];
-    }
-  }
+  int random = dice();
 
   std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
   const auto timestamp = now.time_since_epoch();
-  return uuid + "-" + std::to_string(timestamp.count());
+  return random + "-" + std::to_string(timestamp.count());
 }
 } // namespace utils
 
