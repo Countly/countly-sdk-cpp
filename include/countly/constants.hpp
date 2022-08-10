@@ -7,11 +7,11 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <random>
 #include <stdarg.h>
 #include <stdexcept>
-#include <string>
 #include <stdio.h>
-#include <random>
+#include <string>
 
 #define COUNTLY_SDK_NAME "cpp-native-unknown"
 #define COUNTLY_SDK_VERSION "0.1.0"
@@ -25,7 +25,6 @@ using SHA256Function = std::function<std::string(const std::string &)>;
 namespace utils {
 const std::default_random_engine generator;
 const std::uniform_int_distribution<int> distribution(1, INT_MAX);
-const auto dice = std::bind(distribution, generator);
 const std::string CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 /**
  * Convert map into a string.
@@ -64,17 +63,19 @@ static std::string mapToString(std::map<std::string, std::string> &m) {
 
   return result;
 }
-    /**
+/**
  * Generate a random UUID.
  *
  * @return a string object holding a UUID.
  */
 static std::string generateEventID() {
+  auto dice = std::bind(distribution, generator);
   int random = dice();
 
   std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
   const auto timestamp = now.time_since_epoch();
-  return random + "-" + std::to_string(timestamp.count());
+  std::string result = std::to_string(random) + "-" + std::to_string(timestamp.count());
+  return result;
 }
 } // namespace utils
 
