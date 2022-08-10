@@ -15,30 +15,30 @@ public:
   };
 
   bool _isFirstView = true;
-  std::map<std::string, ViewInfo> _viewsStartTime;
+  std::map<std::string, std::shared_ptr<ViewInfo>> _viewsStartTime;
 
   cly::CountlyDelegates *_cly;
   std::shared_ptr<cly::LoggerModule> _logger;
 
   ViewModuleImpl(cly::CountlyDelegates *cly, std::shared_ptr<cly::LoggerModule> logger) : _cly{cly}, _logger{logger} {}
-  ViewInfo findViewByName(const std::string &name) {
-    for (auto const &x : _viewsStartTime) {
-      if (x.second.name == name) {
+  std::shared_ptr<ViewInfo> findViewByName(const std::string &name) {
+    for (auto &x : _viewsStartTime) {
+      if (x.second->name == name) {
         return x.second;
       }
     }
 
-    return {};
+    return nullptr;
   }
 
   ~ViewModuleImpl() { _logger.reset(); }
 
-  void _recordView(const ViewInfo& v, std::map<std::string, std::string> segmentation = {}, bool isOpenView = false) {
-    std::chrono::system_clock::duration duration = std::chrono::system_clock::now() - v.startTime;
+  void _recordView(std::shared_ptr<ViewInfo> v, std::map<std::string, std::string> segmentation = {}, bool isOpenView = false) {
+    std::chrono::system_clock::duration duration = std::chrono::system_clock::now() - v->startTime;
     std::map<std::string, std::string> viewSegments;
 
-    viewSegments["_idv"] = v.viewId;
-    viewSegments["name"] = v.name;
+    viewSegments["_idv"] = v->viewId;
+    viewSegments["name"] = v->name;
 
     if (isOpenView) {
       viewSegments["visit"] = "1";
@@ -58,7 +58,7 @@ public:
     if (isOpenView) {
       _isFirstView = false;
     } else {
-      _viewsStartTime.erase(v.viewId);
+      _viewsStartTime.erase(v->viewId);
     }
   }
 };
@@ -81,15 +81,17 @@ std::string ViewsModule::openView(const std::string &name, std::map<std::string,
   }
 
 
-  ViewModuleImpl::ViewInfo v;
-  v.name = name;
-  v.viewId = cly::utils::generateEventID();
-  v.startTime = std::chrono::system_clock::now();
+  ViewModuleImpl::ViewInfo* v = new ViewModuleImpl::ViewInfo();
+  v->name = name;
+  v->viewId = cly::utils::generateEventID();
+  v->startTime = std::chrono::system_clock::now();
 
-  impl->_viewsStartTime[v.viewId] = v;
+  std::shared_ptr<ViewModuleImpl::ViewInfo> ptr(v);
+  
+  impl->_viewsStartTime[v->viewId] = ptr;
 
-  impl->_recordView(v, segmentation, true);
-  return v.viewId;
+  impl->_recordView(ptr, segmentation, true);
+  return ptr->viewId;
 }
 
 void ViewsModule::closeViewWithName(const std::string &name) {
@@ -100,8 +102,8 @@ void ViewsModule::closeViewWithName(const std::string &name) {
     return;
   }
 
-  ViewModuleImpl::ViewInfo v = impl->findViewByName(name);
-  if (v.name == "") {
+  std::shared_ptr<ViewModuleImpl::ViewInfo> v = impl->findViewByName(name);
+  if (v->name == "") {
     cly::LogLevel::INFO, cly::utils::format("[ViewsModule] closeViewWithName:  Couldn't found "
                                             "view with name = %s",
                                             name.c_str());
@@ -126,7 +128,7 @@ void ViewsModule::closeViewWithID(const std::string &viewId) {
     return;
   }
 
-  ViewModuleImpl::ViewInfo v = impl->_viewsStartTime[viewId];
+  std::shared_ptr<ViewModuleImpl::ViewInfo> v = impl->_viewsStartTime[viewId];
 
   impl->_recordView(v);
 }
