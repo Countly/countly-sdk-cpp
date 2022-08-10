@@ -21,10 +21,10 @@ public:
   std::shared_ptr<cly::LoggerModule> _logger;
 
   ViewModuleImpl(cly::CountlyDelegates *cly, std::shared_ptr<cly::LoggerModule> logger) : _cly{cly}, _logger{logger} {}
-  ViewInfo* findViewByName(const std::string &name) {
+  std::shared_ptr<ViewInfo> findViewByName(const std::string &name) {
     for (auto &x : _viewsStartTime) {
       if (x.second->name == name) {
-        return x.second.get();
+        return x.second;
       }
     }
 
@@ -33,7 +33,7 @@ public:
 
   ~ViewModuleImpl() { _logger.reset(); }
 
-  void _recordView(ViewInfo* v, std::map<std::string, std::string> segmentation = {}, bool isOpenView = false) {
+  void _recordView(std::shared_ptr<ViewInfo> v, std::map<std::string, std::string> segmentation = {}, bool isOpenView = false) {
     std::chrono::system_clock::duration duration = std::chrono::system_clock::now() - v->startTime;
     std::map<std::string, std::string> viewSegments;
 
@@ -90,7 +90,7 @@ std::string ViewsModule::openView(const std::string &name, std::map<std::string,
   
   impl->_viewsStartTime[v->viewId] = ptr;
 
-  impl->_recordView(v, segmentation, true);
+  impl->_recordView(ptr, segmentation, true);
   return ptr->viewId;
 }
 
@@ -102,7 +102,7 @@ void ViewsModule::closeViewWithName(const std::string &name) {
     return;
   }
 
-  ViewModuleImpl::ViewInfo* v = impl->findViewByName(name);
+  std::shared_ptr<ViewModuleImpl::ViewInfo> v = impl->findViewByName(name);
   if (v->name == "") {
     cly::LogLevel::INFO, cly::utils::format("[ViewsModule] closeViewWithName:  Couldn't found "
                                             "view with name = %s",
@@ -128,7 +128,7 @@ void ViewsModule::closeViewWithID(const std::string &viewId) {
     return;
   }
 
-  ViewModuleImpl::ViewInfo *v = impl->_viewsStartTime[viewId].get();
+  std::shared_ptr<ViewModuleImpl::ViewInfo> v = impl->_viewsStartTime[viewId];
 
   impl->_recordView(v);
 }
