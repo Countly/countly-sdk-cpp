@@ -244,10 +244,10 @@ public:
 	inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) {
 		_auto_session_update_interval = updateInterval;
 	}
-
+	
 	/**
      * Convert event queue into list.
-     * Warning: This method is for debugging purposes, and it is going to be removed in the future.
+     * Warning: This method is for debugging purposes, and it is going to be removed in the future. You should not be using this method.
      * @return a vector object containing events.
      */
 	const std::vector<std::string> debugReturnStateOfEQ() {

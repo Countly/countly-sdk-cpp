@@ -66,14 +66,14 @@ public:
 ViewsModule::ViewsModule(cly::CountlyDelegates *cly, std::shared_ptr<cly::LoggerModule> logger) {
   impl.reset(new ViewModuleImpl(cly, logger));
 
-  impl->_logger->log(cly::LogLevel::DEBUG, cly::utils::format("[ViewsModule] Initialized"));
+  impl->_logger->log(cly::LogLevel::DEBUG, cly::utils::format_string("[ViewsModule] Initialized"));
 }
 
 ViewsModule::~ViewsModule() { impl.reset(); }
 
 std::string ViewsModule::openView(const std::string &name, std::map<std::string, std::string> segmentation) {
 
-  impl->_logger->log(cly::LogLevel::INFO, cly::utils::format("[ViewsModule] openView:  name = %s, segmentation = %s", name.c_str(), utils::mapToString(segmentation).c_str()));
+  impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[ViewsModule] openView:  name = %s, segmentation = %s", name.c_str(), utils::mapToString(segmentation).c_str()));
 
   if (name.empty()) {
     impl->_logger->log(cly::LogLevel::WARNING, "[ViewsModule] openView: view name can not be null or empty!");
@@ -95,7 +95,7 @@ std::string ViewsModule::openView(const std::string &name, std::map<std::string,
 }
 
 void ViewsModule::closeViewWithName(const std::string &name) {
-  impl->_logger->log(cly::LogLevel::INFO, cly::utils::format("[ViewsModule] closeViewWithName:  name = %s", name.c_str()));
+  impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[ViewsModule] closeViewWithName:  name = %s", name.c_str()));
 
   if (name.empty()) {
     impl->_logger->log(cly::LogLevel::WARNING, "[ViewsModule] closeViewWithName: view name can not be null or empty!");
@@ -104,7 +104,7 @@ void ViewsModule::closeViewWithName(const std::string &name) {
 
   std::shared_ptr<ViewModuleImpl::ViewInfo> v = impl->findViewByName(name);
   if (v->name == "") {
-    cly::LogLevel::INFO, cly::utils::format("[ViewsModule] closeViewWithName:  Couldn't found "
+    cly::LogLevel::INFO, cly::utils::format_string("[ViewsModule] closeViewWithName:  Couldn't found "
                                             "view with name = %s",
                                             name.c_str());
     return;
@@ -114,7 +114,7 @@ void ViewsModule::closeViewWithName(const std::string &name) {
 }
 
 void ViewsModule::closeViewWithID(const std::string &viewId) {
-  impl->_logger->log(cly::LogLevel::INFO, cly::utils::format("[ViewsModule] closeViewWithID:  viewId = %s", viewId.c_str()));
+  impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[ViewsModule] closeViewWithID:  viewId = %s", viewId.c_str()));
 
   if (viewId.empty()) {
     impl->_logger->log(cly::LogLevel::WARNING, "[ViewsModule] closeViewWithID: viewId can not be null or empty!");
@@ -122,7 +122,7 @@ void ViewsModule::closeViewWithID(const std::string &viewId) {
   }
 
   if (impl->_viewsStartTime.find(viewId) == impl->_viewsStartTime.end()) {
-    cly::LogLevel::INFO, cly::utils::format("[ViewsModule] closeViewWithID:  Couldn't found "
+    cly::LogLevel::INFO, cly::utils::format_string("[ViewsModule] closeViewWithID:  Couldn't found "
                                             "view with viewId = %s",
                                             viewId.c_str());
     return;
