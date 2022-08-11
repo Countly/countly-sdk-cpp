@@ -28,7 +28,7 @@ private:
 
     return nullptr;
   }
-  void _recordView(std::shared_ptr<ViewInfo> v, const std::map<std::string, std::string> &segmentation = {}, bool isOpenView = false) {
+  void _recordView(std::shared_ptr<ViewInfo> v, const std::map<std::string, std::string> &segmentation, bool isOpenView) {
     std::chrono::system_clock::duration duration = std::chrono::system_clock::now() - v->startTime;
     std::map<std::string, std::string> viewSegments;
 
@@ -59,7 +59,10 @@ private:
 
 public:
   std::shared_ptr<cly::LoggerModule> _logger;
-  ViewModuleImpl(cly::CountlyDelegates *cly, std::shared_ptr<cly::LoggerModule> logger) : _cly{cly}, _logger{logger} {}
+  ViewModuleImpl(cly::CountlyDelegates *cly, std::shared_ptr<cly::LoggerModule> logger) {
+    _cly = cly;
+    _logger = logger;
+  }
 
   ~ViewModuleImpl() { _logger.reset(); }
 
@@ -71,7 +74,7 @@ public:
 
     std::shared_ptr<ViewModuleImpl::ViewInfo> ptr(v);
 
-    _viewsStartTime[v->viewId] = ptr;
+    _viewsStartTime[ptr->viewId] = ptr;
 
     _recordView(ptr, segmentation, true);
     return ptr->viewId;
@@ -85,7 +88,7 @@ public:
                                                         name.c_str());
       return;
     }
-    _recordView(v);
+    _recordView(v, {}, false);
   }
 
   void _closeViewWithID(const std::string &viewId) {
@@ -97,7 +100,7 @@ public:
       return;
     }
 
-    _recordView(_viewsStartTime[viewId]);
+    _recordView(_viewsStartTime[viewId], {}, false);
   }
 };
 
@@ -113,7 +116,7 @@ std::string ViewsModule::openView(const std::string &name, const std::map<std::s
 
   impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[ViewsModule] openView:  name = %s, segmentation = %s", name.c_str(), utils::mapToString(segmentation).c_str()));
 
-  if (name.empty()) {
+  if (name.empty() == true) {
     impl->_logger->log(cly::LogLevel::WARNING, "[ViewsModule] openView: view name can not be null or empty!");
     return {};
   }
@@ -124,7 +127,7 @@ std::string ViewsModule::openView(const std::string &name, const std::map<std::s
 void ViewsModule::closeViewWithName(const std::string &name) {
   impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[ViewsModule] closeViewWithName:  name = %s", name.c_str()));
 
-  if (name.empty()) {
+  if (name.empty() == true) {
     impl->_logger->log(cly::LogLevel::WARNING, "[ViewsModule] closeViewWithName: view name can not be null or empty!");
     return;
   }
