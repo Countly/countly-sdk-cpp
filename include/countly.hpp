@@ -202,15 +202,15 @@ public:
 		return *views_module.get();
 	}
 
-	void RecordEvent(const std::string key, int count) override {
+	void RecordEvent(const std::string& key, int count) override {
 		addEvent(Event(key, count));
 	}
 
-	void RecordEvent(const std::string key, int count, double sum) override {
+	void RecordEvent(const std::string& key, int count, double sum) override {
 		addEvent(Event(key, count, sum));
 	}
 
-	void RecordEvent(const std::string key, std::map<std::string, std::string> segmentation, int count) override {
+	void RecordEvent(const std::string &key, const std::map<std::string, std::string> &segmentation, int count) override {
 		Event event(key, count);
 
 		for (auto key_value: segmentation) {
@@ -220,7 +220,7 @@ public:
 		addEvent(event);
 	}
 
-	void RecordEvent(const std::string key, std::map<std::string, std::string> segmentation, int count, double sum) override {
+	void RecordEvent(const std::string &key, const std::map<std::string, std::string> &segmentation, int count, double sum) override {
 		Event event(key, count, sum);
 
 		for (auto key_value: segmentation) {
@@ -230,7 +230,7 @@ public:
 		addEvent(event);
 	}
 
-	void RecordEvent(const std::string key, std::map<std::string, std::string> segmentation, int count, double sum, double duration) override {
+	void RecordEvent(const std::string &key, const std::map<std::string, std::string> &segmentation, int count, double sum, double duration) override {
 		Event event(key, count, sum, duration);
 
 		for (auto key_value: segmentation) {

@@ -11,8 +11,6 @@ namespace cly {
 class ViewsModule {
 
 public:
-  class Event;
-  class LoggerModule;
   ~ViewsModule();
   ViewsModule(cly::CountlyDelegates *cly, std::shared_ptr<cly::LoggerModule> logger);
 
@@ -36,7 +34,7 @@ public:
    * @param name: name of the view.
    * @param segmentation: custom data you want to set.
    */
-  std::string openView(const std::string &name, std::map<std::string, std::string> segmentation = {});
+  std::string openView(const std::string &name, const std::map<std::string, std::string> &segmentation = {});
 
 private:
   void _recordView(std::string eventID);

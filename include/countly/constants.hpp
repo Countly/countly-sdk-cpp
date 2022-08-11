@@ -48,7 +48,7 @@ template <typename... Args> static std::string format_string(const std::string &
  * @return a string object holding size of map.
  * TODO: In the future, this function will be improved.
  */
-static std::string mapToString(std::map<std::string, std::string> &m) {
+static std::string mapToString(const std::map<std::string, std::string> &m) {
   int lenght = m.size();
 
   return std::to_string(lenght);
@@ -77,15 +77,15 @@ static std::string generateEventID() {
 
 class CountlyDelegates {
 public:
-  virtual void RecordEvent(const std::string key, int count) = 0;
+  virtual void RecordEvent(const std::string &key, int count) = 0;
 
-  virtual void RecordEvent(const std::string key, int count, double sum) = 0;
+  virtual void RecordEvent(const std::string &key, int count, double sum) = 0;
 
-  virtual void RecordEvent(const std::string key, std::map<std::string, std::string> segmentation, int count) = 0;
+  virtual void RecordEvent(const std::string &key, const std::map<std::string, std::string> &segmentation, int count) = 0;
 
-  virtual void RecordEvent(const std::string key, std::map<std::string, std::string> segmentation, int count, double sum) = 0;
+  virtual void RecordEvent(const std::string &key, const std::map<std::string, std::string> &segmentation, int count, double sum) = 0;
 
-  virtual void RecordEvent(const std::string key, std::map<std::string, std::string> segmentation, int count, double sum, double duration) = 0;
+  virtual void RecordEvent(const std::string &key, const std::map<std::string, std::string> &segmentation, int count, double sum, double duration) = 0;
 };
 
 } // namespace cly
