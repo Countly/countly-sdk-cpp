@@ -1,5 +1,5 @@
 21.11.3
-* Added views feature.
+* Added ability to record views.
 * Added functionality to set custom SHA256.
 
 21.11.2
