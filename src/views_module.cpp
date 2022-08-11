@@ -59,10 +59,7 @@ private:
 
 public:
   std::shared_ptr<cly::LoggerModule> _logger;
-  ViewModuleImpl(cly::CountlyDelegates *cly, std::shared_ptr<cly::LoggerModule> logger) {
-    _cly = cly;
-    _logger = logger;
-  }
+  ViewModuleImpl(cly::CountlyDelegates *cly, std::shared_ptr<cly::LoggerModule> logger) : _cly(cly), _logger(logger) {}
 
   ~ViewModuleImpl() { _logger.reset(); }
 
@@ -137,7 +134,8 @@ void ViewsModule::closeViewWithName(const std::string &name) {
 void ViewsModule::closeViewWithID(const std::string &viewId) {
   impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[ViewsModule] closeViewWithID:  viewId = %s", viewId.c_str()));
 
-  if (viewId.empty()) {
+  bool resutl = viewId.empty();
+  if (resutl) {
     impl->_logger->log(cly::LogLevel::WARNING, "[ViewsModule] closeViewWithID: viewId can not be null or empty!");
     return;
   }
