@@ -20,7 +20,7 @@
 namespace cly {
 using SHA256Function = std::function<std::string(const std::string &)>;
 namespace utils {
-const std::default_random_engine generator;
+const std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
 const std::uniform_int_distribution<int> distribution(1, INT_MAX);
 
 /**
