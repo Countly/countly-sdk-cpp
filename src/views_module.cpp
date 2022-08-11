@@ -134,8 +134,7 @@ void ViewsModule::closeViewWithName(const std::string &name) {
 void ViewsModule::closeViewWithID(const std::string &viewId) {
   impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[ViewsModule] closeViewWithID:  viewId = %s", viewId.c_str()));
 
-  bool resutl = viewId.empty();
-  if (resutl) {
+  if (viewId.empty()) {
     impl->_logger->log(cly::LogLevel::WARNING, "[ViewsModule] closeViewWithID: viewId can not be null or empty!");
     return;
   }
