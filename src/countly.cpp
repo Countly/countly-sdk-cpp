@@ -929,12 +929,12 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 
 						if (!WinHttpReadData(hRequest, body_part, n_bytes_available, &n_bytes_read)) {
 							error_reading_body = true;
-							delete body_part;
+							delete[] body_part;
 							break;
 						}
 
 						body += body_part;
-						delete body_part;
+						delete[] body_part;
 					} while (n_bytes_available > 0);
 
 					if (!body.empty()) {
