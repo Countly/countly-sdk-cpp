@@ -113,7 +113,7 @@ std::string ViewsModule::openView(const std::string &name, const std::map<std::s
 
   impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[ViewsModule] openView:  name = %s, segmentation = %s", name.c_str(), utils::mapToString(segmentation).c_str()));
 
-  if (name.empty() == true) {
+  if (name.empty()) {
     impl->_logger->log(cly::LogLevel::WARNING, "[ViewsModule] openView: view name can not be null or empty!");
     return {};
   }
@@ -124,7 +124,7 @@ std::string ViewsModule::openView(const std::string &name, const std::map<std::s
 void ViewsModule::closeViewWithName(const std::string &name) {
   impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[ViewsModule] closeViewWithName:  name = %s", name.c_str()));
 
-  if (name.empty() == true) {
+  if (name.empty()) {
     impl->_logger->log(cly::LogLevel::WARNING, "[ViewsModule] closeViewWithName: view name can not be null or empty!");
     return;
   }
