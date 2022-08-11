@@ -868,9 +868,9 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 		return http_client_function(use_post, path, data);
 	}
 #ifdef _WIN32
-	HINTERNET hSession;
-	HINTERNET hConnect;
-	HINTERNET hRequest;
+	HINTERNET hSession = nullptr;
+	HINTERNET hConnect = nullptr;
+	HINTERNET hRequest = nullptr;
 
 	hSession = WinHttpOpen(NULL, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
 	if (hSession) {
@@ -895,7 +895,7 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 		MultiByteToWideChar(CP_ACP, 0, path.c_str(), -1, wide_path, buffer_size);
 
 		hRequest = WinHttpOpenRequest(hConnect, use_post ? L"POST" : L"GET", wide_path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, use_https ? WINHTTP_FLAG_SECURE : 0);
-		delete wide_path;
+		delete[] wide_path;
 	}
 
 	if (hRequest) {
