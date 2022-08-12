@@ -936,7 +936,11 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 
 					if (!body.empty()) {
 						const nlohmann::json& parseResult = nlohmann::json::parse(body, nullptr, false);
-						if (!parseResult.is_discarded())
+						if (parseResult.is_discarded())
+						{
+							log(Countly::LogLevel::WARNING, "[Countly][sendHTTP] Returned response from the server was not a valid JSON.");
+						}
+						else 
 						{
 							response.data = parseResult;
 						}
@@ -988,7 +992,11 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 
 			if (!body.empty()) {
 				const nlohmann::json& parseResult = nlohmann::json::parse(body, nullptr, false);
-				if (!parseResult.is_discarded())
+				if (parseResult.is_discarded())
+				{
+					log(Countly::LogLevel::WARNING, "[Countly][sendHTTP] Returned response from the server was not a valid JSON.");
+				}
+				else
 				{
 					response.data = parseResult;
 				}
