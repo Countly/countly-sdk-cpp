@@ -47,6 +47,8 @@ private:
           viewSegments[key_value.first] = key_value.second;
         }
       }
+
+      v->name = viewSegments["name"];
     }
 
     _cly->RecordEvent(CLY_VIEW_KEY, viewSegments, 1, 0, duration.count());
