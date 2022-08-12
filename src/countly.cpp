@@ -638,7 +638,7 @@ bool Countly::updateSession() {
 
 			for (int event_index = 1; event_index < row_count+1; event_index++) {
 				event_id_stream << table[event_index * column_count] << ',';
-				events.push_back(json::parse(table[(event_index * column_count) + 1]));
+				events.push_back(nlohmann::json::parse(table[(event_index * column_count) + 1]));
 			}
 
 			event_id_stream.seekp(-1, event_id_stream.cur);
@@ -986,7 +986,7 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 			curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
 			response.success = (status_code >= 200 && status_code < 300);
 			if (!body.empty()) {
-				response.data = json::parse(body);
+				response.data = nlohmann::json::parse(body);
 			}
 		}
 		curl_easy_cleanup(curl);
