@@ -985,8 +985,13 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 			long status_code;
 			curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
 			response.success = (status_code >= 200 && status_code < 300);
+
 			if (!body.empty()) {
-				response.data = nlohmann::json::parse(body);
+				const nlohmann::json& parseResult = nlohmann::json::parse(body, nullptr, false);
+				if (!parseResult.is_discarded())
+				{
+					response.data = parseResult;
+				}
 			}
 		}
 		curl_easy_cleanup(curl);
