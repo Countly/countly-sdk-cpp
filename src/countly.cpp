@@ -935,7 +935,7 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 					} while (n_bytes_available > 0);
 
 					if (!body.empty()) {
-						const auto& parseResult = nlohmann::json::parse(body, nullptr, false);
+						const nlohmann::json& parseResult = nlohmann::json::parse(body, nullptr, false);
 						if (!parseResult.is_discarded())
 						{
 							response.data = parseResult;
