@@ -37,7 +37,10 @@ private:
 
     if (isOpenView) {
       viewSegments["visit"] = "1";
-      viewSegments["start"] = _isFirstView ? "1" : "0";
+
+      if (_isFirstView) {
+        viewSegments["start"] = "1";
+      }
 
       for (auto key_value : segmentation) {
         auto itr = viewSegments.find(key_value.first);
