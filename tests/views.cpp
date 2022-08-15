@@ -12,10 +12,14 @@ void validateViewSegmentation(nlohmann::json e, std::string name, std::string &v
 
   if (isOpenView) {
     CHECK(s["visit"].get<std::string>() == "1");
+  } else {
+    CHECK(s.contains("visit") == false);
   }
 
   if (isFirstView) {
     CHECK(s["start"].get<std::string>() == "1");
+  } else {
+    CHECK(s.contains("start") == false);
   }
 }
 
@@ -43,7 +47,7 @@ TEST_CASE("views are serialized correctly") {
       validateViewSegmentation(e, "view1", eid, true, true);
 
       event = events.at(eventSize - 1);
-      nlohmann::json c = nlohmann::json::parse(event);
+      e = nlohmann::json::parse(event);
       s = e["segmentation"].get<nlohmann::json>();
 
       validateViewSegmentation(e, "view1", eid, false);
