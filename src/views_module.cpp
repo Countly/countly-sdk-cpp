@@ -10,7 +10,7 @@ class ViewsModule::ViewModuleImpl {
   public:
     std::string name;
     std::string viewId;
-    std::chrono::system_clock::time_point startTime;
+    std::chrono::seconds startTime;
   };
 
 private:
@@ -29,7 +29,7 @@ private:
     return nullptr;
   }
   void _recordView(std::shared_ptr<ViewInfo> v, const std::map<std::string, std::string> &segmentation, bool isOpenView) {
-    std::chrono::system_clock::duration duration = std::chrono::system_clock::now() - v->startTime;
+    double duration = 0;
     std::map<std::string, std::string> viewSegments;
 
     viewSegments["_idv"] = v->viewId;
@@ -52,9 +52,15 @@ private:
       }
 
       v->name = viewSegments["name"];
+    } else {
+
+      const std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
+      const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
+      std::chrono::seconds dur = timestamp - v->startTime;
+      duration = dur.count();
     }
 
-    _cly->RecordEvent(CLY_VIEW_KEY, viewSegments, 1, 0, duration.count());
+    _cly->RecordEvent(CLY_VIEW_KEY, viewSegments, 1, 0, duration);
     if (isOpenView) {
       _isFirstView = false;
     } else {
@@ -72,7 +78,7 @@ public:
     ViewModuleImpl::ViewInfo *v = new ViewModuleImpl::ViewInfo();
     v->name = name;
     v->viewId = cly::utils::generateEventID();
-    v->startTime = std::chrono::system_clock::now();
+    v->startTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch());
 
     std::shared_ptr<ViewModuleImpl::ViewInfo> ptr(v);
 
