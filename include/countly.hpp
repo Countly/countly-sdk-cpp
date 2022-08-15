@@ -17,7 +17,6 @@
 #endif
 
 #include "nlohmann/json.hpp"
-using json = nlohmann::json;
 
 #ifdef _WIN32
 #undef ERROR
@@ -55,7 +54,7 @@ public:
 
 	struct HTTPResponse {
 		bool success;
-		json data;
+		nlohmann::json data;
 	};
 	
 	void setSha256(cly::SHA256Function fun);
@@ -121,7 +120,7 @@ public:
 
 	void updateRemoteConfig();
 
-	json getRemoteConfigValue(const std::string& key);
+	nlohmann::json getRemoteConfigValue(const std::string& key);
 
 	void updateRemoteConfigFor(std::string *keys, size_t key_count);
 
@@ -153,7 +152,7 @@ public:
 		template<typename T>
 		void addSegmentation(const std::string& key, T value) {
 			if (object.find("segmentation") == object.end()) {
-				object["segmentation"] = json::object();
+				object["segmentation"] = nlohmann::json::object();
 			}
 
 			object["segmentation"][key] = value;
@@ -161,7 +160,7 @@ public:
 
 		std::string serialize() const;
 	private:
-		json object;
+		nlohmann::json object;
 		bool timer_running;
 		std::chrono::system_clock::time_point timestamp;
 	};
@@ -289,7 +288,7 @@ private:
 
 	std::chrono::system_clock::time_point last_sent_session_request;
 
-	json session_params;
+	nlohmann::json session_params;
 	std::string salt;
 
 	std::unique_ptr<std::thread> thread;
@@ -310,7 +309,7 @@ private:
 #endif
 
 	bool remote_config_enabled = false;
-	json remote_config;
+	nlohmann::json remote_config;
 };
 
 #endif

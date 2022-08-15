@@ -12,9 +12,6 @@
 
 #include "countly.hpp"
 
-#include "nlohmann/json.hpp"
-using json = nlohmann::json;
-
 #ifndef COUNTLY_USE_CUSTOM_HTTP
 #ifdef _WIN32
 #include "Windows.h"
@@ -99,7 +96,7 @@ void Countly::setSha256(cly::SHA256Function fun) {
 
 void Countly::setMetrics(const std::string& os, const std::string& os_version, const std::string& device,
 			 const std::string& resolution, const std::string& carrier, const std::string& app_version) {
-	json metrics = json::object();
+	nlohmann::json metrics = nlohmann::json::object();
 
 	if (!os.empty()) {
 		metrics["_os"] = os;
@@ -609,14 +606,14 @@ bool Countly::updateSession() {
 		began_session = true;
 	}
 
-	json events = json::array();
+	nlohmann::json events = nlohmann::json::array();
 	bool no_events;
 
 #ifndef COUNTLY_USE_SQLITE
 	no_events = event_queue.empty();
 	if (!no_events) {
 		for (const auto& event_json: event_queue) {
-			events.push_back(json::parse(event_json));
+			events.push_back(nlohmann::json::parse(event_json));
 		}
 	}
 #else
@@ -646,7 +643,7 @@ bool Countly::updateSession() {
 
 			for (int event_index = 1; event_index < row_count+1; event_index++) {
 				event_id_stream << table[event_index * column_count] << ',';
-				events.push_back(json::parse(table[(event_index * column_count) + 1]));
+				events.push_back(nlohmann::json::parse(table[(event_index * column_count) + 1]));
 			}
 
 			event_id_stream.seekp(-1, event_id_stream.cur);
@@ -873,9 +870,9 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 		return http_client_function(use_post, path, data);
 	}
 #ifdef _WIN32
-	HINTERNET hSession;
-	HINTERNET hConnect;
-	HINTERNET hRequest;
+	HINTERNET hSession = nullptr;
+	HINTERNET hConnect = nullptr;
+	HINTERNET hRequest = nullptr;
 
 	hSession = WinHttpOpen(NULL, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
 	if (hSession) {
@@ -900,7 +897,7 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 		MultiByteToWideChar(CP_ACP, 0, path.c_str(), -1, wide_path, buffer_size);
 
 		hRequest = WinHttpOpenRequest(hConnect, use_post ? L"POST" : L"GET", wide_path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, use_https ? WINHTTP_FLAG_SECURE : 0);
-		delete wide_path;
+		delete[] wide_path;
 	}
 
 	if (hRequest) {
@@ -934,16 +931,24 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 
 						if (!WinHttpReadData(hRequest, body_part, n_bytes_available, &n_bytes_read)) {
 							error_reading_body = true;
-							delete body_part;
+							delete[] body_part;
 							break;
 						}
 
 						body += body_part;
-						delete body_part;
+						delete[] body_part;
 					} while (n_bytes_available > 0);
 
 					if (!body.empty()) {
-						response.data = json::parse(body);
+						const nlohmann::json& parseResult = nlohmann::json::parse(body, nullptr, false);
+						if (parseResult.is_discarded())
+						{
+							log(Countly::LogLevel::WARNING, "[Countly][sendHTTP] Returned response from the server was not a valid JSON.");
+						}
+						else 
+						{
+							response.data = parseResult;
+						}
 					}
 				}
 			}
@@ -989,8 +994,17 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 			long status_code;
 			curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
 			response.success = (status_code >= 200 && status_code < 300);
+
 			if (!body.empty()) {
-				response.data = json::parse(body);
+				const nlohmann::json& parseResult = nlohmann::json::parse(body, nullptr, false);
+				if (parseResult.is_discarded())
+				{
+					log(Countly::LogLevel::WARNING, "[Countly][sendHTTP] Returned response from the server was not a valid JSON.");
+				}
+				else
+				{
+					response.data = parseResult;
+				}
 			}
 		}
 		curl_easy_cleanup(curl);
@@ -1061,9 +1075,9 @@ void Countly::updateRemoteConfig() {
 	}
 }
 
-json Countly::getRemoteConfigValue(const std::string& key) {
+nlohmann::json Countly::getRemoteConfigValue(const std::string& key) {
 	mutex.lock();
-	json value = remote_config[key];
+	nlohmann::json value = remote_config[key];
 	mutex.unlock();
 	return value;
 }
@@ -1076,7 +1090,7 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
 	};
 
 	{
-		json keys_json = json::array();
+		nlohmann::json keys_json = nlohmann::json::array();
 		for (size_t key_index = 0; key_index < key_count; key_index++) {
 			keys_json.push_back(keys[key_index]);
 		}
@@ -1101,7 +1115,7 @@ void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
 	};
 
 	{
-		json keys_json = json::array();
+		nlohmann::json keys_json = nlohmann::json::array();
 		for (size_t key_index = 0; key_index < key_count; key_index++) {
 			keys_json.push_back(keys[key_index]);
 		}
