@@ -11,6 +11,16 @@ This repository contains the portable Countly C++ SDK.
 * **Slack user?** [Join our Slack community](http://slack.count.ly:3000/)
 * **Questions?** [Ask in our Community forum](http://community.count.ly)
 
+## About
+
+This repository includes the Countly C++ SDK.
+
+Need help? See [Countly SDK for C++](https://support.count.ly/hc/en-us/articles/4416163384857-C-) documentation at [Countly Resources](http://resources.count.ly), or ask us on our [Countly Analytics Community Slack channel](http://slack.count.ly).
+
+## Security
+
+Security is very important to us. If you discover any issue regarding security, please disclose the information responsibly by sending an email to security@count.ly and **not by creating a GitHub issue**.
+
 ## Dependencies and building
 
 Countly C++ SDK has been designed to work with very few dependencies in order to be available on most platforms.
@@ -91,16 +101,6 @@ To run unit tests associated with 'SQLITE' and 'Custom SHA-256' build executable
 ``` shell
 cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=1 -DCOUNTLY_USE_CUSTOM_SHA256=1 -B build
 ```
-## About
-
-This repository includes the Countly C++ SDK.
-
-Need help? See [Countly SDK for C++](https://support.count.ly/hc/en-us/articles/4416163384857-C-) documentation at [Countly Resources](http://resources.count.ly), or ask us on our [Countly Analytics Community Slack channel](http://slack.count.ly).
-
-## Security
-
-Security is very important to us. If you discover any issue regarding security, please disclose the information responsibly by sending an email to security@count.ly and **not by creating a GitHub issue**.
-
 ## Other Github resources
 
 This SDK needs one of the following Countly Editions to work:
