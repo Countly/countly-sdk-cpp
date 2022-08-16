@@ -23,14 +23,11 @@ void printLog(Countly::LogLevel level, const string &msg) {
   case Countly::LogLevel::WARNING:
     lvl = "[WARNING]";
     break;
-  case Countly::LogLevel::ERROR:
-    lvl = "[ERROR]";
-    break;
   case Countly::LogLevel::FATAL:
     lvl = "[FATAL]";
     break;
-
   default:
+    lvl = "[ERROR]";
     break;
   }
 
