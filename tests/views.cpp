@@ -6,6 +6,16 @@
 #include <unistd.h>
 #endif
 
+/**
+ * Validate view data.
+ *
+ * @param e: json holding view data.
+ * @param name: name of the view.
+ * @param viewId: id of the view.
+ * @param duration: duration of the view.
+ * @param isOpenView: set 'true' if it is a open view.
+ * @param isFirstView: set 'true' if it is very first view.
+ */
 void validateViewSegmentation(nlohmann::json e, std::string name, std::string &viewId, double duration, bool isOpenView, bool isFirstView = false) {
   CHECK(e["key"].get<std::string>() == "[CLY]_view");
   CHECK(e["count"].get<int>() == 1);
@@ -15,7 +25,6 @@ void validateViewSegmentation(nlohmann::json e, std::string name, std::string &v
 
   CHECK(s["_idv"].get<std::string>() == viewId);
   CHECK(s["name"].get<std::string>() == name);
-  
 
   if (isOpenView) {
     CHECK(s["visit"].get<std::string>() == "1");
@@ -30,10 +39,16 @@ void validateViewSegmentation(nlohmann::json e, std::string name, std::string &v
   }
 }
 
-TEST_CASE("views are serialized correctly") {
+TEST_CASE("recording views") {
   Countly &ct = Countly::getInstance();
 
+  /*
+  * It validates the views recorded without segmentation.
+  */
   SUBCASE("views without segmentation") {
+    /*
+    * Case: Open a view without segmentation and close it with the name.
+    */
     SUBCASE("with name") {
       unsigned int eventSize = 0;
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
@@ -60,6 +75,10 @@ TEST_CASE("views are serialized correctly") {
 
       CHECK(events.size() == eventSize);
     }
+
+    /*
+    * Open a view without segmentation and close it the id.
+    */
     SUBCASE("with id") {
       unsigned int eventSize = ct.debugReturnStateOfEQ().size();
 
@@ -85,7 +104,14 @@ TEST_CASE("views are serialized correctly") {
       CHECK(events.size() == eventSize);
     }
   }
+
+  /*
+  * It validates the views recorded with segmentation.
+  */
   SUBCASE("views with segmentation") {
+    /*
+    * Case: Open a view with segmentation and close it with the name.
+    */
     SUBCASE("with name") {
       unsigned int eventSize = ct.debugReturnStateOfEQ().size();
 
@@ -120,6 +146,9 @@ TEST_CASE("views are serialized correctly") {
 
       CHECK(events.size() == eventSize);
     }
+    /*
+    * Case: Open a view without segmentation and close it with the id.
+    */
     SUBCASE("with id") {
       unsigned int eventSize = ct.debugReturnStateOfEQ().size();
 
@@ -154,13 +183,22 @@ TEST_CASE("views are serialized correctly") {
     }
   }
 
+  /*
+  * It validates the event queue when closing non-existing views.
+  */
   SUBCASE("CLOSING NONEXISTING VIEWS") {
+    /*
+    * Closing non-existing view with name.
+    */
     SUBCASE("with name") {
       unsigned int eventSize = ct.debugReturnStateOfEQ().size();
       ct.views().closeViewWithName("view1");
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
     }
 
+    /*
+    * Closing non-existing view with id.
+    */
     SUBCASE("with id") {
       unsigned int eventSize = ct.debugReturnStateOfEQ().size();
       ct.views().closeViewWithName("event_id");
