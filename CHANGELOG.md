@@ -1,3 +1,6 @@
+22.02.0
+* Added 10-second time-outs for all windows HTTP transactions.
+
 21.11.3
 * Added functionality to set custom SHA256.
 
