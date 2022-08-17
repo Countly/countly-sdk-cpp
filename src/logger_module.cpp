@@ -3,8 +3,8 @@
 namespace cly {
 	class LoggerModule::LoggerModuleImpl {
 	public:
+		LoggerModuleImpl::LoggerModuleImpl() {}
 		LoggerFunction logger_function;
-
 	};
 
 	LoggerModule::LoggerModule()

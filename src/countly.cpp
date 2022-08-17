@@ -28,6 +28,7 @@
 #endif
 
 Countly::Countly() {
+	views_module = nullptr;
 	logger.reset(new cly::LoggerModule());
 
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
@@ -38,6 +39,7 @@ Countly::Countly() {
 Countly::~Countly() {
 	is_being_disposed = true;
 	stop();
+	views_module.reset();
 	logger.reset();
 
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
@@ -347,6 +349,9 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
 		this->port = port;
 	}
 
+
+	views_module.reset(new cly::ViewsModule(this, logger));
+	
 	is_sdk_initialized = true; // after this point SDK is initialized.
 
 	if (!running) {

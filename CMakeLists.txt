@@ -20,6 +20,7 @@ endif()
 
 add_library(countly
   ${CMAKE_CURRENT_SOURCE_DIR}/src/countly.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/views_module.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/logger_module.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/event.cpp)
 
@@ -67,6 +68,7 @@ endif()
 if(COUNTLY_BUILD_TESTS)
   add_executable(countly-tests
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/views.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/event.cpp)
   if(COUNTLY_USE_SQLITE)
     target_compile_definitions(countly-tests PRIVATE COUNTLY_USE_SQLITE)

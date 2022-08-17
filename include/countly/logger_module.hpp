@@ -32,8 +32,6 @@ namespace cly {
 		class LoggerModuleImpl;
 		std::unique_ptr<LoggerModuleImpl> impl;
 	};
-
-
 }
 #endif
 

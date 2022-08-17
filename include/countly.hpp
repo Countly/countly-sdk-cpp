@@ -22,8 +22,9 @@
 #undef ERROR
 #endif
 #include "countly/logger_module.hpp"
+#include "countly/views_module.hpp"
 
-class Countly {
+class Countly : public cly::CountlyDelegates {
 public:
 	Countly();
 
@@ -196,15 +197,19 @@ public:
 		stop();
 	}
 
-	void RecordEvent(const std::string key, int count) {
+	inline cly::ViewsModule& views() const {
+		return *views_module.get();
+	}
+
+	void RecordEvent(const std::string& key, int count) override {
 		addEvent(Event(key, count));
 	}
 
-	void RecordEvent(const std::string key, int count, double sum) {
+	void RecordEvent(const std::string& key, int count, double sum) override {
 		addEvent(Event(key, count, sum));
 	}
 
-	void RecordEvent(const std::string key, std::map<std::string, std::string> segmentation, int count) {
+	void RecordEvent(const std::string &key, const std::map<std::string, std::string> &segmentation, int count) override {
 		Event event(key, count);
 
 		for (auto key_value: segmentation) {
@@ -214,7 +219,7 @@ public:
 		addEvent(event);
 	}
 
-	void RecordEvent(const std::string key, std::map<std::string, std::string> segmentation, int count, double sum) {
+	void RecordEvent(const std::string &key, const std::map<std::string, std::string> &segmentation, int count, double sum) override {
 		Event event(key, count, sum);
 
 		for (auto key_value: segmentation) {
@@ -224,7 +229,7 @@ public:
 		addEvent(event);
 	}
 
-	void RecordEvent(const std::string key, std::map<std::string, std::string> segmentation, int count, double sum, double duration) {
+	void RecordEvent(const std::string &key, const std::map<std::string, std::string> &segmentation, int count, double sum, double duration) override {
 		Event event(key, count, sum, duration);
 
 		for (auto key_value: segmentation) {
@@ -238,6 +243,18 @@ public:
 	inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) {
 		_auto_session_update_interval = updateInterval;
 	}
+
+     /**
+     * Convert event queue into list.
+     * Warning: This method is for debugging purposes, and it is going to be removed in the future. 
+     * You should not be using this method.
+     * @return a vector object containing events.
+     */
+	const std::vector<std::string> debugReturnStateOfEQ() {
+          std::vector<std::string> v(event_queue.begin(), event_queue.end());
+          return v;
+	}
+
 private:
 	void _deleteThread();
 	void _sendIndependantLocationRequest();
@@ -275,7 +292,8 @@ private:
 	std::string salt;
 
 	std::unique_ptr<std::thread> thread;
-	std::unique_ptr<cly::LoggerModule> logger;
+	std::unique_ptr<cly::ViewsModule> views_module;
+	std::shared_ptr<cly::LoggerModule> logger;
 
 	std::mutex mutex;
 	bool stop_thread = false;
