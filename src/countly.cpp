@@ -876,6 +876,13 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 
 	hSession = WinHttpOpen(NULL, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
 	if (hSession) {
+		// Set way Shorter timeouts:
+		WinHttpSetTimeouts(hSession,
+				   10000,	// nResolveTimeout: 10sec (default 'infinite').
+				   10000,	// nConnectTimeout: 10sec (default 60sec).
+				   10000,	// nSendTimeout: 10sec (default 30sec).
+				   10000);	// nReceiveTimeout: 10sec (default 30sec).
+
 		size_t scheme_offset = use_https ? (sizeof("https://") - 1) : (sizeof("http://") - 1);
 		size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, host.c_str() + scheme_offset, -1, nullptr, 0);
 		wchar_t *wide_hostname = new wchar_t[buffer_size];

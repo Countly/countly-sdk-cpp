@@ -1,5 +1,5 @@
-
-21.11.4
+22.02.0
+* Added 10-second time-outs for all windows HTTP transactions.
 * Added ability to record views.
 
 21.11.3
