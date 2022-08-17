@@ -55,6 +55,7 @@ TEST_CASE("recording views") {
 
       std::string eid = ct.views().openView("view1");
       eventSize++;
+      CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
       std::vector<std::string> events = ct.debugReturnStateOfEQ();
       std::string event = events.at(eventSize - 1);
@@ -65,6 +66,7 @@ TEST_CASE("recording views") {
       Sleep(3000);
       ct.views().closeViewWithName("view1");
       eventSize++;
+      CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
       events = ct.debugReturnStateOfEQ();
       event = events.at(eventSize - 1);
@@ -72,8 +74,6 @@ TEST_CASE("recording views") {
       s = e["segmentation"].get<nlohmann::json>();
 
       validateViewSegmentation(e, "view1", eid, 3, false);
-
-      CHECK(events.size() == eventSize);
     }
 
     /*
@@ -84,6 +84,7 @@ TEST_CASE("recording views") {
 
       std::string eid = ct.views().openView("view1");
       eventSize++;
+      CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
       std::vector<std::string> events = ct.debugReturnStateOfEQ();
       std::string event = events.at(eventSize - 1);
@@ -95,13 +96,13 @@ TEST_CASE("recording views") {
 
       ct.views().closeViewWithID(eid);
       eventSize++;
+      CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
       events = ct.debugReturnStateOfEQ();
       event = events.at(eventSize - 1);
       e = nlohmann::json::parse(event);
 
       validateViewSegmentation(e, "view1", eid, 2, false);
-      CHECK(events.size() == eventSize);
     }
   }
 
@@ -122,6 +123,7 @@ TEST_CASE("recording views") {
       };
       std::string eid = ct.views().openView("view1", segmentation);
       eventSize++;
+      CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
       std::vector<std::string> events = ct.debugReturnStateOfEQ();
 
@@ -138,13 +140,12 @@ TEST_CASE("recording views") {
 
       ct.views().closeViewWithName("view2");
       eventSize++;
+      CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
       events = ct.debugReturnStateOfEQ();
       event = events.at(eventSize - 1);
       e = nlohmann::json::parse(event);
       validateViewSegmentation(e, "view2", eid, 3, false);
-
-      CHECK(events.size() == eventSize);
     }
     /*
     * Case: Open a view without segmentation and close it with the id.
@@ -158,6 +159,7 @@ TEST_CASE("recording views") {
       };
       std::string eid = ct.views().openView("view1", segmentation);
       eventSize++;
+      CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
       std::vector<std::string> events = ct.debugReturnStateOfEQ();
 
@@ -173,13 +175,12 @@ TEST_CASE("recording views") {
 
       ct.views().closeViewWithID(eid);
       eventSize++;
+      CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
       events = ct.debugReturnStateOfEQ();
       event = events.at(eventSize - 1);
       e = nlohmann::json::parse(event);
       validateViewSegmentation(e, "view1", eid, 1, false);
-
-      CHECK(events.size() == eventSize);
     }
   }
 
