@@ -1,6 +1,8 @@
+22.02.0
+* Added 10-second time-outs for all windows HTTP transactions.
+
 21.11.3
 * Added functionality to set custom SHA256.
-* Added 10-second time-outs for all windows HTTP transactions.
 
 21.11.2
 * Fixed a bug that occurred after trying to erase events from the SQLite database when there were none.
