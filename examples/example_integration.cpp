@@ -73,7 +73,7 @@ int main() {
       ct.RecordEvent("Event with count and sum", 644, 13.3);
       break;
     case 3: {
-      Countly::Event event("Event with sum, count, duration", 1, 10, 60.5);
+      cly::Event event("Event with sum, count, duration", 1, 10, 60.5);
       ct.addEvent(event);
       break;
     }
