@@ -23,14 +23,17 @@ EventModule::EventModule(cly::CountlyDelegates *cly, std::shared_ptr<cly::Logger
 
 EventModule::~EventModule() { impl.reset(); }
 
-void EventModule::RecordEvent(const Event &event) {}
+void EventModule::RecordEvent(const Event &event) {
+}
 
-//void EventModule::RecordEvent(const std::string &key, const int count = 1, const std::map<std::string, std::string> &segmentation = {}, const double sum = 0, const double duration = 0) {
-//  Event event(key, count, sum, duration);
-//
-//  for (auto key_value : segmentation) {
-//    event.addSegmentation(key_value.first, key_value.second);
-//  }
-//}
+void EventModule::RecordEvent(const std::string &key, const int count, const std::map<std::string, std::string> &segmentation, const double sum, const double duration) {
+  Event event(key, count, sum, duration);
+
+  for (auto key_value : segmentation) {
+    event.addSegmentation(key_value.first, key_value.second);
+  }
+
+  RecordEvent(event);
+}
 
 } // namespace cly
