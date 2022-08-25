@@ -26,6 +26,7 @@
 #include "countly/logger_module.hpp"
 #include "countly/views_module.hpp"
 #include "countly/countly_configuration.hpp"
+#include <countly/request_module.hpp>
 
 namespace cly {
 class Countly : public cly::CountlyDelegates {
@@ -222,7 +223,6 @@ private:
   void updateLoop();
   void (*logger_function)(LogLevel level, const std::string &message) = nullptr;
 
-  int port = 0;
   bool use_https = false;
 
   bool began_session = false;
@@ -233,10 +233,12 @@ private:
 
   nlohmann::json session_params;
 
-  CountlyConfiguration configiration;
   std::unique_ptr<std::thread> thread;
-  std::unique_ptr<cly::ViewsModule> views_module;
-  std::shared_ptr<cly::LoggerModule> logger;
+  std::unique_ptr<ViewsModule> views_module;
+  std::shared_ptr<LoggerModule> logger;
+  std::shared_ptr<RequestModule> request_module;
+  std::shared_ptr<RequestBuilder> request_builder;
+  std::shared_ptr<CountlyConfiguration> configiration;
 
   std::mutex mutex;
   bool stop_thread = false;

@@ -28,17 +28,17 @@ private:
 
 public:
   std::deque<std::string> request_queue;
-  const CountlyConfiguration _configuration;
+  std::shared_ptr<CountlyConfiguration> _configuration;
   std::shared_ptr<LoggerModule> _logger;
   std::shared_ptr<RequestBuilder> _requestBuilder;
-  RequestModuleImpl(const CountlyConfiguration &config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder) : _configuration(config), _logger(logger), _requestBuilder(requestBuilder) {}
+  RequestModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder) : _configuration(config), _logger(logger), _requestBuilder(requestBuilder) {}
 
   ~RequestModuleImpl() { _logger.reset(); }
 
   std::string calculateChecksum(const std::string &salt, const std::string &data) {
     std::string salted_data = data + salt;
 #ifdef COUNTLY_USE_CUSTOM_SHA256
-    if (_configuration.sha256_function == nullptr) {
+    if (_configuration->sha256_function == nullptr) {
       _logger->log(LogLevel::FATAL, "Missing SHA 256 function");
       return {};
     }
@@ -63,12 +63,12 @@ public:
 
   HTTPResponse sendHTTP(std::string data) {
     std::string path = "/i";
-    std::string host = _configuration.serverUrl;
+    std::string host = _configuration->serverUrl;
 
-    bool use_post = _configuration.enablePost || (data.size() > COUNTLY_POST_THRESHOLD);
+    bool use_post = _configuration->enablePost || (data.size() > COUNTLY_POST_THRESHOLD);
     _logger->log(LogLevel::DEBUG, "[Countly][sendHTTP] data: " + data);
-    if (!_configuration.salt.empty()) {
-      std::string checksum = calculateChecksum(_configuration.salt, data);
+    if (!_configuration->salt.empty()) {
+      std::string checksum = calculateChecksum(_configuration->salt, data);
       if (!data.empty()) {
         data += '&';
       }
@@ -81,7 +81,7 @@ public:
     response.success = false;
 
 #ifdef COUNTLY_USE_CUSTOM_HTTP
-    if (_configuration.http_client_function == nullptr) {
+    if (_configuration->http_client_function == nullptr) {
       _logger->log(LogLevel::FATAL, "Missing HTTP client function");
       return response;
     }
@@ -107,7 +107,7 @@ public:
       wchar_t *wide_hostname = new wchar_t[buffer_size];
       MultiByteToWideChar(CP_ACP, 0, host.c_str() + scheme_offset, -1, wide_hostname, buffer_size);
 
-      hConnect = WinHttpConnect(hSession, wide_hostname, _configuration.port, 0);
+      hConnect = WinHttpConnect(hSession, wide_hostname, _configuration->port, 0);
 
       delete[] wide_hostname;
     }
@@ -193,7 +193,7 @@ public:
     curl = curl_easy_init();
     if (curl) {
       std::ostringstream full_url_stream;
-      full_url_stream << host << ':' << std::dec << _configuration.port << path;
+      full_url_stream << host << ':' << std::dec << _configuration->port << path;
 
       if (!use_post) {
         full_url_stream << '?' << data;
@@ -236,7 +236,7 @@ public:
   }
 };
 
-RequestModule::RequestModule(const CountlyConfiguration &config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder) {
+RequestModule::RequestModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder) {
   impl.reset(new RequestModuleImpl(config, logger, requestBuilder));
 
   impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] Initialized"));
@@ -246,7 +246,7 @@ RequestModule::~RequestModule() { impl.reset(); }
 
 void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &data) {
 
-  if (impl->_configuration.requestQueueThreshold == impl->request_queue.size()) {
+  if (impl->_configuration->requestQueueThreshold == impl->request_queue.size()) {
     impl->_logger->log(LogLevel::WARNING, cly::utils::format_string("[RequestModule] addRequestToQueue: Request Queue is full. Dropping the oldest request."));
     impl->request_queue.pop_back();
   }

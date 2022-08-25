@@ -19,7 +19,7 @@ class RequestModule {
 
 public:
   ~RequestModule();
-  RequestModule(const CountlyConfiguration &config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder);
+  RequestModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder);
 
   void processQueue();
   void addRequestToQueue(const std::map<std::string, std::string> &data);
