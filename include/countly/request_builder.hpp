@@ -11,6 +11,7 @@ namespace cly {
 class RequestBuilder {
 private:
   std::shared_ptr<CountlyConfiguration> _configuration;
+  std::shared_ptr<LoggerModule> _logger;
 
 public:
   RequestBuilder(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger);

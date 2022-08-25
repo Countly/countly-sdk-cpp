@@ -4,7 +4,7 @@
 #include <sstream>
 #include <chrono>
 namespace cly {
-RequestBuilder::RequestBuilder(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger) {}
+RequestBuilder::RequestBuilder(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger) : _configuration(config), _logger(logger) {}
 
 RequestBuilder::~RequestBuilder() {}
 
@@ -28,7 +28,7 @@ std::string RequestBuilder::buildRequest(const std::map<std::string, std::string
 
   std::map<std::string, std::string> request = {
       {"app_key", _configuration->appKey},
-      {"device_id", _configuration->deviceId}, 
+    //  {"device_id", _configuration->deviceId}, 
       {"timestamp", std::to_string(timestamp.count())}
   };
 

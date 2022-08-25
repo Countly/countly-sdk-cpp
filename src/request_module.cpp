@@ -24,14 +24,20 @@
 namespace cly {
 class RequestModule::RequestModuleImpl {
 private:
-  bool use_https = false;
+  bool use_https = true;
 
 public:
   std::deque<std::string> request_queue;
   std::shared_ptr<CountlyConfiguration> _configuration;
   std::shared_ptr<LoggerModule> _logger;
   std::shared_ptr<RequestBuilder> _requestBuilder;
-  RequestModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder) : _configuration(config), _logger(logger), _requestBuilder(requestBuilder) {}
+  RequestModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder) : _configuration(config), _logger(logger), _requestBuilder(requestBuilder) {
+    if (_configuration->serverUrl.find("http://") == 0) {
+      use_https = false;
+    } else if (_configuration->serverUrl.find("https://") == 0) {
+      use_https = true;
+    }
+  }
 
   ~RequestModuleImpl() { _logger.reset(); }
 
@@ -253,6 +259,8 @@ void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &
 
   std::string &request = impl->_requestBuilder->buildRequest(data);
   impl->request_queue.push_back(request);
+
+  processQueue();
 }
 
 void RequestModule::processQueue() {
