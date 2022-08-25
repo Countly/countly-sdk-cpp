@@ -9,6 +9,7 @@
 #include <random>
 #include <sstream>
 #include <string>
+#include "nlohmann/json.hpp"
 
 #define COUNTLY_SDK_NAME "cpp-native-unknown"
 #define COUNTLY_SDK_VERSION "0.1.0"
@@ -18,6 +19,11 @@
 #define COUNTLY_MAX_EVENTS_DEFAULT 200
 
 namespace cly {
+struct HTTPResponse {
+  bool success;
+  nlohmann::json data;
+};
+using HTTPClientFunction = std::function<HTTPResponse(bool, const std::string &, const std::string &)>;
 using SHA256Function = std::function<std::string(const std::string &)>;
 namespace utils {
 const std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());

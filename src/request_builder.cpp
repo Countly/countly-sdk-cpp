@@ -2,6 +2,7 @@
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <chrono>
 namespace cly {
 RequestBuilder::RequestBuilder(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger) {}
 
@@ -22,13 +23,17 @@ std::string RequestBuilder::encodeURL(const std::string &data) {
 }
 
 std::string RequestBuilder::buildRequest(const std::map<std::string, std::string> &data) {
+  const std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
+  const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
 
   std::map<std::string, std::string> request = {
       {"app_key", _configuration->appKey},
-      {"device_id", _configuration->deviceId},
+      {"device_id", _configuration->deviceId}, 
+      {"timestamp", std::to_string(timestamp.count())}
   };
 
   request.insert(data.begin(), data.end());
+  return serializeData(request);
 }
 
   std::string RequestBuilder::serializeData(const std::map<std::string, std::string> &data) {
