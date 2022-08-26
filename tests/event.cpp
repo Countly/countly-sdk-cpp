@@ -1,6 +1,6 @@
 #include "countly.hpp"
 #include "doctest.h"
-
+using namespace cly;
 TEST_CASE("events are serialized correctly") {
 	SUBCASE("without segmentation") {
 		SUBCASE("without sum") {

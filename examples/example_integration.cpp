@@ -10,6 +10,7 @@
 #endif
 
 using namespace std;
+using namespace cly;
 
 void printLog(Countly::LogLevel level, const string &msg) {
   string lvl = "[DEBUG]";

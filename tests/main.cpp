@@ -13,6 +13,7 @@
 
 #include "nlohmann/json.hpp"
 using json = nlohmann::json;
+using namespace cly;
 
 #define COUNTLY_TEST_APP_KEY "a32cb06789a6e99958d628378ee66bf8583a454f"
 #define COUNTLY_TEST_DEVICE_ID "11732aa3-19a6-4272-9057-e3411f1938be"

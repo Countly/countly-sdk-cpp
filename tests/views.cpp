@@ -6,6 +6,8 @@
 #include <unistd.h>
 #endif
 
+using namespace cly;
+
 /**
  * Validate view data.
  *
