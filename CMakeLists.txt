@@ -29,7 +29,7 @@ target_include_directories(countly
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 set_target_properties(countly PROPERTIES
-    CXX_STANDARD 11
+    CXX_STANDARD 14
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO)
 
@@ -81,7 +81,7 @@ if(COUNTLY_BUILD_TESTS)
   target_include_directories(countly-tests PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include)
   target_link_libraries(countly-tests countly)
   set_target_properties(countly-tests PROPERTIES
-    CXX_STANDARD 11
+    CXX_STANDARD 14
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO)
 endif()
@@ -97,7 +97,7 @@ if(COUNTLY_BUILD_SAMPLE)
   target_include_directories(countly-sample PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include)
   target_link_libraries(countly-sample countly)
   set_target_properties(countly-sample PROPERTIES
-    CXX_STANDARD 11
+    CXX_STANDARD 14
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO)
 endif()
