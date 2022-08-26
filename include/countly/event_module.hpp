@@ -16,7 +16,7 @@ public:
   EventModule(cly::CountlyDelegates *cly, std::shared_ptr<cly::LoggerModule> logger);
 
   void RecordEvent(const Event &event);
-  //void RecordEvent(const std::string &key, const int count = 1, const std::map<std::string, std::string> &segmentation = {}, const double sum = 0, const double duration = 0);
+  void RecordEvent(const std::string &key, const int count = 1, const std::map<std::string, std::string> &segmentation = {}, const double sum = 0, const double duration = 0);
 
 private:
   class EventModuleImpl;

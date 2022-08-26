@@ -11,20 +11,19 @@
 
 using namespace std;
 
-
-void printLog(cly::LogLevel level, const string &msg) {
+void printLog(Countly::LogLevel level, const string &msg) {
   string lvl = "[DEBUG]";
   switch (level) {
-  case cly::LogLevel::DEBUG:
-    lvl = "[DEBUG]";
+  case Countly::LogLevel::DEBUG:
+    lvl = "[Debug]";
     break;
-  case cly::LogLevel::INFO:
+  case Countly::LogLevel::INFO:
     lvl = "[INFO]";
     break;
-  case cly::LogLevel::WARNING:
+  case Countly::LogLevel::WARNING:
     lvl = "[WARNING]";
     break;
-  case cly::LogLevel::FATAL:
+  case Countly::LogLevel::FATAL:
     lvl = "[FATAL]";
     break;
   default:
@@ -37,7 +36,7 @@ void printLog(cly::LogLevel level, const string &msg) {
 
 int main() {
   cout << "Sample App" << endl;
-  cly::Countly &ct = cly::Countly::getInstance();
+  Countly &ct = Countly::getInstance();
   ct.alwaysUsePost(true);
   ct.setDeviceID("test-device-id");
 
