@@ -47,7 +47,7 @@ int main() {
   // Server and port
   ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, true);
   ct.SetMaxEventsPerMessage(10);
-  ct.setAutomaticSessionUpdateInterval(60);
+  ct.setAutomaticSessionUpdateInterval(5);
 
   bool flag = true;
   while (flag) {
