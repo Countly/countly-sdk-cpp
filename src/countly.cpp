@@ -143,13 +143,12 @@ void Countly::setUserDetails(const std::map<std::string, std::string>& value) {
 	}
 
 	std::map<std::string, std::string> data = {
-			//{"app_key", session_params["app_key"].get<std::string>()},
+			{"app_key", session_params["app_key"].get<std::string>()},
 			{"device_id", session_params["device_id"].get<std::string>()},
 			{"user_details", session_params["user_details"].dump()}
 	};
 
-	//sendHTTP("/i", Countly::serializeForm(data));
-    request_module->addRequestToQueue(data);
+	sendHTTP("/i", Countly::serializeForm(data));
 	mutex.unlock();
 }
 
@@ -164,13 +163,12 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string>& val
 	}
 
 	std::map<std::string, std::string> data = {
-			//{"app_key", session_params["app_key"].get<std::string>()},
+			{"app_key", session_params["app_key"].get<std::string>()},
 			{"device_id", session_params["device_id"].get<std::string>()},
 			{"user_details", session_params["user_details"].dump()}
 	};
 
-	//sendHTTP("/i", Countly::serializeForm(data));
-    request_module->addRequestToQueue(data);
+	sendHTTP("/i", Countly::serializeForm(data));
 	mutex.unlock();
 }
 
@@ -246,12 +244,10 @@ void Countly::_sendIndependantLocationRequest() {
 	const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
 
 	if (!data.empty()) {
-		/*data["app_key"] = session_params["app_key"].get<std::string>();
+		data["app_key"] = session_params["app_key"].get<std::string>();
+		data["device_id"] = session_params["device_id"].get<std::string>();
 		data["timestamp"] = std::to_string(timestamp.count());
-		sendHTTP("/i", Countly::serializeForm(data));*/
-
-        data["device_id"] = session_params["device_id"].get<std::string>();
-        request_module->addRequestToQueue(data);
+		sendHTTP("/i", Countly::serializeForm(data));
 	}
 	
 	mutex.unlock();
@@ -303,14 +299,12 @@ void Countly::_changeDeviceIdWithMerge(const std::string& value) {
 	const std::chrono::system_clock::time_point now = Countly::getTimestamp();
 	const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
 	std::map<std::string, std::string> data = {
-	//{"app_key", session_params["app_key"].get<std::string>()},
+	{"app_key", session_params["app_key"].get<std::string>()},
 	{"device_id", session_params["device_id"].get<std::string>()},
 	{"old_device_id", session_params["old_device_id"].get<std::string>()},
-	//{"timestamp", std::to_string(timestamp.count())},
+	{"timestamp", std::to_string(timestamp.count())},
 	};
-    request_module->addRequestToQueue(data);
-	//sendHTTP("/i", Countly::serializeForm(data));
-
+	sendHTTP("/i", Countly::serializeForm(data));
 
 	session_params.erase("old_device_id");
 	mutex.unlock();
@@ -346,7 +340,7 @@ void Countly::start(const std::string& app_key, const std::string& host, int por
     
 
 	log(LogLevel::INFO, "[Countly][start]");
-    if (configiration->serverUrl.find("http://") == 0) {
+        if (configiration->serverUrl.find("http://") == 0) {
 		use_https = false;
 	} else if (configiration->serverUrl.find("https://") == 0) {
 		use_https = true;
@@ -564,8 +558,8 @@ bool Countly::beginSession() {
 	std::map<std::string, std::string> data = {
 		{"sdk_name", COUNTLY_SDK_NAME},
 		{"sdk_version", COUNTLY_API_VERSION},
-		//{"timestamp", std::to_string(timestamp.count())},
-		//{"app_key", session_params["app_key"].get<std::string>()},
+		{"timestamp", std::to_string(timestamp.count())},
+		{"app_key", session_params["app_key"].get<std::string>()},
 		{"device_id", session_params["device_id"].get<std::string>()},
 		{"begin_session", "1"}
 	};
@@ -595,16 +589,11 @@ bool Countly::beginSession() {
 		data["metrics"] = session_params["metrics"].dump();
 	}
 
-	request_module->addRequestToQueue(data);
-    session_params.erase("user_details");
-    last_sent_session_request = Countly::getTimestamp();
-    began_session = true;
-
-	/*if (sendHTTP("/i", Countly::serializeForm(data)).success) {
+	if (sendHTTP("/i", Countly::serializeForm(data)).success) {
 		session_params.erase("user_details");
 		last_sent_session_request = Countly::getTimestamp();
 		began_session = true;
-	}*/
+	}
 
 	if (remote_config_enabled) {
 		mutex.unlock();
@@ -687,17 +676,14 @@ bool Countly::updateSession() {
 	if (duration.count() >= _auto_session_update_interval) {
 		log(LogLevel::DEBUG, "[Countly][updateSession] sending session update.");
 		std::map<std::string, std::string> data = {
-			//{"app_key", session_params["app_key"].get<std::string>()},
+			{"app_key", session_params["app_key"].get<std::string>()},
 			{"device_id", session_params["device_id"].get<std::string>()},
 			{"session_duration", std::to_string(duration.count())}
 		};
-
-		/*if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
+		if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
 			mutex.unlock();
 			return false;
-		}*/
-
-		request_module->addRequestToQueue(data);
+		}
 
 		last_sent_session_request += duration;
 	}
@@ -705,16 +691,15 @@ bool Countly::updateSession() {
 	if (!no_events) {
 		log(LogLevel::DEBUG, "[Countly][updateSession] sending event.");
 		std::map<std::string, std::string> data = {
-		//{"app_key", session_params["app_key"].get<std::string>()},
+		{"app_key", session_params["app_key"].get<std::string>()},
 		{"device_id", session_params["device_id"].get<std::string>()},
 		{"events", events.dump()}
 		};
 
-		request_module->addRequestToQueue(data);
-		/*if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
+		if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
 			mutex.unlock();
 			return false;
-		}*/
+		}
 	}
 
 #ifndef COUNTLY_USE_SQLITE
@@ -750,10 +735,10 @@ bool Countly::endSession() {
 
 	mutex.lock();
 	std::map<std::string, std::string> data = {
-	//	{"app_key", session_params["app_key"].get<std::string>()},
+		{"app_key", session_params["app_key"].get<std::string>()},
 		{"device_id", session_params["device_id"].get<std::string>()},
 		{"session_duration", std::to_string(duration.count())},
-		//{"timestamp", std::to_string(timestamp.count())},
+		{"timestamp", std::to_string(timestamp.count())},
 		{"end_session", "1"}
 	};
 
@@ -763,18 +748,15 @@ bool Countly::endSession() {
 		return false;
 	}
 
-	request_module->addRequestToQueue(data);
-	/*if (sendHTTP("/i", Countly::serializeForm(data)).success) {
+	if (sendHTTP("/i", Countly::serializeForm(data)).success) {
 		last_sent_session_request = now;
 		began_session = false;
 		mutex.unlock();
 		return true;
-	}*/
+	}
 
-	last_sent_session_request = now;
-    began_session = false;
-    mutex.unlock();
-    return true;
+	mutex.unlock();
+	return false;
 }
 
 std::chrono::system_clock::time_point Countly::getTimestamp() {
