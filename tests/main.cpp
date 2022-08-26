@@ -223,7 +223,7 @@ TEST_CASE("events are sent correctly") {
 	}
 
 	SUBCASE("single event is sent") {
-		Countly::Event event("win", 4);
+		cly::Event event("win", 4);
 		event.addSegmentation("points", 100);
 		countly.addEvent(event);
 		WAIT_FOR_SQLITE(1);
@@ -237,8 +237,8 @@ TEST_CASE("events are sent correctly") {
 	}
 
 	SUBCASE("two events are sent") {
-		Countly::Event event1("win", 2);
-		Countly::Event event2("achievement", 1);
+		cly::Event event1("win", 2);
+		cly::Event event2("achievement", 1);
 		countly.addEvent(event1);
 		countly.addEvent(event2);
 		WAIT_FOR_SQLITE(1);
@@ -252,7 +252,7 @@ TEST_CASE("events are sent correctly") {
 	}
 
 	SUBCASE("event with count, sum, duration and segmentation is sent") {
-		Countly::Event event("lose", 3, 10, 100);
+		cly::Event event("lose", 3, 10, 100);
 		event.addSegmentation("points", 2000);
 		countly.addEvent(event);
 
@@ -268,7 +268,7 @@ TEST_CASE("events are sent correctly") {
 
 	SUBCASE("100 events are sent") {
 		for (int i = 0; i < 100; i++) {
-			Countly::Event event("click", i);
+			cly::Event event("click", i);
 			countly.addEvent(event);
 		}
 		WAIT_FOR_SQLITE(1);
