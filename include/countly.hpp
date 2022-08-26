@@ -143,7 +143,7 @@ public:
 #ifdef COUNTLY_USE_SQLITE
 		setDatabasePath(path);
 #elif defined _WIN32
-		//UNREFERENCED_PARAMETER(path);
+		UNREFERENCED_PARAMETER(path);
 #endif
 	}
 
