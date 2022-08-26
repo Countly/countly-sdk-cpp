@@ -3,8 +3,8 @@
 
 #include <chrono>
 #include <deque>
-#include <iomanip>
 #include <string>
+#include <iomanip>
 
 #ifndef COUNTLY_USE_CUSTOM_SHA256
 #include "openssl/sha.h"
@@ -12,7 +12,7 @@
 
 #ifndef COUNTLY_USE_CUSTOM_HTTP
 #ifdef _WIN32
-#include "Windows.h" //1: Order matters
+#include "Windows.h"//1: Order matters
 #include "WinHTTP.h"
 #undef ERROR
 #pragma comment(lib, "winhttp.lib")
@@ -21,9 +21,13 @@
 #endif
 #endif
 
+
+
 namespace cly {
 class RequestModule::RequestModuleImpl {
 private:
+  int port = 0;
+  std::string host;
   bool use_https = false;
 
 public:
@@ -38,8 +42,8 @@ public:
   std::string calculateChecksum(const std::string &salt, const std::string &data) {
     std::string salted_data = data + salt;
 #ifdef COUNTLY_USE_CUSTOM_SHA256
-    if (_configuration.sha256_function == nullptr) {
-      _logger->log(LogLevel::FATAL, "Missing SHA 256 function");
+    if (sha256_function == nullptr) {
+      log(LogLevel::FATAL, "Missing SHA 256 function");
       return {};
     }
 
@@ -61,10 +65,7 @@ public:
 #endif
   }
 
-  HTTPResponse sendHTTP(std::string data) {
-    std::string path = "/i";
-    std::string host = _configuration.serverUrl;
-
+  HTTPResponse sendHTTP(std::string path, std::string data) {
     bool use_post = _configuration.enablePost || (data.size() > COUNTLY_POST_THRESHOLD);
     _logger->log(LogLevel::DEBUG, "[Countly][sendHTTP] data: " + data);
     if (!_configuration.salt.empty()) {
@@ -81,8 +82,8 @@ public:
     response.success = false;
 
 #ifdef COUNTLY_USE_CUSTOM_HTTP
-    if (_configuration.http_client_function == nullptr) {
-      _logger->log(LogLevel::FATAL, "Missing HTTP client function");
+    if (!http_client_function) {
+      log(LogLevel::FATAL, "Missing HTTP client function");
       return response;
     }
 
@@ -102,12 +103,13 @@ public:
                          10000,  // nSendTimeout: 10sec (default 30sec).
                          10000); // nReceiveTimeout: 10sec (default 30sec).
 
+      
       size_t scheme_offset = use_https ? (sizeof("https://") - 1) : (sizeof("http://") - 1);
       size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, host.c_str() + scheme_offset, -1, nullptr, 0);
       wchar_t *wide_hostname = new wchar_t[buffer_size];
       MultiByteToWideChar(CP_ACP, 0, host.c_str() + scheme_offset, -1, wide_hostname, buffer_size);
 
-      hConnect = WinHttpConnect(hSession, wide_hostname, _configuration.port, 0);
+      hConnect = WinHttpConnect(hSession, wide_hostname, port, 0);
 
       delete[] wide_hostname;
     }
@@ -193,7 +195,7 @@ public:
     curl = curl_easy_init();
     if (curl) {
       std::ostringstream full_url_stream;
-      full_url_stream << host << ':' << std::dec << _configuration.port << path;
+      full_url_stream << host << ':' << std::dec << port << path;
 
       if (!use_post) {
         full_url_stream << '?' << data;
@@ -202,7 +204,7 @@ public:
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.c_str());
       }
 
-      _logger->log(LogLevel::DEBUG, "[Countly][sendHTTP] request: " + full_url_stream.str());
+      log(LogLevel::DEBUG, "[Countly][sendHTTP] request: " + full_url_stream.str());
 
       std::string full_url = full_url_stream.str();
       curl_easy_setopt(curl, CURLOPT_URL, full_url.c_str());
@@ -221,7 +223,7 @@ public:
         if (!body.empty()) {
           const nlohmann::json &parseResult = nlohmann::json::parse(body, nullptr, false);
           if (parseResult.is_discarded()) {
-            _logger->log(LogLevel::WARNING, "[Countly][sendHTTP] Returned response from the server was not a valid JSON.");
+            log(LogLevel::WARNING, "[Countly][sendHTTP] Returned response from the server was not a valid JSON.");
           } else {
             response.data = parseResult;
           }
@@ -256,17 +258,6 @@ void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &
 }
 
 void RequestModule::processQueue() {
-  // make it thread safe
-  while (!impl->request_queue.empty()) {
-    std::string data = impl->request_queue.front();
-    HTTPResponse response = impl->sendHTTP(data);
-
-    if (!response.success) {
-      break;
-    }
-
-    impl->request_queue.pop_back();
-  }
 }
 
 } // namespace cly

@@ -56,13 +56,13 @@ Countly& Countly::getInstance() {
 
 void Countly::alwaysUsePost(bool value) {
 	mutex.lock();
-    configiration.enablePost = value;
+	always_use_post = value;
 	mutex.unlock();
 }
 
 void Countly::setSalt(const std::string& value) {
 	mutex.lock();
-    configiration.salt = value;
+	salt = value;
 	mutex.unlock();
 }
 
@@ -86,13 +86,13 @@ void Countly::setLogger(void (*fun)(LogLevel level, const std::string& message))
 
 void Countly::setHTTPClient(HTTPClientFunction fun) {
 	mutex.lock();
-    configiration.http_client_function = fun;
+	http_client_function = fun;
 	mutex.unlock();
 }
 
 void Countly::setSha256(cly::SHA256Function fun) {
 	mutex.lock();
-    configiration.sha256_function = fun;
+	sha256_function = fun;
 	mutex.unlock();
 }
 
@@ -330,21 +330,17 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string& value) {
 
 void Countly::start(const std::string& app_key, const std::string& host, int port, bool start_thread) {
 	mutex.lock();
-
-	configiration.port = port;
-	configiration.appKey = app_key;
-	configiration.serverUrl = host;
-    
-
 	log(LogLevel::INFO, "[Countly][start]");
-        if (configiration.serverUrl.find("http://") == 0) {
+	this->host = host;
+	if (host.find("http://") == 0) {
 		use_https = false;
-	} else if (configiration.serverUrl.find("https://") == 0) {
+	}
+	else if (host.find("https://") == 0) {
 		use_https = true;
 	}
 	else {
 		use_https = false;
-          this->configiration.serverUrl.insert(0, "http://");
+		this->host.insert(0, "http://");
 	}
 
 	session_params["app_key"] = app_key;
@@ -421,7 +417,7 @@ void Countly::setUpdateInterval(size_t milliseconds) {
 void Countly::addEvent(const cly::Event& event) {
 	mutex.lock();
 #ifndef COUNTLY_USE_SQLITE
-	if (event_queue.size() == configiration.eventQueueThreshold) {
+	if (event_queue.size() == max_events) {
 		log(LogLevel::WARNING, "Event queue is full, dropping the oldest event to insert a new one");
 		event_queue.pop_front();
 	}
@@ -457,7 +453,7 @@ void Countly::addEvent(const cly::Event& event) {
 
 void Countly::setMaxEvents(size_t value) {
 	mutex.lock();
-    configiration.eventQueueThreshold = value;
+	max_events = value;
 #ifndef COUNTLY_USE_SQLITE
 	if (event_queue.size() > value) {
 		log(LogLevel::WARNING, "New event queue size is smaller than the old one, dropping the oldest events to fit");
@@ -638,7 +634,7 @@ bool Countly::updateSession() {
 	return_value = sqlite3_open(database_path.c_str(), &database);
 	if (return_value == SQLITE_OK) {
 		std::ostringstream sql_statement_stream;
-        sql_statement_stream << "SELECT evtid, event FROM events LIMIT " << std::dec << configiration.eventQueueThreshold << ';';
+		sql_statement_stream << "SELECT evtid, event FROM events LIMIT " << std::dec << max_events << ';';
 		std::string sql_statement = sql_statement_stream.str();
 
 		return_value = sqlite3_get_table(database, sql_statement.c_str(), &table, &row_count, &column_count, &error_message);
@@ -825,12 +821,12 @@ static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n
 std::string Countly::calculateChecksum(const std::string& salt, const std::string& data) {
 	std::string salted_data = data + salt;
 #ifdef COUNTLY_USE_CUSTOM_SHA256
-        if (configiration.sha256_function == nullptr) {
+	if (sha256_function == nullptr) {
 		log(LogLevel::FATAL, "Missing SHA 256 function");
 		return {};
 	}
 
-	return configiration.sha256_function(salted_data);
+	return sha256_function(salted_data);
 #else
 	unsigned char checksum[SHA256_DIGEST_LENGTH];
 	SHA256_CTX sha256;
@@ -848,11 +844,11 @@ std::string Countly::calculateChecksum(const std::string& salt, const std::strin
 #endif
 }
 
-HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
-    bool use_post = configiration.enablePost || (data.size() > COUNTLY_POST_THRESHOLD);
+Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
+	bool use_post = always_use_post || (data.size() > COUNTLY_POST_THRESHOLD);
 	log(LogLevel::DEBUG, "[Countly][sendHTTP] data: "+ data);
-    if (!configiration.salt.empty()) {
-          std::string checksum = calculateChecksum(configiration.salt, data);
+	if (!salt.empty()) {
+		std::string checksum = calculateChecksum(salt, data);
 		if (!data.empty()) {
 			data += '&';
 		}
@@ -861,18 +857,20 @@ HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 		log(LogLevel::DEBUG, "[Countly][sendHTTP] with checksum, data: " + data);
 	}
 	
-	HTTPResponse response;
+	Countly::HTTPResponse response;
 	response.success = false;
 
 #ifdef COUNTLY_USE_CUSTOM_HTTP
-	if (!configiration.http_client_function) {
+	if (!http_client_function) {
 		log(LogLevel::FATAL, "Missing HTTP client function");
 		return response;
 	}
 
-	return configiration.http_client_function(use_post, path, data);
+	return http_client_function(use_post, path, data);
 #else
-
+	if (http_client_function) {
+		return http_client_function(use_post, path, data);
+	}
 #ifdef _WIN32
 	HINTERNET hSession = nullptr;
 	HINTERNET hConnect = nullptr;
@@ -888,9 +886,9 @@ HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 				   10000);	// nReceiveTimeout: 10sec (default 30sec).
 
 		size_t scheme_offset = use_https ? (sizeof("https://") - 1) : (sizeof("http://") - 1);
-		size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, configiration.serverUrl.c_str() + scheme_offset, -1, nullptr, 0);
+		size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, host.c_str() + scheme_offset, -1, nullptr, 0);
 		wchar_t *wide_hostname = new wchar_t[buffer_size];
-                MultiByteToWideChar(CP_ACP, 0, configiration.serverUrl.c_str() + scheme_offset, -1, wide_hostname, buffer_size);
+		MultiByteToWideChar(CP_ACP, 0, host.c_str() + scheme_offset, -1, wide_hostname, buffer_size);
 
 		hConnect = WinHttpConnect(hSession, wide_hostname, port, 0);
 
@@ -981,7 +979,7 @@ HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 	curl = curl_easy_init();
 	if (curl) {
 		std::ostringstream full_url_stream;
-        full_url_stream << configiration.serverUrl << ':' << std::dec << port << path;
+		full_url_stream << host << ':' << std::dec << port << path;
 
 		if (!use_post) {
 			full_url_stream << '?' << data;

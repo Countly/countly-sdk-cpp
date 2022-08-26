@@ -3,7 +3,6 @@
 
 #include "countly/constants.hpp"
 #include "countly/event.hpp"
-#include "countly/constants.hpp"
 
 #include <chrono>
 #include <functional>
@@ -25,7 +24,6 @@
 #endif
 #include "countly/logger_module.hpp"
 #include "countly/views_module.hpp"
-#include "countly/countly_configuration.hpp"
 
 namespace cly {
 class Countly : public cly::CountlyDelegates {
@@ -56,8 +54,14 @@ public:
   */
   inline std::function<void(LogLevel, const std::string &)> getLogger() { return logger_function; }
 
+  struct HTTPResponse {
+    bool success;
+    nlohmann::json data;
+  };
+
   void setSha256(cly::SHA256Function fun);
 
+  using HTTPClientFunction = std::function<HTTPResponse(bool, const std::string &, const std::string &)>;
   void setHTTPClient(HTTPClientFunction fun);
 
   void setMetrics(const std::string &os, const std::string &os_version, const std::string &device, const std::string &resolution, const std::string &carrier, const std::string &app_version);
@@ -220,10 +224,16 @@ private:
   std::chrono::system_clock::duration getSessionDuration();
 
   void updateLoop();
+
+  cly::SHA256Function sha256_function;
+  HTTPClientFunction http_client_function;
   void (*logger_function)(LogLevel level, const std::string &message) = nullptr;
+
+  std::string host;
 
   int port = 0;
   bool use_https = false;
+  bool always_use_post = false;
 
   bool began_session = false;
   bool is_being_disposed = false;
@@ -232,8 +242,8 @@ private:
   std::chrono::system_clock::time_point last_sent_session_request;
 
   nlohmann::json session_params;
+  std::string salt;
 
-  CountlyConfiguration configiration;
   std::unique_ptr<std::thread> thread;
   std::unique_ptr<cly::ViewsModule> views_module;
   std::shared_ptr<cly::LoggerModule> logger;
@@ -244,6 +254,7 @@ private:
   size_t wait_milliseconds = COUNTLY_KEEPALIVE_INTERVAL;
   unsigned short _auto_session_update_interval = 60; // value is in seconds;
 
+  size_t max_events = COUNTLY_MAX_EVENTS_DEFAULT;
 #ifndef COUNTLY_USE_SQLITE
   std::deque<std::string> event_queue;
 #else
