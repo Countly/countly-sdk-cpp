@@ -43,12 +43,12 @@ TEST_CASE("recording views") {
   Countly &ct = Countly::getInstance();
 
   /*
-  * It validates the views recorded without segmentation.
-  */
+   * It validates the views recorded without segmentation.
+   */
   SUBCASE("views without segmentation") {
     /*
-    * Case: Open a view without segmentation and close it with the name.
-    */
+     * Case: Open a view without segmentation and close it with the name.
+     */
     SUBCASE("with name") {
       unsigned int eventSize = 0;
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
@@ -77,8 +77,8 @@ TEST_CASE("recording views") {
     }
 
     /*
-    * Open a view without segmentation and close it the id.
-    */
+     * Open a view without segmentation and close it the id.
+     */
     SUBCASE("with id") {
       unsigned int eventSize = ct.debugReturnStateOfEQ().size();
 
@@ -107,12 +107,12 @@ TEST_CASE("recording views") {
   }
 
   /*
-  * It validates the views recorded with segmentation.
-  */
+   * It validates the views recorded with segmentation.
+   */
   SUBCASE("views with segmentation") {
     /*
-    * Case: Open a view with segmentation and close it with the name.
-    */
+     * Case: Open a view with segmentation and close it with the name.
+     */
     SUBCASE("with name") {
       unsigned int eventSize = ct.debugReturnStateOfEQ().size();
 
@@ -148,8 +148,8 @@ TEST_CASE("recording views") {
       validateViewSegmentation(e, "view2", eid, 3, false);
     }
     /*
-    * Case: Open a view without segmentation and close it with the id.
-    */
+     * Case: Open a view without segmentation and close it with the id.
+     */
     SUBCASE("with id") {
       unsigned int eventSize = ct.debugReturnStateOfEQ().size();
 
@@ -185,12 +185,12 @@ TEST_CASE("recording views") {
   }
 
   /*
-  * It validates the event queue when closing non-existing views.
-  */
+   * It validates the event queue when closing non-existing views.
+   */
   SUBCASE("CLOSING NONEXISTING VIEWS") {
     /*
-    * Closing non-existing view with name.
-    */
+     * Closing non-existing view with name.
+     */
     SUBCASE("with name") {
       unsigned int eventSize = ct.debugReturnStateOfEQ().size();
       ct.views().closeViewWithName("view1");
@@ -198,8 +198,8 @@ TEST_CASE("recording views") {
     }
 
     /*
-    * Closing non-existing view with id.
-    */
+     * Closing non-existing view with id.
+     */
     SUBCASE("with id") {
       unsigned int eventSize = ct.debugReturnStateOfEQ().size();
       ct.views().closeViewWithName("event_id");
