@@ -62,6 +62,7 @@ Typical use is:
 
 ```C++
 #include "countly.hpp"
+using namespace cly;
 
 int main(int argc, char *argv[]) {
 	Countly& ct = Countly::getInstance();
