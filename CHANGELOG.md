@@ -1,5 +1,5 @@
 22.06.0
-* !! Major breaking change !! 'Countly::Event' will not work, use 'cly::Event' instead 'Countly::Event'.
+* !! Major breaking change !! We are extracting the 'Event' class out of the 'Countly' class which will change how that class can be referenced.'Countly::Event' will not work, you will have to use 'cly::Event' instead.
 
 22.02.0
 * Added 10-second time-outs for all windows HTTP transactions.
