@@ -24,6 +24,7 @@
 #include "countly/logger_module.hpp"
 #include "countly/views_module.hpp"
 
+namespace cly {
 class Countly : public cly::CountlyDelegates {
 public:
   Countly();
@@ -291,5 +292,6 @@ private:
   bool remote_config_enabled = false;
   nlohmann::json remote_config;
 };
+} // namespace cly
 
 #endif

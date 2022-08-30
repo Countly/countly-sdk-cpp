@@ -27,6 +27,7 @@
 #include "sqlite3.h"
 #endif
 
+namespace cly {
 Countly::Countly() {
   views_module = nullptr;
   logger.reset(new cly::LoggerModule());
@@ -1072,3 +1073,4 @@ void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
     mutex.unlock();
   }
 }
+} // namespace cly
