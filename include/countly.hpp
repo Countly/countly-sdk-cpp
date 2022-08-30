@@ -21,6 +21,7 @@
 #ifdef _WIN32
 #undef ERROR
 #endif
+#include "countly/event.hpp"
 #include "countly/logger_module.hpp"
 #include "countly/views_module.hpp"
 
@@ -29,7 +30,6 @@ public:
   Countly();
 
   ~Countly();
-
   static Countly &getInstance();
 
   // Do not implicitly generate the copy constructor, this is a singleton.
@@ -102,9 +102,7 @@ public:
 
   void setUpdateInterval(size_t milliseconds);
 
-  class Event;
-
-  void addEvent(const Event &event);
+  void addEvent(const cly::Event &event);
 
   void setMaxEvents(size_t value);
 
@@ -138,33 +136,6 @@ public:
   void setDatabasePath(const std::string &path);
 #endif
 
-  class Event {
-  public:
-    Event(const std::string &key, size_t count = 1);
-    Event(const std::string &key, size_t count, double sum);
-    Event(const std::string &key, size_t count, double sum, double duration);
-
-    void setTimestamp();
-
-    void startTimer();
-    void stopTimer();
-
-    template <typename T> void addSegmentation(const std::string &key, T value) {
-      if (object.find("segmentation") == object.end()) {
-        object["segmentation"] = nlohmann::json::object();
-      }
-
-      object["segmentation"][key] = value;
-    }
-
-    std::string serialize() const;
-
-  private:
-    nlohmann::json object;
-    bool timer_running;
-    std::chrono::system_clock::time_point timestamp;
-  };
-
   void SetPath(const std::string &path) {
 #ifdef COUNTLY_USE_SQLITE
     setDatabasePath(path);
@@ -187,12 +158,12 @@ public:
 
   inline cly::ViewsModule &views() const { return *views_module.get(); }
 
-  void RecordEvent(const std::string &key, int count) override { addEvent(Event(key, count)); }
+  void RecordEvent(const std::string &key, int count) override { addEvent(cly::Event(key, count)); }
 
-  void RecordEvent(const std::string &key, int count, double sum) override { addEvent(Event(key, count, sum)); }
+  void RecordEvent(const std::string &key, int count, double sum) override { addEvent(cly::Event(key, count, sum)); }
 
   void RecordEvent(const std::string &key, const std::map<std::string, std::string> &segmentation, int count) override {
-    Event event(key, count);
+    cly::Event event(key, count);
 
     for (auto key_value : segmentation) {
       event.addSegmentation(key_value.first, key_value.second);
@@ -202,7 +173,7 @@ public:
   }
 
   void RecordEvent(const std::string &key, const std::map<std::string, std::string> &segmentation, int count, double sum) override {
-    Event event(key, count, sum);
+    cly::Event event(key, count, sum);
 
     for (auto key_value : segmentation) {
       event.addSegmentation(key_value.first, key_value.second);
@@ -212,7 +183,7 @@ public:
   }
 
   void RecordEvent(const std::string &key, const std::map<std::string, std::string> &segmentation, int count, double sum, double duration) override {
-    Event event(key, count, sum, duration);
+    cly::Event event(key, count, sum, duration);
 
     for (auto key_value : segmentation) {
       event.addSegmentation(key_value.first, key_value.second);

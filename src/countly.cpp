@@ -391,7 +391,7 @@ void Countly::setUpdateInterval(size_t milliseconds) {
   mutex.unlock();
 }
 
-void Countly::addEvent(const Event &event) {
+void Countly::addEvent(const cly::Event &event) {
   mutex.lock();
 #ifndef COUNTLY_USE_SQLITE
   if (event_queue.size() == max_events) {
