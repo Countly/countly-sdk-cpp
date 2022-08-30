@@ -1,3 +1,6 @@
+22.06.0
+* !! Major breaking change !! 'Countly::Event' will not work, use 'cly::Event' instead 'Countly::Event'.
+
 22.02.0
 * Added 10-second time-outs for all windows HTTP transactions.
 * Added ability to record views.
