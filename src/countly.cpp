@@ -223,7 +223,7 @@ void Countly::_sendIndependantLocationRequest() {
   }
 
   const std::chrono::system_clock::time_point now = Countly::getTimestamp();
-  const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
+  const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
 
   if (!data.empty()) {
     data["app_key"] = session_params["app_key"].get<std::string>();
@@ -278,7 +278,7 @@ void Countly::_changeDeviceIdWithMerge(const std::string &value) {
   session_params["device_id"] = value;
 
   const std::chrono::system_clock::time_point now = Countly::getTimestamp();
-  const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
+  const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
   std::map<std::string, std::string> data = {
       {"app_key", session_params["app_key"].get<std::string>()},
       {"device_id", session_params["device_id"].get<std::string>()},
@@ -522,7 +522,7 @@ bool Countly::beginSession() {
   }
 
   const std::chrono::system_clock::time_point now = Countly::getTimestamp();
-  const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
+  const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
 
   std::map<std::string, std::string> data = {{"sdk_name", COUNTLY_SDK_NAME}, {"sdk_version", COUNTLY_API_VERSION}, {"timestamp", std::to_string(timestamp.count())}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()},
                                              {"begin_session", "1"}};
@@ -685,7 +685,7 @@ bool Countly::updateSession() {
 bool Countly::endSession() {
   log(Countly::LogLevel::INFO, "[Countly][endSession]");
   const std::chrono::system_clock::time_point now = Countly::getTimestamp();
-  const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
+  const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
   const auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration(now));
 
   mutex.lock();
