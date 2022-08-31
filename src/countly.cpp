@@ -31,6 +31,7 @@ namespace cly {
 Countly::Countly() {
   views_module = nullptr;
   logger.reset(new cly::LoggerModule());
+  configuration.reset(new cly::CountlyConfiguration());
 
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
   curl_global_init(CURL_GLOBAL_ALL);
@@ -55,13 +56,13 @@ Countly &Countly::getInstance() {
 
 void Countly::alwaysUsePost(bool value) {
   mutex.lock();
-  always_use_post = value;
+  configuration->enablePost = value;
   mutex.unlock();
 }
 
 void Countly::setSalt(const std::string &value) {
   mutex.lock();
-  salt = value;
+  configuration->salt = value;
   mutex.unlock();
 }
 
@@ -82,13 +83,13 @@ void Countly::setLogger(void (*fun)(Countly::LogLevel level, const std::string &
 
 void Countly::setHTTPClient(HTTPClientFunction fun) {
   mutex.lock();
-  http_client_function = fun;
+  configuration->http_client_function = fun;
   mutex.unlock();
 }
 
 void Countly::setSha256(cly::SHA256Function fun) {
   mutex.lock();
-  sha256_function = fun;
+  configuration->sha256_function = fun;
   mutex.unlock();
 }
 
@@ -314,22 +315,26 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
 void Countly::start(const std::string &app_key, const std::string &host, int port, bool start_thread) {
   mutex.lock();
   log(Countly::LogLevel::INFO, "[Countly][start]");
-  this->host = host;
-  if (host.find("http://") == 0) {
+
+  configuration->port = port;
+  configuration->appKey = app_key;
+  configuration->serverUrl = host;
+
+  if (configuration->serverUrl.find("http://") == 0) {
     use_https = false;
-  } else if (host.find("https://") == 0) {
+  } else if (configuration->serverUrl.find("https://") == 0) {
     use_https = true;
   } else {
     use_https = false;
-    this->host.insert(0, "http://");
+    configuration->serverUrl.insert(0, "http://");
   }
 
   session_params["app_key"] = app_key;
 
   if (port <= 0) {
-    this->port = use_https ? 443 : 80;
+    configuration->port = use_https ? 443 : 80;
   } else {
-    this->port = port;
+    configuration->port = port;
   }
 
   views_module.reset(new cly::ViewsModule(this, logger));
@@ -395,7 +400,7 @@ void Countly::setUpdateInterval(size_t milliseconds) {
 void Countly::addEvent(const cly::Event &event) {
   mutex.lock();
 #ifndef COUNTLY_USE_SQLITE
-  if (event_queue.size() == max_events) {
+  if (event_queue.size() == configuration->eventQueueThreshold) {
     log(Countly::LogLevel::WARNING, "Event queue is full, dropping the oldest event to insert a new one");
     event_queue.pop_front();
   }
@@ -431,11 +436,11 @@ void Countly::addEvent(const cly::Event &event) {
 
 void Countly::setMaxEvents(size_t value) {
   mutex.lock();
-  max_events = value;
+  configuration->eventQueueThreshold = value;
 #ifndef COUNTLY_USE_SQLITE
-  if (event_queue.size() > value) {
+  if (event_queue.size() > configuration->eventQueueThreshold) {
     log(Countly::LogLevel::WARNING, "New event queue size is smaller than the old one, dropping the oldest events to fit");
-    event_queue.resize(value);
+    event_queue.resize(configuration->eventQueueThreshold);
   }
 #endif
   mutex.unlock();
@@ -606,7 +611,7 @@ bool Countly::updateSession() {
   return_value = sqlite3_open(database_path.c_str(), &database);
   if (return_value == SQLITE_OK) {
     std::ostringstream sql_statement_stream;
-    sql_statement_stream << "SELECT evtid, event FROM events LIMIT " << std::dec << max_events << ';';
+    sql_statement_stream << "SELECT evtid, event FROM events LIMIT " << std::dec << configuration->eventQueueThreshold << ';';
     std::string sql_statement = sql_statement_stream.str();
 
     return_value = sqlite3_get_table(database, sql_statement.c_str(), &table, &row_count, &column_count, &error_message);
@@ -636,7 +641,7 @@ bool Countly::updateSession() {
   auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
   mutex.lock();
 
-  if (duration.count() >= _auto_session_update_interval) {
+  if (duration.count() >= configuration->sessionDuration) {
     log(Countly::LogLevel::DEBUG, "[Countly][updateSession] sending session update.");
     std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"session_duration", std::to_string(duration.count())}};
     if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
@@ -775,12 +780,12 @@ static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n
 std::string Countly::calculateChecksum(const std::string &salt, const std::string &data) {
   std::string salted_data = data + salt;
 #ifdef COUNTLY_USE_CUSTOM_SHA256
-  if (sha256_function == nullptr) {
+  if (configuration->sha256_function == nullptr) {
     log(LogLevel::FATAL, "Missing SHA 256 function");
     return {};
   }
 
-  return sha256_function(salted_data);
+  return configuration->sha256_function(salted_data);
 #else
   unsigned char checksum[SHA256_DIGEST_LENGTH];
   SHA256_CTX sha256;
@@ -798,11 +803,11 @@ std::string Countly::calculateChecksum(const std::string &salt, const std::strin
 #endif
 }
 
-Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
-  bool use_post = always_use_post || (data.size() > COUNTLY_POST_THRESHOLD);
+HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
+  bool use_post = configuration->enablePost|| (data.size() > COUNTLY_POST_THRESHOLD);
   log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: " + data);
-  if (!salt.empty()) {
-    std::string checksum = calculateChecksum(salt, data);
+  if (!configuration->salt.empty()) {
+    std::string checksum = calculateChecksum(configuration->salt, data);
     if (!data.empty()) {
       data += '&';
     }
@@ -811,19 +816,19 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
     log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] with checksum, data: " + data);
   }
 
-  Countly::HTTPResponse response;
+  HTTPResponse response;
   response.success = false;
 
 #ifdef COUNTLY_USE_CUSTOM_HTTP
-  if (!http_client_function) {
+  if (!configuration->http_client_function) {
     log(Countly::LogLevel::FATAL, "Missing HTTP client function");
     return response;
   }
 
-  return http_client_function(use_post, path, data);
+  return configuration->http_client_function(use_post, path, data);
 #else
-  if (http_client_function) {
-    return http_client_function(use_post, path, data);
+  if (configuration->http_client_function) {
+    return configuration->http_client_function(use_post, path, data);
   }
 #ifdef _WIN32
   HINTERNET hSession = nullptr;
@@ -840,11 +845,11 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
                        10000); // nReceiveTimeout: 10sec (default 30sec).
 
     size_t scheme_offset = use_https ? (sizeof("https://") - 1) : (sizeof("http://") - 1);
-    size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, host.c_str() + scheme_offset, -1, nullptr, 0);
+    size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, configuration->serverUrl.c_str() + scheme_offset, -1, nullptr, 0);
     wchar_t *wide_hostname = new wchar_t[buffer_size];
-    MultiByteToWideChar(CP_ACP, 0, host.c_str() + scheme_offset, -1, wide_hostname, buffer_size);
+    MultiByteToWideChar(CP_ACP, 0, configuration->serverUrl.c_str() + scheme_offset, -1, wide_hostname, buffer_size);
 
-    hConnect = WinHttpConnect(hSession, wide_hostname, port, 0);
+    hConnect = WinHttpConnect(hSession, wide_hostname, configuration->port, 0);
 
     delete[] wide_hostname;
   }
@@ -930,7 +935,7 @@ Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
   curl = curl_easy_init();
   if (curl) {
     std::ostringstream full_url_stream;
-    full_url_stream << host << ':' << std::dec << port << path;
+    full_url_stream << configuration->serverUrl << ':' << std::dec << configuration->port << path;
 
     if (!use_post) {
       full_url_stream << '?' << data;

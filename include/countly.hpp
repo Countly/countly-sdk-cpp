@@ -2,6 +2,7 @@
 #define COUNTLY_HPP_
 
 #include "countly/constants.hpp"
+#include "countly/countly_configuration.hpp"
 
 #include <chrono>
 #include <functional>
@@ -53,14 +54,8 @@ public:
   */
   inline std::function<void(LogLevel, const std::string &)> getLogger() { return logger_function; }
 
-  struct HTTPResponse {
-    bool success;
-    nlohmann::json data;
-  };
-
   void setSha256(cly::SHA256Function fun);
 
-  using HTTPClientFunction = std::function<HTTPResponse(bool, const std::string &, const std::string &)>;
   void setHTTPClient(HTTPClientFunction fun);
 
   void setMetrics(const std::string &os, const std::string &os_version, const std::string &device, const std::string &resolution, const std::string &carrier, const std::string &app_version);
@@ -141,7 +136,7 @@ public:
 #ifdef COUNTLY_USE_SQLITE
     setDatabasePath(path);
 #elif defined _WIN32
-    UNREFERENCED_PARAMETER(path);
+    //UNREFERENCED_PARAMETER(path);
 #endif
   }
 
@@ -194,7 +189,7 @@ public:
   }
 
   /* Provide 'updateInterval' in seconds. */
-  inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) { _auto_session_update_interval = updateInterval; }
+  inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) { configuration->sessionDuration = updateInterval; }
 
   /**
    * Convert event queue into list.
@@ -223,16 +218,9 @@ private:
   std::chrono::system_clock::duration getSessionDuration();
 
   void updateLoop();
-
-  cly::SHA256Function sha256_function;
-  HTTPClientFunction http_client_function;
   void (*logger_function)(LogLevel level, const std::string &message) = nullptr;
 
-  std::string host;
-
-  int port = 0;
   bool use_https = false;
-  bool always_use_post = false;
 
   bool began_session = false;
   bool is_being_disposed = false;
@@ -241,10 +229,10 @@ private:
   std::chrono::system_clock::time_point last_sent_session_request;
 
   nlohmann::json session_params;
-  std::string salt;
 
   std::unique_ptr<std::thread> thread;
   std::unique_ptr<cly::ViewsModule> views_module;
+  std::unique_ptr<cly::CountlyConfiguration> configuration;
   std::shared_ptr<cly::LoggerModule> logger;
 
   std::mutex mutex;
