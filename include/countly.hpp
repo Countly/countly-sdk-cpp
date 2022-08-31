@@ -43,8 +43,6 @@ public:
 
   void setSalt(const std::string &value);
 
-  enum LogLevel { DEBUG = 1, INFO = 2, WARNING = 3, ERROR = 4, FATAL = 5 };
-
   void setLogger(void (*fun)(LogLevel level, const std::string &message));
 
   /*

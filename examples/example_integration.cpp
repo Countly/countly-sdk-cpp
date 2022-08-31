@@ -12,19 +12,19 @@
 using namespace std;
 using namespace cly;
 
-void printLog(Countly::LogLevel level, const string &msg) {
+void printLog(LogLevel level, const string &msg) {
   string lvl = "[DEBUG]";
   switch (level) {
-  case Countly::LogLevel::DEBUG:
+  case LogLevel::DEBUG:
     lvl = "[Debug]";
     break;
-  case Countly::LogLevel::INFO:
+  case LogLevel::INFO:
     lvl = "[INFO]";
     break;
-  case Countly::LogLevel::WARNING:
+  case LogLevel::WARNING:
     lvl = "[WARNING]";
     break;
-  case Countly::LogLevel::FATAL:
+  case LogLevel::FATAL:
     lvl = "[FATAL]";
     break;
   default:
