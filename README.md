@@ -26,7 +26,7 @@ Security is very important to us. If you discover any issue regarding security, 
 Countly C++ SDK has been designed to work with very few dependencies in order to be available on most platforms.
 In order to build this SDK, you need:
 
-- a C++ compiler with C++11 support
+- a C++ compiler with C++14 support
 - libcurl (with openssl) and its headers if you are on *nix
 - cmake >= 3.13
 
@@ -62,6 +62,7 @@ Typical use is:
 
 ```C++
 #include "countly.hpp"
+using namespace cly;
 
 int main(int argc, char *argv[]) {
 	Countly& ct = Countly::getInstance();
