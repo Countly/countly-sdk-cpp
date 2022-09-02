@@ -12,8 +12,7 @@
 #include "nlohmann/json.hpp"
 
 #define COUNTLY_SDK_NAME "cpp-native-unknown"
-#define COUNTLY_SDK_VERSION "0.1.0"
-#define COUNTLY_API_VERSION "22.02.0"
+#define COUNTLY_SDK_VERSION "22.02.0"
 #define COUNTLY_POST_THRESHOLD 2000
 #define COUNTLY_KEEPALIVE_INTERVAL 3000
 #define COUNTLY_MAX_EVENTS_DEFAULT 200
