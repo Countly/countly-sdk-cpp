@@ -70,7 +70,11 @@ if(COUNTLY_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/views.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/event.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/countly_configuration.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/config.cpp)
+
+    if(COUNTLY_TESTS)
+    target_compile_definitions(countly PRIVATE COUNTLY_TESTS)
+    endif()
   if(COUNTLY_USE_SQLITE)
     target_compile_definitions(countly-tests PRIVATE COUNTLY_USE_SQLITE)
     target_include_directories(countly-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/sqlite)

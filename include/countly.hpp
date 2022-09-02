@@ -198,21 +198,21 @@ public:
    * @return a vector object containing events.
    */
 
+  //#ifdef COUNTLY_BUILD_TESTS
 
-#ifdef COUNTLY_BUILD_TESTS
-
- const std::vector<std::string> debugReturnStateOfEQ() {
-    vector<std::string> v;
+  const std::vector<std::string> debugReturnStateOfEQ() {
 #ifndef COUNTLY_USE_SQLITE
-   std::vector<std::string> v(event_queue.begin(), event_queue.end());
+    std::vector<std::string> v(event_queue.begin(), event_queue.end());
+    return v;
 #endif
-   return v;
+    return {};
   }
 
   inline const CountlyConfiguration *getConfiguration() { return configuration.get(); }
 
   void halt();
-#endif
+  static void reset();
+  //#endif
 
 private:
   void _deleteThread();
@@ -247,6 +247,8 @@ private:
   std::shared_ptr<cly::CountlyConfiguration> configuration;
   std::shared_ptr<cly::LoggerModule> logger;
 
+  //static std::unique_ptr<Countly> _sharedInstance;
+
   std::mutex mutex;
   bool stop_thread = false;
   bool running = false;
@@ -262,6 +264,7 @@ private:
   bool remote_config_enabled = false;
   nlohmann::json remote_config;
 };
+//std::unique_ptr<Countly> Countly::_sharedInstance;
 } // namespace cly
 
 #endif

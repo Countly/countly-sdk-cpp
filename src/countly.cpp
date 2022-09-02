@@ -49,10 +49,15 @@ Countly::~Countly() {
 #endif
 }
 
+std::unique_ptr<Countly> _sharedInstance;
 Countly &Countly::getInstance() {
-  static Countly instance;
-  return instance;
+  if (_sharedInstance.get() == nullptr) {
+    _sharedInstance.reset(new Countly());
+  }
+  return *_sharedInstance.get();
 }
+
+void Countly::reset() { _sharedInstance.reset(new Countly()); }
 
 void Countly::alwaysUsePost(bool value) {
   mutex.lock();
@@ -87,42 +92,20 @@ void Countly::setHTTPClient(HTTPClientFunction fun) {
   mutex.unlock();
 }
 
-void Countly::setSha256(cly::SHA256Function fun) {
+void Countly::setSha256(SHA256Function fun) {
   mutex.lock();
   configuration->sha256_function = fun;
   mutex.unlock();
 }
 
 void Countly::setMetrics(const std::string &os, const std::string &os_version, const std::string &device, const std::string &resolution, const std::string &carrier, const std::string &app_version) {
-  nlohmann::json metrics = nlohmann::json::object();
 
-  if (!os.empty()) {
-    metrics["_os"] = os;
-  }
-
-  if (!os_version.empty()) {
-    metrics["_os_version"] = os_version;
-  }
-
-  if (!device.empty()) {
-    metrics["_device"] = device;
-  }
-
-  if (!resolution.empty()) {
-    metrics["_resolution"] = resolution;
-  }
-
-  if (!carrier.empty()) {
-    metrics["_carrier"] = carrier;
-  }
-
-  if (!app_version.empty()) {
-    metrics["_app_version"] = app_version;
-  }
-
-  mutex.lock();
-  session_params["metrics"] = metrics;
-  mutex.unlock();
+  configuration->metrics.os = os;
+  configuration->metrics.osVersion = os_version;
+  configuration->metrics.device = device;
+  configuration->metrics.resolution = resolution;
+  configuration->metrics.carrier = carrier;
+  configuration->metrics.appVersion = app_version;
 }
 
 void Countly::setUserDetails(const std::map<std::string, std::string> &value) {
@@ -555,7 +538,7 @@ bool Countly::beginSession() {
   }
 
   if (session_params.contains("metrics")) {
-    data["metrics"] = session_params["metrics"].dump();
+    data["metrics"] = configuration->metrics.serialize();
   }
 
   if (sendHTTP("/i", Countly::serializeForm(data)).success) {
@@ -805,7 +788,7 @@ std::string Countly::calculateChecksum(const std::string &salt, const std::strin
 }
 
 HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
-  bool use_post = configuration->enablePost|| (data.size() > COUNTLY_POST_THRESHOLD);
+  bool use_post = configuration->enablePost || (data.size() > COUNTLY_POST_THRESHOLD);
   log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: " + data);
   if (!configuration->salt.empty()) {
     std::string checksum = calculateChecksum(configuration->salt, data);

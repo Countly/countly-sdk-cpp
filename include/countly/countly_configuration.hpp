@@ -1,9 +1,49 @@
 #ifndef COUNTLY_CONFIGURATION_HPP_
 #define COUNTLY_CONFIGURATION_HPP_
-#include <string>
 #include "countly/constants.hpp"
+#include <string>
 
 namespace cly {
+
+struct Metrics {
+  std::string os;
+  std::string device;
+  std::string carrier;
+  std::string osVersion;
+  std::string resolution;
+  std::string appVersion;
+
+  const std::string serialize() {
+    if (!os.empty()) {
+      object["_os"] = os;
+    }
+
+    if (!osVersion.empty()) {
+      object["_os_version"] = osVersion;
+    }
+
+    if (!device.empty()) {
+      object["_device"] = device;
+    }
+
+    if (!resolution.empty()) {
+      object["_resolution"] = resolution;
+    }
+
+    if (!carrier.empty()) {
+      object["_carrier"] = carrier;
+    }
+
+    if (!appVersion.empty()) {
+      object["_app_version"] = appVersion;
+    }
+
+    return object.dump();
+  }
+
+private:
+  nlohmann::json object;
+};
 struct CountlyConfiguration {
   /// <summary>
   /// URL of the Countly server to submit data to.
@@ -58,6 +98,8 @@ struct CountlyConfiguration {
   SHA256Function sha256_function = nullptr;
 
   HTTPClientFunction http_client_function = nullptr;
+
+  Metrics metrics;
 };
 } // namespace cly
 #endif
