@@ -42,7 +42,7 @@ struct HTTPCall {
 
 std::deque<HTTPCall> http_call_queue;
 
-Countly::HTTPResponse fakeSendHTTP(bool use_post, const std::string &url, const std::string &data) {
+HTTPResponse fakeSendHTTP(bool use_post, const std::string &url, const std::string &data) {
   HTTPCall http_call({use_post, url, {}});
 
   std::string::size_type startIndex = 0;
@@ -69,7 +69,7 @@ Countly::HTTPResponse fakeSendHTTP(bool use_post, const std::string &url, const 
 
   http_call_queue.push_back(http_call);
 
-  Countly::HTTPResponse response{false, json::object()};
+  HTTPResponse response{false, json::object()};
 
   if (http_call.url == "/i") {
     response.success = true;

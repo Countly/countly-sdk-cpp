@@ -197,10 +197,22 @@ public:
    * You should not be using this method.
    * @return a vector object containing events.
    */
-  const std::vector<std::string> debugReturnStateOfEQ() {
-    std::vector<std::string> v(event_queue.begin(), event_queue.end());
-    return v;
+
+
+#ifdef COUNTLY_BUILD_TESTS
+
+ const std::vector<std::string> debugReturnStateOfEQ() {
+    vector<std::string> v;
+#ifndef COUNTLY_USE_SQLITE
+   std::vector<std::string> v(event_queue.begin(), event_queue.end());
+#endif
+   return v;
   }
+
+  inline const CountlyConfiguration *getConfiguration() { return configuration.get(); }
+
+  void halt();
+#endif
 
 private:
   void _deleteThread();
@@ -232,14 +244,13 @@ private:
 
   std::unique_ptr<std::thread> thread;
   std::unique_ptr<cly::ViewsModule> views_module;
-  std::unique_ptr<cly::CountlyConfiguration> configuration;
+  std::shared_ptr<cly::CountlyConfiguration> configuration;
   std::shared_ptr<cly::LoggerModule> logger;
 
   std::mutex mutex;
   bool stop_thread = false;
   bool running = false;
   size_t wait_milliseconds = COUNTLY_KEEPALIVE_INTERVAL;
-  unsigned short _auto_session_update_interval = 60; // value is in seconds;
 
   size_t max_events = COUNTLY_MAX_EVENTS_DEFAULT;
 #ifndef COUNTLY_USE_SQLITE

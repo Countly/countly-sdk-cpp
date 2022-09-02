@@ -55,9 +55,9 @@ struct CountlyConfiguration {
 
   unsigned int port = 443;
 
-  SHA256Function sha256_function;
+  SHA256Function sha256_function = nullptr;
 
-  HTTPClientFunction http_client_function;
+  HTTPClientFunction http_client_function = nullptr;
 };
 } // namespace cly
 #endif

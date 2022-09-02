@@ -241,6 +241,7 @@ void Countly::_sendIndependantLocationRequest() {
 #pragma region Device Id
 void Countly::setDeviceID(const std::string &value, bool same_user) {
   mutex.lock();
+  configuration->deviceId = value;
   log(Countly::LogLevel::INFO, "[Countly][changeDeviceIdWithMerge] setDeviceID = '" + value + "'");
 
   // Checking old and new devices ids are same
