@@ -37,6 +37,9 @@ find_package(Threads)
 target_link_libraries(countly Threads::Threads)
 
 target_include_directories(countly PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include)
+if (COUNTLY_BUILD_TESTS)
+  target_compile_definitions(countly PRIVATE COUNTLY_BUILD_TESTS)
+endif()
 
 if (COUNTLY_USE_CUSTOM_SHA256)
   target_compile_definitions(countly PRIVATE COUNTLY_USE_CUSTOM_SHA256)
@@ -72,9 +75,7 @@ if(COUNTLY_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/event.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/config.cpp)
 
-    if(COUNTLY_TESTS)
-    target_compile_definitions(countly PRIVATE COUNTLY_TESTS)
-    endif()
+    target_compile_definitions(countly-tests PRIVATE COUNTLY_BUILD_TESTS)
   if(COUNTLY_USE_SQLITE)
     target_compile_definitions(countly-tests PRIVATE COUNTLY_USE_SQLITE)
     target_include_directories(countly-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/sqlite)
@@ -94,10 +95,7 @@ endif()
 if(COUNTLY_BUILD_SAMPLE)
   add_executable(countly-sample
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/example_integration.cpp)
-  if(COUNTLY_USE_SQLITE)
-    target_compile_definitions(countly-tests PRIVATE COUNTLY_USE_SQLITE)
-    target_include_directories(countly-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/sqlite)
-  endif()
+
   target_include_directories(countly-sample PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/doctest/doctest)
   target_include_directories(countly-sample PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include)
   target_link_libraries(countly-sample countly)

@@ -198,8 +198,7 @@ public:
    * @return a vector object containing events.
    */
 
-  //#ifdef COUNTLY_BUILD_TESTS
-
+#ifdef COUNTLY_BUILD_TESTS
   const std::vector<std::string> debugReturnStateOfEQ() {
 #ifndef COUNTLY_USE_SQLITE
     std::vector<std::string> v(event_queue.begin(), event_queue.end());
@@ -208,11 +207,12 @@ public:
     return {};
   }
 
-  inline const CountlyConfiguration *getConfiguration() { return configuration.get(); }
+  inline const CountlyConfiguration &getConfiguration() { return *configuration.get(); }
 
   void halt();
   static void reset();
-  //#endif
+#endif
+  
 
 private:
   void _deleteThread();
