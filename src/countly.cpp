@@ -14,8 +14,8 @@
 
 #ifndef COUNTLY_USE_CUSTOM_HTTP
 #ifdef _WIN32
-#include "WinHTTP.h"
 #include "Windows.h"
+#include "WinHTTP.h"
 #undef ERROR
 #pragma comment(lib, "winhttp.lib")
 #else
@@ -715,7 +715,7 @@ std::string Countly::encodeURL(const std::string &data) {
 
   for (auto character : data) {
     unsigned int ch = *reinterpret_cast<unsigned char *>(&character);
-    if (ch > 127 || !std::isalnum(character)) {
+    if (ch > 127 || (!std::isalnum(character) && character != '.' && character != '_' && character != '~')) {
       encoded << '%' << std::setw(2) << std::hex << std::setfill('0') << std::uppercase << ch;
     } else {
       encoded << character;
