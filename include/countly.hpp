@@ -45,11 +45,14 @@ public:
 
   void setLogger(void (*fun)(LogLevel level, const std::string &message));
 
+
+  #ifdef COUNTLY_USE_CUSTOM_SHA256
   /*
   This function should not be used as it will be removed in a future release. It is
   currently added as a temporary workaround.
   */
-  inline std::function<void(LogLevel, const std::string &)> getLogger() { return logger_function; }
+  inline std::function<void(LogLevel, const std::string &)> getLogger() { return logger->getLogger(); }
+  #endif
 
   struct HTTPResponse {
     bool success;
@@ -224,7 +227,6 @@ private:
 
   cly::SHA256Function sha256_function;
   HTTPClientFunction http_client_function;
-  void (*logger_function)(LogLevel level, const std::string &message) = nullptr;
 
   std::string host;
 
