@@ -557,13 +557,11 @@ bool Countly::beginSession() {
   session_params.erase("user_details");
   last_sent_session_request = Countly::getTimestamp();
   began_session = true;
-
-  //TODO: potential bug
-  if (remote_config_enabled) {
-  //  updateRemoteConfig();
-  }
-
   mutex.unlock();
+
+  if (remote_config_enabled) {
+    updateRemoteConfig();
+  }
   return began_session;
 }
 
@@ -789,6 +787,7 @@ std::string Countly::calculateChecksum(const std::string &salt, const std::strin
 }
 
 void Countly::processRequestQueue() {
+  mutex.lock();
   while (!request_queue.empty()) {
     std::string data = request_queue.front();
     HTTPResponse response = sendHTTP("/i", data);
@@ -796,6 +795,7 @@ void Countly::processRequestQueue() {
       request_queue.pop_front();
     }
   }
+  mutex.unlock();
 }
 
 void Countly::addToRequestQueue(std::string &data) {
@@ -1014,20 +1014,28 @@ void Countly::enableRemoteConfig() {
   mutex.unlock();
 }
 
-void Countly::updateRemoteConfig() {
-  if (!session_params["app_key"].is_string() || !session_params["device_id"].is_string()) {
-    log(Countly::LogLevel::ERROR, "Error updating remote config, app key or device id is missing");
-    return;
-  }
-
-  std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
-
+void Countly::_fetchRemoteConfig(std::map < std::string, std::string> &data) {
+  mutex.lock();
   HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
   if (response.success) {
-    mutex.lock();
     remote_config = response.data;
-    mutex.unlock();
   }
+  mutex.unlock();
+}
+
+void Countly::updateRemoteConfig() {
+  mutex.lock();
+  if (!session_params["app_key"].is_string() || !session_params["device_id"].is_string()) {
+    log(Countly::LogLevel::ERROR, "Error updating remote config, app key or device id is missing");
+    mutex.unlock();
+    return;
+  }
+  std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
+
+  mutex.unlock();
+
+  std::thread th(&Countly::_fetchRemoteConfig, this, data);
+  th.detach();
 }
 
 nlohmann::json Countly::getRemoteConfigValue(const std::string &key) {
@@ -1037,7 +1045,19 @@ nlohmann::json Countly::getRemoteConfigValue(const std::string &key) {
   return value;
 }
 
+void Countly::_updateRemoteConfigFor(std::map < std::string, std::string> &data) {
+  mutex.lock();
+  HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
+  if (response.success) {
+    for (auto it = response.data.begin(); it != response.data.end(); ++it) {
+      remote_config[it.key()] = it.value();
+    }
+  }
+  mutex.unlock();
+}
+
 void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
+  mutex.lock();
   std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
 
   {
@@ -1047,18 +1067,13 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
     }
     data["keys"] = keys_json.dump();
   }
-
-  HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
-  if (response.success) {
-    mutex.lock();
-    for (auto it = response.data.begin(); it != response.data.end(); ++it) {
-      remote_config[it.key()] = it.value();
-    }
-    mutex.unlock();
-  }
+  mutex.unlock();
+  std::thread th(&Countly::_updateRemoteConfigFor, this, data);
+  th.detach();
 }
 
-void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
+  void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
+  mutex.lock();
   std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
 
   {
@@ -1068,14 +1083,10 @@ void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
     }
     data["omit_keys"] = keys_json.dump();
   }
+  mutex.unlock();
 
-  HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
-  if (response.success) {
-    mutex.lock();
-    for (auto it = response.data.begin(); it != response.data.end(); ++it) {
-      remote_config[it.key()] = it.value();
-    }
-    mutex.unlock();
-  }
+  std::thread th(&Countly::_updateRemoteConfigFor, this, data);
+  th.detach();
+ 
 }
 } // namespace cly

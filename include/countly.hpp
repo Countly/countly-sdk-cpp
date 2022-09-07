@@ -212,6 +212,10 @@ private:
   void _sendIndependantLocationRequest();
   void log(LogLevel level, const std::string &message);
 
+  void _fetchRemoteConfig(std::map<std::string, std::string> &data);
+  void _updateRemoteConfigFor(std::map<std::string, std::string> &data);
+  void _updateRemoteConfigExcept(std::map<std::string, std::string> &data);
+
   void processRequestQueue();
   void addToRequestQueue(std::string &data);
   HTTPResponse sendHTTP(std::string path, std::string data);
@@ -254,6 +258,8 @@ private:
   bool running = false;
   size_t wait_milliseconds = COUNTLY_KEEPALIVE_INTERVAL;
   unsigned short _auto_session_update_interval = 60; // value is in seconds;
+
+  std::thread first;
 
   size_t max_events = COUNTLY_MAX_EVENTS_DEFAULT;
   std::deque<std::string> request_queue;
