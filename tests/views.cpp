@@ -1,12 +1,10 @@
 #include "countly.hpp"
 #include "doctest.h"
-#ifdef _WIN32
-#include <Windows.h>
-#else
-#include <unistd.h>
-#endif
+#include <thread>
+#include <chrono>
 
 using namespace cly;
+using namespace std::literals::chrono_literals;
 
 /**
  * Validate view data.
@@ -65,7 +63,7 @@ TEST_CASE("recording views") {
       nlohmann::json s = e["segmentation"].get<nlohmann::json>();
       validateViewSegmentation(e, "view1", eid, 0, true, true);
 
-      Sleep(3000);
+      std::this_thread::sleep_for(3s);
       ct.views().closeViewWithName("view1");
       eventSize++;
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
@@ -94,7 +92,7 @@ TEST_CASE("recording views") {
 
       validateViewSegmentation(e, "view1", eid, 0, true);
 
-      Sleep(2000);
+      std::this_thread::sleep_for(2s);
 
       ct.views().closeViewWithID(eid);
       eventSize++;
@@ -138,7 +136,7 @@ TEST_CASE("recording views") {
       CHECK(s["platform"].get<std::string>() == "ubuntu");
       CHECK(s["time"].get<std::string>() == "60");
 
-      Sleep(3000);
+      std::this_thread::sleep_for(3s);
 
       ct.views().closeViewWithName("view2");
       eventSize++;
@@ -173,7 +171,7 @@ TEST_CASE("recording views") {
       CHECK(s["platform"].get<std::string>() == "ubuntu");
       CHECK(s["time"].get<std::string>() == "60");
 
-      Sleep(1000);
+      std::this_thread::sleep_for(1s);
 
       ct.views().closeViewWithID(eid);
       eventSize++;
