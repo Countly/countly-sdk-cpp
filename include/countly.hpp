@@ -212,6 +212,8 @@ private:
   void _sendIndependantLocationRequest();
   void log(LogLevel level, const std::string &message);
 
+  void processRequestQueue();
+  void addToRequestQueue(std::string &data);
   HTTPResponse sendHTTP(std::string path, std::string data);
 
   void _changeDeviceIdWithMerge(const std::string &value);
@@ -254,6 +256,7 @@ private:
   unsigned short _auto_session_update_interval = 60; // value is in seconds;
 
   size_t max_events = COUNTLY_MAX_EVENTS_DEFAULT;
+  std::deque<std::string> request_queue;
 #ifndef COUNTLY_USE_SQLITE
   std::deque<std::string> event_queue;
 #else
