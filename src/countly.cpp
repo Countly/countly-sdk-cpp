@@ -313,6 +313,7 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
 
 void Countly::start(const std::string &app_key, const std::string &host, int port, bool start_thread) {
   mutex.lock();
+  enable_autometic_session = start_thread;
   start_thread = true;
   log(Countly::LogLevel::INFO, "[Countly][start]");
   this->host = host;
@@ -787,15 +788,20 @@ std::string Countly::calculateChecksum(const std::string &salt, const std::strin
 }
 
 void Countly::processRequestQueue() {
-  mutex.lock();
+
   while (!request_queue.empty()) {
+    mutex.lock();
     std::string data = request_queue.front();
     HTTPResponse response = sendHTTP("/i", data);
-    if (response.success) {
-      request_queue.pop_front();
+
+    if (!response.success) {
+      mutex.unlock();
+      return;
     }
+
+    request_queue.pop_front();
+    mutex.unlock();
   }
-  mutex.unlock();
 }
 
 void Countly::addToRequestQueue(std::string &data) { request_queue.push_back(data); }
@@ -998,7 +1004,10 @@ void Countly::updateLoop() {
     size_t last_wait_milliseconds = wait_milliseconds;
     mutex.unlock();
     std::this_thread::sleep_for(std::chrono::milliseconds(last_wait_milliseconds));
-    updateSession();
+    if (enable_autometic_session) {
+      updateSession();
+    }
+
     processRequestQueue();
   }
   mutex.lock();
@@ -1032,8 +1041,9 @@ void Countly::updateRemoteConfig() {
 
   mutex.unlock();
 
-  std::thread th(&Countly::_fetchRemoteConfig, this, data);
-  th.detach();
+  // Fetch remote config asynchronously
+  std::thread _thread(&Countly::_fetchRemoteConfig, this, data);
+  _thread.detach();
 }
 
 nlohmann::json Countly::getRemoteConfigValue(const std::string &key) {
@@ -1066,8 +1076,10 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
     data["keys"] = keys_json.dump();
   }
   mutex.unlock();
-  std::thread th(&Countly::_updateRemoteConfigFor, this, data);
-  th.detach();
+
+  // Fetch remote config asynchronously
+  std::thread _thread(&Countly::_updateRemoteConfigFor, this, data);
+  _thread.detach();
 }
 
 void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
@@ -1083,7 +1095,8 @@ void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
   }
   mutex.unlock();
 
-  std::thread th(&Countly::_updateRemoteConfigFor, this, data);
-  th.detach();
+  // Fetch remote config asynchronously
+  std::thread _thread(&Countly::_updateRemoteConfigFor, this, data);
+  _thread.detach();
 }
 } // namespace cly

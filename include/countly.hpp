@@ -254,12 +254,11 @@ private:
   std::shared_ptr<cly::LoggerModule> logger;
 
   std::mutex mutex;
+  bool enable_autometic_session = false;
   bool stop_thread = false;
   bool running = false;
   size_t wait_milliseconds = COUNTLY_KEEPALIVE_INTERVAL;
   unsigned short _auto_session_update_interval = 60; // value is in seconds;
-
-  std::thread first;
 
   size_t max_events = COUNTLY_MAX_EVENTS_DEFAULT;
   std::deque<std::string> request_queue;
