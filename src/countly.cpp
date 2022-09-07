@@ -689,7 +689,7 @@ bool Countly::endSession() {
   }
 
   addToRequestQueue(Countly::serializeForm(data));
- 
+
   last_sent_session_request = now;
   began_session = false;
   mutex.unlock();
@@ -798,9 +798,7 @@ void Countly::processRequestQueue() {
   mutex.unlock();
 }
 
-void Countly::addToRequestQueue(std::string &data) {
-	request_queue.push_back(data); 
-}
+void Countly::addToRequestQueue(std::string &data) { request_queue.push_back(data); }
 
 Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
   bool use_post = always_use_post || (data.size() > COUNTLY_POST_THRESHOLD);
@@ -1014,7 +1012,7 @@ void Countly::enableRemoteConfig() {
   mutex.unlock();
 }
 
-void Countly::_fetchRemoteConfig(std::map < std::string, std::string> &data) {
+void Countly::_fetchRemoteConfig(std::map<std::string, std::string> &data) {
   mutex.lock();
   HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
   if (response.success) {
@@ -1045,7 +1043,7 @@ nlohmann::json Countly::getRemoteConfigValue(const std::string &key) {
   return value;
 }
 
-void Countly::_updateRemoteConfigFor(std::map < std::string, std::string> &data) {
+void Countly::_updateRemoteConfigFor(std::map<std::string, std::string> &data) {
   mutex.lock();
   HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
   if (response.success) {
@@ -1072,7 +1070,7 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
   th.detach();
 }
 
-  void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
+void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
   mutex.lock();
   std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
 
@@ -1087,6 +1085,5 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
 
   std::thread th(&Countly::_updateRemoteConfigFor, this, data);
   th.detach();
- 
 }
 } // namespace cly
