@@ -713,8 +713,10 @@ std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chro
 std::string Countly::encodeURL(const std::string &data) {
   std::ostringstream encoded;
 
-  for (auto character : data) {
+  for (char character : data) {
     unsigned int ch = *reinterpret_cast<unsigned char *>(&character);
+
+    //The extended ASCII codes (character code 128-255)
     if (ch > 127 || (!std::isalnum(character) && character != '.' && character != '_' && character != '~')) {
       encoded << '%' << std::setw(2) << std::hex << std::setfill('0') << std::uppercase << ch;
     } else {
