@@ -212,6 +212,16 @@ private:
   void _sendIndependantLocationRequest();
   void log(LogLevel level, const std::string &message);
 
+  /**
+   * Helper methods to fetch remote config from the server.
+   */
+#pragma region  Remote_Config_Helper_Methods
+  void _fetchRemoteConfig(std::map<std::string, std::string> &data);
+  void _updateRemoteConfigWithSpecificValues(std::map<std::string, std::string> &data);
+#pragma endregion Remote_Config_Helper_Methods
+
+  void processRequestQueue();
+  void addToRequestQueue(std::string &data);
   HTTPResponse sendHTTP(std::string path, std::string data);
 
   void _changeDeviceIdWithMerge(const std::string &value);
@@ -248,12 +258,14 @@ private:
   std::shared_ptr<cly::LoggerModule> logger;
 
   std::mutex mutex;
+  bool enable_automatic_session = false;
   bool stop_thread = false;
   bool running = false;
   size_t wait_milliseconds = COUNTLY_KEEPALIVE_INTERVAL;
   unsigned short _auto_session_update_interval = 60; // value is in seconds;
 
   size_t max_events = COUNTLY_MAX_EVENTS_DEFAULT;
+  std::deque<std::string> request_queue;
 #ifndef COUNTLY_USE_SQLITE
   std::deque<std::string> event_queue;
 #else

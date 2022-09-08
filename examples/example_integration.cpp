@@ -3,11 +3,6 @@
 #include <iostream>
 #include <random>
 #include <thread>
-#ifdef _WIN32
-#include <Windows.h>
-#else
-#include <unistd.h>
-#endif
 
 using namespace std;
 using namespace cly;
@@ -123,7 +118,7 @@ int main() {
       // Open a view
       std::string viewID = ct.views().openView("Main view", segmentation);
 
-      Sleep(2000); // two seconds
+      std::this_thread::sleep_for(2s);
 
       // Close an opened view
       ct.views().closeViewWithID(viewID);
