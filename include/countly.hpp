@@ -217,8 +217,7 @@ private:
    */
 #pragma region  Remote_Config_Helper_Methods
   void _fetchRemoteConfig(std::map<std::string, std::string> &data);
-  void _updateRemoteConfigFor(std::map<std::string, std::string> &data);
-  void _updateRemoteConfigExcept(std::map<std::string, std::string> &data);
+  void _updateRemoteConfigWithSpecificValues(std::map<std::string, std::string> &data);
 #pragma endregion Remote_Config_Helper_Methods
 
   void processRequestQueue();

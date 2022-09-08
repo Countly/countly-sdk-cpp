@@ -1060,7 +1060,7 @@ nlohmann::json Countly::getRemoteConfigValue(const std::string &key) {
   return value;
 }
 
-void Countly::_updateRemoteConfigFor(std::map<std::string, std::string> &data) {
+void Countly::_updateRemoteConfigWithSpecificValues(std::map<std::string, std::string> &data) {
   mutex.lock();
   HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
   if (response.success) {
@@ -1085,7 +1085,7 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
   mutex.unlock();
 
   // Fetch remote config asynchronously
-  std::thread _thread(&Countly::_updateRemoteConfigFor, this, data);
+  std::thread _thread(&Countly::_updateRemoteConfigWithSpecificValues, this, data);
   _thread.detach();
 }
 
@@ -1103,7 +1103,7 @@ void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
   mutex.unlock();
 
   // Fetch remote config asynchronously
-  std::thread _thread(&Countly::_updateRemoteConfigFor, this, data);
+  std::thread _thread(&Countly::_updateRemoteConfigWithSpecificValues, this, data);
   _thread.detach();
 }
 } // namespace cly
