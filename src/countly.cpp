@@ -313,7 +313,7 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
 
 void Countly::start(const std::string &app_key, const std::string &host, int port, bool start_thread) {
   mutex.lock();
-  enable_autometic_session = start_thread;
+  enable_automatic_session = start_thread;
   start_thread = true;
   log(Countly::LogLevel::INFO, "[Countly][start]");
   this->host = host;
@@ -796,7 +796,7 @@ void Countly::processRequestQueue() {
 
     if (!response.success) {
       mutex.unlock();
-      return;
+      break;
     }
 
     request_queue.pop_front();
@@ -804,7 +804,13 @@ void Countly::processRequestQueue() {
   }
 }
 
-void Countly::addToRequestQueue(std::string &data) { request_queue.push_back(data); }
+void Countly::addToRequestQueue(std::string &data) {
+  if (request_queue.size() >= 1000) {
+    request_queue.pop_front();
+  }
+
+  request_queue.push_back(data);
+}
 
 Countly::HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
   bool use_post = always_use_post || (data.size() > COUNTLY_POST_THRESHOLD);
@@ -1004,7 +1010,7 @@ void Countly::updateLoop() {
     size_t last_wait_milliseconds = wait_milliseconds;
     mutex.unlock();
     std::this_thread::sleep_for(std::chrono::milliseconds(last_wait_milliseconds));
-    if (enable_autometic_session) {
+    if (enable_automatic_session) {
       updateSession();
     }
 

@@ -212,9 +212,14 @@ private:
   void _sendIndependantLocationRequest();
   void log(LogLevel level, const std::string &message);
 
+  /**
+   * Helper methods to fetch remote config from the server.
+   */
+#pragma region  Remote_Config_Helper_Methods
   void _fetchRemoteConfig(std::map<std::string, std::string> &data);
   void _updateRemoteConfigFor(std::map<std::string, std::string> &data);
   void _updateRemoteConfigExcept(std::map<std::string, std::string> &data);
+#pragma endregion Remote_Config_Helper_Methods
 
   void processRequestQueue();
   void addToRequestQueue(std::string &data);
@@ -254,7 +259,7 @@ private:
   std::shared_ptr<cly::LoggerModule> logger;
 
   std::mutex mutex;
-  bool enable_autometic_session = false;
+  bool enable_automatic_session = false;
   bool stop_thread = false;
   bool running = false;
   size_t wait_milliseconds = COUNTLY_KEEPALIVE_INTERVAL;
