@@ -702,11 +702,11 @@ std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chro
 std::string Countly::encodeURL(const std::string &data) {
   std::ostringstream encoded;
 
-  for (auto character : data) {
+  for (unsigned char character : data) {
     if (std::isalnum(character) || character == '.' || character == '_' || character == '~') {
       encoded << character;
     } else {
-      encoded << '%' << std::setw(2) << std::hex << std::uppercase << (int)((unsigned char)character);
+      encoded << '%' << std::setw(2) << std::hex << std::setfill('0') << std::uppercase << (unsigned int)((unsigned char)character);
     }
   }
 
