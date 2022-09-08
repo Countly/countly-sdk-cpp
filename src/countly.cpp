@@ -806,6 +806,7 @@ void Countly::processRequestQueue() {
 
 void Countly::addToRequestQueue(std::string &data) {
   if (request_queue.size() >= 1000) {
+    log(Countly::LogLevel::WARNING, "[Countly][addToRequestQueue] Request Queue is full. Dropping the oldest request.");
     request_queue.pop_front();
   }
 
