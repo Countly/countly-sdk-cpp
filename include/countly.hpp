@@ -139,7 +139,7 @@ public:
 #ifdef COUNTLY_USE_SQLITE
     setDatabasePath(path);
 #elif defined _WIN32
-    // UNREFERENCED_PARAMETER(path);
+     UNREFERENCED_PARAMETER(path);
 #endif
   }
 
@@ -200,12 +200,14 @@ public:
    * You should not be using this method.
    * @return a vector object containing events.
    */
-#ifndef COUNTLY_USE_SQLITE
   const std::vector<std::string> debugReturnStateOfEQ() {
+#ifdef COUNTLY_USE_SQLITE
+    return {};
+#endif
     std::vector<std::string> v(event_queue.begin(), event_queue.end());
     return v;
   }
-#endif
+
 
 private:
   void _deleteThread();
