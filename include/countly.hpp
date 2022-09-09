@@ -215,7 +215,7 @@ private:
   /**
    * Helper methods to fetch remote config from the server.
    */
-#pragma region  Remote_Config_Helper_Methods
+#pragma region Remote_Config_Helper_Methods
   void _fetchRemoteConfig(std::map<std::string, std::string> &data);
   void _updateRemoteConfigWithSpecificValues(std::map<std::string, std::string> &data);
 #pragma endregion Remote_Config_Helper_Methods
@@ -258,6 +258,8 @@ private:
   std::shared_ptr<cly::LoggerModule> logger;
 
   std::mutex mutex;
+
+  bool is_queue_being_processed = false;
   bool enable_automatic_session = false;
   bool stop_thread = false;
   bool running = false;

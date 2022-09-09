@@ -788,20 +788,43 @@ std::string Countly::calculateChecksum(const std::string &salt, const std::strin
 }
 
 void Countly::processRequestQueue() {
+  mutex.lock();
+  if (is_queue_being_processed) {
+    mutex.unlock();
+    return;
+  }
 
-  while (!request_queue.empty()) {
+  is_queue_being_processed = true;
+  mutex.unlock();
+
+  while (true) {
     mutex.lock();
+    if (request_queue.empty()) {
+      mutex.unlock();
+      break;
+    }
+
     std::string data = request_queue.front();
+    mutex.unlock();
     HTTPResponse response = sendHTTP("/i", data);
 
+    mutex.lock();
     if (!response.success) {
       mutex.unlock();
       break;
     }
 
-    request_queue.pop_front();
+    if (request_queue.front() == data) {
+      // we pop the front only if it is still the same request
+      request_queue.pop_front();
+    }
+
     mutex.unlock();
   }
+
+  mutex.lock();
+  is_queue_being_processed = false;
+  mutex.unlock();
 }
 
 void Countly::addToRequestQueue(std::string &data) {
@@ -1029,8 +1052,8 @@ void Countly::enableRemoteConfig() {
 }
 
 void Countly::_fetchRemoteConfig(std::map<std::string, std::string> &data) {
-  mutex.lock();
   HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
+  mutex.lock();
   if (response.success) {
     remote_config = response.data;
   }
@@ -1061,8 +1084,8 @@ nlohmann::json Countly::getRemoteConfigValue(const std::string &key) {
 }
 
 void Countly::_updateRemoteConfigWithSpecificValues(std::map<std::string, std::string> &data) {
-  mutex.lock();
   HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
+  mutex.lock();
   if (response.success) {
     for (auto it = response.data.begin(); it != response.data.end(); ++it) {
       remote_config[it.key()] = it.value();
