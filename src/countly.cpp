@@ -839,7 +839,7 @@ void Countly::processRequestQueue() {
   mutex.unlock();
 }
 
-void Countly::addToRequestQueue(std::string &data) {
+void Countly::addToRequestQueue(const std::string &data) {
   if (request_queue.size() >= 1000) {
     log(Countly::LogLevel::WARNING, "[Countly][addToRequestQueue] Request Queue is full. Dropping the oldest request.");
     request_queue.pop_front();
@@ -1063,7 +1063,7 @@ void Countly::enableRemoteConfig() {
   mutex.unlock();
 }
 
-void Countly::_fetchRemoteConfig(std::map<std::string, std::string> &data) {
+void Countly::_fetchRemoteConfig(std::map<std::string, std::string> data) {
   HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
   mutex.lock();
   if (response.success) {
@@ -1095,7 +1095,7 @@ nlohmann::json Countly::getRemoteConfigValue(const std::string &key) {
   return value;
 }
 
-void Countly::_updateRemoteConfigWithSpecificValues(std::map<std::string, std::string> &data) {
+void Countly::_updateRemoteConfigWithSpecificValues(std::map<std::string, std::string> data) {
   HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
   mutex.lock();
   if (response.success) {
