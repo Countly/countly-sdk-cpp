@@ -12,9 +12,7 @@
 #include <string>
 #include <thread>
 
-#ifndef COUNTLY_USE_SQLITE
 #include <deque>
-#endif
 
 #include "nlohmann/json.hpp"
 
@@ -203,6 +201,9 @@ public:
    * @return a vector object containing events.
    */
   const std::vector<std::string> debugReturnStateOfEQ() {
+#ifdef COUNTLY_USE_SQLITE
+    return {};
+#endif
     std::vector<std::string> v(event_queue.begin(), event_queue.end());
     return v;
   }
@@ -215,7 +216,7 @@ private:
   /**
    * Helper methods to fetch remote config from the server.
    */
-#pragma region  Remote_Config_Helper_Methods
+#pragma region Remote_Config_Helper_Methods
   void _fetchRemoteConfig(std::map<std::string, std::string> &data);
   void _updateRemoteConfigWithSpecificValues(std::map<std::string, std::string> &data);
 #pragma endregion Remote_Config_Helper_Methods
@@ -258,6 +259,8 @@ private:
   std::shared_ptr<cly::LoggerModule> logger;
 
   std::mutex mutex;
+
+  bool is_queue_being_processed = false;
   bool enable_automatic_session = false;
   bool stop_thread = false;
   bool running = false;
