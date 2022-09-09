@@ -1,3 +1,6 @@
+
+#ifndef COUNTLY_USE_SQLITE
+
 #include "countly.hpp"
 #include "doctest.h"
 
@@ -208,3 +211,5 @@ TEST_CASE("recording views") {
     }
   }
 }
+
+#endif
