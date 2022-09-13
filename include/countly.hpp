@@ -44,12 +44,14 @@ public:
   void setLogger(void (*fun)(LogLevel level, const std::string &message));
 
 
+  #ifdef COUNTLY_BUILD_TESTS
   #ifdef COUNTLY_USE_CUSTOM_SHA256
   /*
   This function should not be used as it will be removed in a future release. It is
   currently added as a temporary workaround.
   */
   inline std::function<void(LogLevel, const std::string &)> getLogger() { return logger->getLogger(); }
+  #endif
   #endif
 
   struct HTTPResponse {
