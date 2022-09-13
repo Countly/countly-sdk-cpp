@@ -117,8 +117,9 @@ HTTPCall popHTTPCall() {
 
 TEST_CASE("urlencoding is correct") {
   CHECK(Countly::encodeURL("hello world") == "hello%20world");
+  CHECK(Countly::encodeURL("hello.~world") == "hello.~world");
   CHECK(Countly::encodeURL("{\"key\":\"win\",\"count\":3}") == "%7B%22key%22%3A%22win%22%2C%22count%22%3A3%7D");
-  // CHECK(Countly::encodeURL("测试") == "%E6%B5%8B%E8%AF%95"); // UTF-8 TODO: Needs to be fixed. This is throwing an exception.
+  CHECK(Countly::encodeURL("测试") == "%E6%B5%8B%E8%AF%95");
 }
 
 void printLog(LogLevel level, const std::string &msg) {
