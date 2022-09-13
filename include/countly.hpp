@@ -196,7 +196,7 @@ public:
    * @return a vector object containing events.
    */
 
-#ifndef COUNTLY_BUILD_TESTS
+#ifdef COUNTLY_BUILD_TESTS
   const std::vector<std::string> debugReturnStateOfEQ() {
 
 #ifdef COUNTLY_USE_SQLITE

@@ -57,8 +57,7 @@ Countly &Countly::getInstance() {
   return *_sharedInstance.get();
 }
 
-#ifndef COUNTLY_BUILD_TESTS
-
+#ifdef COUNTLY_BUILD_TESTS
 void Countly::reset() { _sharedInstance.reset(new Countly()); }
 #endif
 
