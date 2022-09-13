@@ -787,21 +787,56 @@ std::string Countly::calculateChecksum(const std::string &salt, const std::strin
 #endif
 }
 
+  /**
+   * SDK central execution call for processing requests in the request queue.
+   * Only one sender is active at a time. Requests are processed in order.
+   */
 void Countly::processRequestQueue() {
+  mutex.lock();
+  //making sure that no other thread is processing the queue
+  if (is_queue_being_processed) {
+    mutex.unlock();
+    return;
+  }
 
-  while (!request_queue.empty()) {
+  //if this is the only thread, mark that processing is happening
+  is_queue_being_processed = true;
+  mutex.unlock();
+
+  while (true) {
     mutex.lock();
-    std::string data = request_queue.front();
-    HTTPResponse response = sendHTTP("/i", data);
-
-    if (!response.success) {
+    if (request_queue.empty()) {
+      //stop sending requests once the queue is empty
       mutex.unlock();
       break;
     }
 
-    request_queue.pop_front();
+    std::string data = request_queue.front();
+    mutex.unlock();
+
+    HTTPResponse response = sendHTTP("/i", data);
+
+    mutex.lock();
+    if (!response.success) {
+      //if the request was not a success, abort sending and try again in the future
+      mutex.unlock();
+      break;
+    }
+
+
+    if (request_queue.front() == data) {
+      // we pop the front only if it is still the same request
+      // the queue might have changed while we were sending the request
+      request_queue.pop_front();
+    }
+
     mutex.unlock();
   }
+
+  mutex.lock();
+  //mark that no thread is processing the request queue
+  is_queue_being_processed = false;
+  mutex.unlock();
 }
 
 void Countly::addToRequestQueue(std::string &data) {
@@ -1029,8 +1064,8 @@ void Countly::enableRemoteConfig() {
 }
 
 void Countly::_fetchRemoteConfig(std::map<std::string, std::string> &data) {
-  mutex.lock();
   HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
+  mutex.lock();
   if (response.success) {
     remote_config = response.data;
   }
@@ -1061,8 +1096,8 @@ nlohmann::json Countly::getRemoteConfigValue(const std::string &key) {
 }
 
 void Countly::_updateRemoteConfigWithSpecificValues(std::map<std::string, std::string> &data) {
-  mutex.lock();
   HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
+  mutex.lock();
   if (response.success) {
     for (auto it = response.data.begin(); it != response.data.end(); ++it) {
       remote_config[it.key()] = it.value();
