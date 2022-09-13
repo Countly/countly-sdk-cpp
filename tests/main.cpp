@@ -201,12 +201,13 @@ TEST_CASE("events are sent correctly") {
     timestamp = getUnixTimestamp();
     countly.beginSession();
     HTTPCall http_call = popHTTPCall();
-    long long timestampDiff = timestamp - stoll(http_call.data["timestamp"]);
+    long long timestampDiff = stoll(http_call.data["timestamp"]) - timestamp;
     CHECK(!http_call.use_post);
     CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
     CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
     CHECK(http_call.data["begin_session"] == "1");
     CHECK(timestampDiff >= 0);
+    CHECK(timestampDiff <= 100);//todo find out what the sweetspot is for the difference
   }
 
   SUBCASE("remote config is fetched") {
