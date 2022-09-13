@@ -217,8 +217,8 @@ private:
    * Helper methods to fetch remote config from the server.
    */
 #pragma region Remote_Config_Helper_Methods
-  void _fetchRemoteConfig(std::map<std::string, std::string> data);
-  void _updateRemoteConfigWithSpecificValues(std::map<std::string, std::string> data);
+  void _fetchRemoteConfig(const std::map<std::string, std::string> &data);
+  void _updateRemoteConfigWithSpecificValues(const std::map<std::string, std::string> &data);
 #pragma endregion Remote_Config_Helper_Methods
 
   void processRequestQueue();
