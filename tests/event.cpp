@@ -4,25 +4,28 @@
 #include <string>
 using namespace cly;
 
+void valideEventParams(nlohmann::json eventJson, std::string key, int count) {
+
+  CHECK(eventJson["key"].get<std::string>() == key);
+  CHECK(eventJson["count"].get<int>() == count);
+  CHECK(std::to_string(eventJson["timestamp"].get<long long>()).size() == 13);
+}
+
 TEST_CASE("events are serialized correctly") {
   SUBCASE("without segmentation") {
     SUBCASE("without sum") {
       cly::Event event("win", 1);
 
       nlohmann::json e = nlohmann::json::parse(event.serialize());
-      CHECK(e["key"].get<std::string>() == "win");
-      CHECK(e["count"].get<int>() == 1);
-      CHECK(std::to_string(e["timestamp"].get<long long>()).size() == 13);
+      valideEventParams(e, "win", 1);
     }
 
     SUBCASE("with sum") {
       cly::Event event("buy", 2, 9.99);
 
       nlohmann::json e = nlohmann::json::parse(event.serialize());
-      CHECK(e["key"].get<std::string>() == "buy");
-      CHECK(e["count"].get<int>() == 2);
       CHECK(e["sum"].get<double>() == 9.99);
-      CHECK(std::to_string(e["timestamp"].get<long long>()).size() == 13);
+      valideEventParams(e, "buy", 2);
     }
   }
 
@@ -32,9 +35,7 @@ TEST_CASE("events are serialized correctly") {
       event.addSegmentation("points", -144);
 
       nlohmann::json e = nlohmann::json::parse(event.serialize());
-      CHECK(e["key"].get<std::string>() == "lose");
-      CHECK(e["count"].get<int>() == 3);
-      CHECK(std::to_string(e["timestamp"].get<long long>()).size() == 13);
+      valideEventParams(e, "lose", 3);
 
       nlohmann::json s = e["segmentation"].get<nlohmann::json>();
       CHECK(s["points"].get<int>() == -144);
@@ -45,9 +46,7 @@ TEST_CASE("events are serialized correctly") {
       event.addSegmentation("points", 232U);
 
       nlohmann::json e = nlohmann::json::parse(event.serialize());
-      CHECK(e["key"].get<std::string>() == "win");
-      CHECK(e["count"].get<int>() == 1);
-      CHECK(std::to_string(e["timestamp"].get<long long>()).size() == 13);
+      valideEventParams(e, "win", 1);
 
       nlohmann::json s = e["segmentation"].get<nlohmann::json>();
       CHECK(s["points"].get<unsigned int>() == 232U);
@@ -58,9 +57,7 @@ TEST_CASE("events are serialized correctly") {
       event.addSegmentation("alive", true);
 
       nlohmann::json e = nlohmann::json::parse(event.serialize());
-      CHECK(e["key"].get<std::string>() == "win");
-      CHECK(e["count"].get<int>() == 1);
-      CHECK(std::to_string(e["timestamp"].get<long long>()).size() == 13);
+      valideEventParams(e, "win", 1);
 
       nlohmann::json s = e["segmentation"].get<nlohmann::json>();
       CHECK(s["alive"].get<bool>() == true);
@@ -71,9 +68,7 @@ TEST_CASE("events are serialized correctly") {
       event.addSegmentation("sender", "TheLegend27");
 
       nlohmann::json e = nlohmann::json::parse(event.serialize());
-      CHECK(e["key"].get<std::string>() == "message");
-      CHECK(e["count"].get<int>() == 1);
-      CHECK(std::to_string(e["timestamp"].get<long long>()).size() == 13);
+      valideEventParams(e, "message", 1);
 
       nlohmann::json s = e["segmentation"].get<nlohmann::json>();
       CHECK(s["sender"].get<std::string>() == "TheLegend27");
@@ -85,9 +80,7 @@ TEST_CASE("events are serialized correctly") {
       event.addSegmentation("searchQuery", "cheap cheese");
 
       nlohmann::json e = nlohmann::json::parse(event.serialize());
-      CHECK(e["key"].get<std::string>() == "buy");
-      CHECK(e["count"].get<int>() == 5);
-      CHECK(std::to_string(e["timestamp"].get<long long>()).size() == 13);
+      valideEventParams(e, "buy", 5);
 
       nlohmann::json s = e["segmentation"].get<nlohmann::json>();
       CHECK(s["quantity"].get<int>() == 27);
@@ -99,9 +92,7 @@ TEST_CASE("events are serialized correctly") {
       event.addSegmentation("苹果", "美味");
 
       nlohmann::json e = nlohmann::json::parse(event.serialize());
-      CHECK(e["key"].get<std::string>() == "测试");
-      CHECK(e["count"].get<int>() == 1);
-      CHECK(std::to_string(e["timestamp"].get<long long>()).size() == 13);
+      valideEventParams(e, "测试", 1);
 
       nlohmann::json s = e["segmentation"].get<nlohmann::json>();
       CHECK(s["苹果"].get<std::string>() == "美味");
