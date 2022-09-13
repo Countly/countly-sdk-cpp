@@ -57,7 +57,10 @@ Countly &Countly::getInstance() {
   return *_sharedInstance.get();
 }
 
+#ifndef COUNTLY_BUILD_TESTS
+
 void Countly::reset() { _sharedInstance.reset(new Countly()); }
+#endif
 
 void Countly::alwaysUsePost(bool value) {
   mutex.lock();
@@ -120,7 +123,7 @@ void Countly::setUserDetails(const std::map<std::string, std::string> &value) {
 
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"user_details", session_params["user_details"].dump()}};
 
-  sendHTTP("/i", Countly::serializeForm(data));
+  addToRequestQueue(Countly::serializeForm(data));
   mutex.unlock();
 }
 
@@ -136,7 +139,7 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string> &val
 
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"user_details", session_params["user_details"].dump()}};
 
-  sendHTTP("/i", Countly::serializeForm(data));
+  addToRequestQueue(Countly::serializeForm(data));
   mutex.unlock();
 }
 
@@ -213,7 +216,7 @@ void Countly::_sendIndependantLocationRequest() {
     data["app_key"] = session_params["app_key"].get<std::string>();
     data["device_id"] = session_params["device_id"].get<std::string>();
     data["timestamp"] = std::to_string(timestamp.count());
-    sendHTTP("/i", Countly::serializeForm(data));
+    addToRequestQueue(Countly::serializeForm(data));
   }
 
   mutex.unlock();
@@ -270,7 +273,7 @@ void Countly::_changeDeviceIdWithMerge(const std::string &value) {
       {"old_device_id", session_params["old_device_id"].get<std::string>()},
       {"timestamp", std::to_string(timestamp.count())},
   };
-  sendHTTP("/i", Countly::serializeForm(data));
+  addToRequestQueue(Countly::serializeForm(data));
 
   session_params.erase("old_device_id");
   mutex.unlock();
@@ -298,6 +301,8 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
 
 void Countly::start(const std::string &app_key, const std::string &host, int port, bool start_thread) {
   mutex.lock();
+  enable_automatic_session = start_thread;
+  start_thread = true;
   log(Countly::LogLevel::INFO, "[Countly][start]");
 
   configuration->port = port;
@@ -541,19 +546,15 @@ bool Countly::beginSession() {
     data["metrics"] = configuration->metrics.serialize();
   }
 
-  if (sendHTTP("/i", Countly::serializeForm(data)).success) {
-    session_params.erase("user_details");
-    last_sent_session_request = Countly::getTimestamp();
-    began_session = true;
-  }
+  addToRequestQueue(Countly::serializeForm(data));
+  session_params.erase("user_details");
+  last_sent_session_request = Countly::getTimestamp();
+  began_session = true;
+  mutex.unlock();
 
   if (remote_config_enabled) {
-    mutex.unlock();
     updateRemoteConfig();
-  } else {
-    mutex.unlock();
   }
-
   return began_session;
 }
 
@@ -628,10 +629,7 @@ bool Countly::updateSession() {
   if (duration.count() >= configuration->sessionDuration) {
     log(Countly::LogLevel::DEBUG, "[Countly][updateSession] sending session update.");
     std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"session_duration", std::to_string(duration.count())}};
-    if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
-      mutex.unlock();
-      return false;
-    }
+    addToRequestQueue(Countly::serializeForm(data));
 
     last_sent_session_request += duration;
   }
@@ -640,10 +638,7 @@ bool Countly::updateSession() {
     log(Countly::LogLevel::DEBUG, "[Countly][updateSession] sending event.");
     std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"events", events.dump()}};
 
-    if (!sendHTTP("/i", Countly::serializeForm(data)).success) {
-      mutex.unlock();
-      return false;
-    }
+    addToRequestQueue(Countly::serializeForm(data));
   }
 
 #ifndef COUNTLY_USE_SQLITE
@@ -686,15 +681,12 @@ bool Countly::endSession() {
     return false;
   }
 
-  if (sendHTTP("/i", Countly::serializeForm(data)).success) {
-    last_sent_session_request = now;
-    began_session = false;
-    mutex.unlock();
-    return true;
-  }
+  addToRequestQueue(Countly::serializeForm(data));
 
+  last_sent_session_request = now;
+  began_session = false;
   mutex.unlock();
-  return false;
+  return true;
 }
 
 std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chrono::system_clock::now(); }
@@ -702,11 +694,11 @@ std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chro
 std::string Countly::encodeURL(const std::string &data) {
   std::ostringstream encoded;
 
-  for (auto character : data) {
+  for (unsigned char character : data) {
     if (std::isalnum(character) || character == '.' || character == '_' || character == '~') {
       encoded << character;
     } else {
-      encoded << '%' << std::setw(2) << std::hex << std::uppercase << (int)((unsigned char)character);
+      encoded << '%' << std::setw(2) << std::hex << std::setfill('0') << std::uppercase << (unsigned int)((unsigned char)character);
     }
   }
 
@@ -785,6 +777,66 @@ std::string Countly::calculateChecksum(const std::string &salt, const std::strin
 
   return checksum_stream.str();
 #endif
+}
+
+/**
+ * SDK central execution call for processing requests in the request queue.
+ * Only one sender is active at a time. Requests are processed in order.
+ */
+void Countly::processRequestQueue() {
+  mutex.lock();
+  // making sure that no other thread is processing the queue
+  if (is_queue_being_processed) {
+    mutex.unlock();
+    return;
+  }
+
+  // if this is the only thread, mark that processing is happening
+  is_queue_being_processed = true;
+  mutex.unlock();
+
+  while (true) {
+    mutex.lock();
+    if (request_queue.empty()) {
+      // stop sending requests once the queue is empty
+      mutex.unlock();
+      break;
+    }
+
+    std::string data = request_queue.front();
+    mutex.unlock();
+
+    HTTPResponse response = sendHTTP("/i", data);
+
+    mutex.lock();
+    if (!response.success) {
+      // if the request was not a success, abort sending and try again in the future
+      mutex.unlock();
+      break;
+    }
+
+    if (request_queue.front() == data) {
+      // we pop the front only if it is still the same request
+      // the queue might have changed while we were sending the request
+      request_queue.pop_front();
+    }
+
+    mutex.unlock();
+  }
+
+  mutex.lock();
+  // mark that no thread is processing the request queue
+  is_queue_being_processed = false;
+  mutex.unlock();
+}
+
+void Countly::addToRequestQueue(std::string &data) {
+  if (request_queue.size() >= 1000) {
+    log(Countly::LogLevel::WARNING, "[Countly][addToRequestQueue] Request Queue is full. Dropping the oldest request.");
+    request_queue.pop_front();
+  }
+
+  request_queue.push_back(data);
 }
 
 HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
@@ -985,7 +1037,11 @@ void Countly::updateLoop() {
     size_t last_wait_milliseconds = wait_milliseconds;
     mutex.unlock();
     std::this_thread::sleep_for(std::chrono::milliseconds(last_wait_milliseconds));
-    updateSession();
+    if (enable_automatic_session) {
+      updateSession();
+    }
+
+    processRequestQueue();
   }
   mutex.lock();
   running = false;
@@ -998,20 +1054,29 @@ void Countly::enableRemoteConfig() {
   mutex.unlock();
 }
 
+void Countly::_fetchRemoteConfig(std::map<std::string, std::string> &data) {
+  HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
+  mutex.lock();
+  if (response.success) {
+    remote_config = response.data;
+  }
+  mutex.unlock();
+}
+
 void Countly::updateRemoteConfig() {
+  mutex.lock();
   if (!session_params["app_key"].is_string() || !session_params["device_id"].is_string()) {
     log(Countly::LogLevel::ERROR, "Error updating remote config, app key or device id is missing");
+    mutex.unlock();
     return;
   }
-
   std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
 
-  HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
-  if (response.success) {
-    mutex.lock();
-    remote_config = response.data;
-    mutex.unlock();
-  }
+  mutex.unlock();
+
+  // Fetch remote config asynchronously
+  std::thread _thread(&Countly::_fetchRemoteConfig, this, data);
+  _thread.detach();
 }
 
 nlohmann::json Countly::getRemoteConfigValue(const std::string &key) {
@@ -1021,7 +1086,19 @@ nlohmann::json Countly::getRemoteConfigValue(const std::string &key) {
   return value;
 }
 
+void Countly::_updateRemoteConfigWithSpecificValues(std::map<std::string, std::string> &data) {
+  HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
+  mutex.lock();
+  if (response.success) {
+    for (auto it = response.data.begin(); it != response.data.end(); ++it) {
+      remote_config[it.key()] = it.value();
+    }
+  }
+  mutex.unlock();
+}
+
 void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
+  mutex.lock();
   std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
 
   {
@@ -1031,18 +1108,15 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
     }
     data["keys"] = keys_json.dump();
   }
+  mutex.unlock();
 
-  HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
-  if (response.success) {
-    mutex.lock();
-    for (auto it = response.data.begin(); it != response.data.end(); ++it) {
-      remote_config[it.key()] = it.value();
-    }
-    mutex.unlock();
-  }
+  // Fetch remote config asynchronously
+  std::thread _thread(&Countly::_updateRemoteConfigWithSpecificValues, this, data);
+  _thread.detach();
 }
 
 void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
+  mutex.lock();
   std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
 
   {
@@ -1052,14 +1126,10 @@ void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
     }
     data["omit_keys"] = keys_json.dump();
   }
+  mutex.unlock();
 
-  HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
-  if (response.success) {
-    mutex.lock();
-    for (auto it = response.data.begin(); it != response.data.end(); ++it) {
-      remote_config[it.key()] = it.value();
-    }
-    mutex.unlock();
-  }
+  // Fetch remote config asynchronously
+  std::thread _thread(&Countly::_updateRemoteConfigWithSpecificValues, this, data);
+  _thread.detach();
 }
 } // namespace cly
