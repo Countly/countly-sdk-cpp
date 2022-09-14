@@ -15,21 +15,21 @@ public:
   ViewsModule(cly::CountlyDelegates *cly, std::shared_ptr<cly::LoggerModule> logger);
 
   /**
-   * Close view a with id.
+   * Close view with id.
    *
    * @param viewId: id of the view.
    */
   void closeViewWithID(const std::string &viewId);
 
   /**
-   * Close view a with name.
+   * Close view with name.
    *
    * @param name: name of the view.
    */
   void closeViewWithName(const std::string &name);
 
   /**
-   * Close view a with name.
+   * Open view with name.
    *
    * @param name: name of the view.
    * @param segmentation: custom data you want to set.
