@@ -45,13 +45,11 @@ public:
 
 
   #ifdef COUNTLY_BUILD_TESTS
-  #ifdef COUNTLY_USE_CUSTOM_SHA256
   /*
   This function should not be used as it will be removed in a future release. It is
   currently added as a temporary workaround.
   */
   inline std::function<void(LogLevel, const std::string &)> getLogger() { return logger->getLogger(); }
-  #endif
   #endif
 
   struct HTTPResponse {
@@ -220,12 +218,12 @@ private:
    * Helper methods to fetch remote config from the server.
    */
 #pragma region Remote_Config_Helper_Methods
-  void _fetchRemoteConfig(std::map<std::string, std::string> &data);
-  void _updateRemoteConfigWithSpecificValues(std::map<std::string, std::string> &data);
+  void _fetchRemoteConfig(const std::map<std::string, std::string> &data);
+  void _updateRemoteConfigWithSpecificValues(const std::map<std::string, std::string> &data);
 #pragma endregion Remote_Config_Helper_Methods
 
   void processRequestQueue();
-  void addToRequestQueue(std::string &data);
+  void addToRequestQueue(const std::string &data);
   HTTPResponse sendHTTP(std::string path, std::string data);
 
   void _changeDeviceIdWithMerge(const std::string &value);
