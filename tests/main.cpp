@@ -127,7 +127,6 @@ void printLog(LogLevel level, const std::string &msg) {
   CHECK(level == LogLevel::DEBUG);
 }
 
-#ifdef COUNTLY_USE_CUSTOM_SHA256
 TEST_CASE("Logger function validation") {
   Countly &countly = Countly::getInstance();
 
@@ -140,7 +139,6 @@ TEST_CASE("Logger function validation") {
   countly.setLogger(nullptr);
   CHECK(countly.getLogger() == nullptr);
 }
-#endif
 
 #ifdef COUNTLY_USE_CUSTOM_SHA256
 
