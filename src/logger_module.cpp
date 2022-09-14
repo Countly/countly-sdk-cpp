@@ -1,13 +1,14 @@
 #include "countly/logger_module.hpp"
 #include <iostream>
+#include <memory>
 namespace cly {
 class LoggerModule::LoggerModuleImpl {
 public:
-  LoggerModuleImpl::LoggerModuleImpl() {}
+  LoggerModuleImpl() {}
   LoggerFunction logger_function;
 };
 
-LoggerModule::LoggerModule() { impl.reset(new LoggerModuleImpl()); }
+LoggerModule::LoggerModule() { impl = std::make_unique<LoggerModuleImpl>(); }
 
 LoggerModule::~LoggerModule() {}
 
