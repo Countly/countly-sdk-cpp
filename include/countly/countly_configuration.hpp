@@ -5,52 +5,52 @@
 
 namespace cly {
 struct CountlyConfiguration {
-  /// <summary>
-  /// URL of the Countly server to submit data to.
-  /// Mandatory field.
-  /// </summary>
+  /**
+   * URL of the Countly server to submit data to.
+   * Mandatory field.
+   */
   std::string serverUrl;
 
-  /// <summary>
-  /// App key for the application being tracked.
-  /// Mandatory field.
-  /// </summary>
+  /**
+   * App key for the application being tracked.
+   * Mandatory field.
+   */
   std::string appKey;
 
-  /// <summary>
-  /// Unique ID for the device the app is running on.
-  /// </summary>
+  /**
+   * Unique ID for the device the app is running on.
+   */
   std::string deviceId;
 
-  /// <summary>
-  /// Set to prevent parameter tampering.
-  /// </summary>
+  /**
+   * Set to prevent parameter tampering.
+   */
   std::string salt;
 
-  /// <summary>
-  /// Sets the interval for the automatic update calls
-  /// min value 1 (1 second), max value 600 (10 minutes)
-  /// </summary>
+  /**
+   * Sets the interval for the automatic update calls
+   * min value 1 (1 second), max value 600 (10 minutes)
+   */
   unsigned int sessionDuration = 60;
 
-  /// <summary>
-  /// Set threshold value for the number of events that can be stored locally.
-  /// </summary>
+  /**
+   * Set threshold value for the number of events that can be stored locally.
+   */
   unsigned int eventQueueThreshold = 100;
 
-  /// <summary>
-  /// Set limit for the number of requests that can be stored locally.
-  /// </summary>
+  /**
+   * Set limit for the number of requests that can be stored locally.
+   */
   unsigned int requestQueueThreshold = 1000;
 
-  /// <summary>
-  /// Set the maximum amount of breadcrumbs.
-  /// </summary>
+  /**
+   * Set the maximum amount of breadcrumbs.
+   */
   unsigned int breadcrumbsThreshold = 100;
 
-  /// <summary>
-  /// Set to send all requests made to the Countly server using HTTP POST.
-  /// </summary>
+  /**
+   * Set to send all requests made to the Countly server using HTTP POST.
+   */
   bool forcePost = false;
 
   unsigned int port = 443;
