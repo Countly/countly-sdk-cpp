@@ -58,12 +58,12 @@ Countly &Countly::getInstance() {
 }
 
 #ifdef COUNTLY_BUILD_TESTS
-void Countly::reset() { _sharedInstance.reset(new Countly()); }
+void Countly::halt() { _sharedInstance.reset(new Countly()); }
 #endif
 
 void Countly::alwaysUsePost(bool value) {
   mutex.lock();
-  configuration->enablePost = value;
+  configuration->forcePost = value;
   mutex.unlock();
 }
 
@@ -101,13 +101,28 @@ void Countly::setSha256(SHA256Function fun) {
 }
 
 void Countly::setMetrics(const std::string &os, const std::string &os_version, const std::string &device, const std::string &resolution, const std::string &carrier, const std::string &app_version) {
+  if (!os.empty()) {
+    configuration->metrics["_os"] = os;
+  }
+  if (!os_version.empty()) {
+    configuration->metrics["_os_version"] = os_version;
+  }
 
-  configuration->metrics.os = os;
-  configuration->metrics.osVersion = os_version;
-  configuration->metrics.device = device;
-  configuration->metrics.resolution = resolution;
-  configuration->metrics.carrier = carrier;
-  configuration->metrics.appVersion = app_version;
+  if (!device.empty()) {
+    configuration->metrics["_device"] = device;
+  }
+
+  if (!resolution.empty()) {
+    configuration->metrics["_resolution"] = resolution;
+  }
+
+  if (!carrier.empty()) {
+    configuration->metrics["_carrier"] = carrier;
+  }
+
+  if (!app_version.empty()) {
+    configuration->metrics["_app_version"] = app_version;
+  }
 }
 
 void Countly::setUserDetails(const std::map<std::string, std::string> &value) {
@@ -542,7 +557,7 @@ bool Countly::beginSession() {
   }
 
   if (session_params.contains("metrics")) {
-    data["metrics"] = configuration->metrics.serialize();
+    data["metrics"] = configuration->metrics.dump();
   }
 
   addToRequestQueue(Countly::serializeForm(data));
@@ -839,7 +854,7 @@ void Countly::addToRequestQueue(const std::string &data) {
 }
 
 HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
-  bool use_post = configuration->enablePost || (data.size() > COUNTLY_POST_THRESHOLD);
+  bool use_post = configuration->forcePost || (data.size() > COUNTLY_POST_THRESHOLD);
   log(Countly::LogLevel::DEBUG, "[Countly][sendHTTP] data: " + data);
   if (!configuration->salt.empty()) {
     std::string checksum = calculateChecksum(configuration->salt, data);

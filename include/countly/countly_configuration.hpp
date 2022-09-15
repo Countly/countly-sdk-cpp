@@ -4,46 +4,6 @@
 #include <string>
 
 namespace cly {
-
-struct Metrics {
-  std::string os;
-  std::string device;
-  std::string carrier;
-  std::string osVersion;
-  std::string resolution;
-  std::string appVersion;
-
-  const std::string serialize() {
-    if (!os.empty()) {
-      object["_os"] = os;
-    }
-
-    if (!osVersion.empty()) {
-      object["_os_version"] = osVersion;
-    }
-
-    if (!device.empty()) {
-      object["_device"] = device;
-    }
-
-    if (!resolution.empty()) {
-      object["_resolution"] = resolution;
-    }
-
-    if (!carrier.empty()) {
-      object["_carrier"] = carrier;
-    }
-
-    if (!appVersion.empty()) {
-      object["_app_version"] = appVersion;
-    }
-
-    return object.dump();
-  }
-
-private:
-  nlohmann::json object;
-};
 struct CountlyConfiguration {
   /// <summary>
   /// URL of the Countly server to submit data to.
@@ -91,7 +51,7 @@ struct CountlyConfiguration {
   /// <summary>
   /// Set to send all requests made to the Countly server using HTTP POST.
   /// </summary>
-  bool enablePost = false;
+  bool forcePost = false;
 
   unsigned int port = 443;
 
@@ -99,7 +59,7 @@ struct CountlyConfiguration {
 
   HTTPClientFunction http_client_function = nullptr;
 
-  Metrics metrics;
+  nlohmann::json metrics;
 };
 } // namespace cly
 #endif

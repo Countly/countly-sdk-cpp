@@ -209,7 +209,8 @@ public:
 
   inline const CountlyConfiguration &getConfiguration() { return *configuration.get(); }
 
-  static void reset();
+  static void halt();
+  static void clearSDK() { halt(); }
 #endif
   
 
@@ -255,8 +256,6 @@ private:
   std::unique_ptr<cly::ViewsModule> views_module;
   std::shared_ptr<cly::CountlyConfiguration> configuration;
   std::shared_ptr<cly::LoggerModule> logger;
-
-  //static std::unique_ptr<Countly> _sharedInstance;
 
   std::mutex mutex;
 
