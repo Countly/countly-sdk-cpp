@@ -104,9 +104,9 @@ HTTPResponse fakeSendHTTP(bool use_post, const std::string &url, const std::stri
 
 void logToConsole(Countly::LogLevel level, const std::string &message) { std::cout << level << '\t' << message << std::endl; }
 
-long getUnixTimestamp() {
+long long getUnixTimestamp() {
   const std::chrono::system_clock::time_point now = Countly::getTimestamp();
-  const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
+  const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
   return timestamp.count();
 }
 
@@ -196,19 +196,19 @@ TEST_CASE("events are sent correctly") {
 #endif
 
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-  long timestamp;
+  long long timestamp;
 
   SUBCASE("session begins") {
     timestamp = getUnixTimestamp();
     countly.beginSession();
     HTTPCall http_call = popHTTPCall();
-    long timestampDiff = stol(http_call.data["timestamp"]) - timestamp;
+    long long timestampDiff = stoll(http_call.data["timestamp"]) - timestamp;
     CHECK(!http_call.use_post);
     CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
     CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
     CHECK(http_call.data["begin_session"] == "1");
     CHECK(timestampDiff >= 0);
-    CHECK(timestampDiff <= 1);
+    CHECK(timestampDiff <= 100);//todo find out what the sweetspot is for the difference
   }
 
   SUBCASE("remote config is fetched") {
@@ -229,7 +229,15 @@ TEST_CASE("events are sent correctly") {
     CHECK(!http_call.use_post);
     CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
     CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
-    CHECK(http_call.data["events"] == "[{\"count\":4,\"key\":\"win\",\"segmentation\":{\"points\":100}}]");
+
+    nlohmann::json events = nlohmann::json::parse(http_call.data["events"]);
+    nlohmann::json e = events[0];
+    CHECK(e["key"].get<std::string>() == "win");
+    CHECK(e["count"].get<int>() == 4);
+    CHECK(std::to_string(e["timestamp"].get<long long>()).size() == 13);
+
+    nlohmann::json s = e["segmentation"].get<nlohmann::json>();
+    CHECK(s["points"].get<int>() == 100);
   }
 
   SUBCASE("two events are sent") {
@@ -244,7 +252,17 @@ TEST_CASE("events are sent correctly") {
     CHECK(!http_call.use_post);
     CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
     CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
-    CHECK(http_call.data["events"] == "[{\"count\":2,\"key\":\"win\"},{\"count\":1,\"key\":\"achievement\"}]");
+
+    nlohmann::json events = nlohmann::json::parse(http_call.data["events"]);
+    nlohmann::json e = events[0];
+    CHECK(e["key"].get<std::string>() == "win");
+    CHECK(e["count"].get<int>() == 2);
+    CHECK(std::to_string(e["timestamp"].get<long long>()).size() == 13);
+
+    e = events[1];
+    CHECK(e["key"].get<std::string>() == "achievement");
+    CHECK(e["count"].get<int>() == 1);
+    CHECK(std::to_string(e["timestamp"].get<long long>()).size() == 13);
   }
 
   SUBCASE("event with count, sum, duration and segmentation is sent") {
@@ -259,7 +277,16 @@ TEST_CASE("events are sent correctly") {
     CHECK(!http_call.use_post);
     CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
     CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
-    CHECK(http_call.data["events"] == "[{\"count\":3,\"dur\":100.0,\"key\":\"lose\",\"segmentation\":{\"points\":2000},\"sum\":10.0}]");
+
+    nlohmann::json events = nlohmann::json::parse(http_call.data["events"]);
+    nlohmann::json e = events[0];
+    CHECK(e["key"].get<std::string>() == "lose");
+    CHECK(e["count"].get<int>() == 3);
+    CHECK(e["sum"].get<double>() == 10.0);
+    CHECK(std::to_string(e["timestamp"].get<long long>()).size() == 13);
+
+    nlohmann::json s = e["segmentation"].get<nlohmann::json>();
+    CHECK(s["points"].get<int>() == 2000);
   }
 
   SUBCASE("100 events are sent") {
@@ -280,12 +307,12 @@ TEST_CASE("events are sent correctly") {
   SUBCASE("session ends") {
     countly.stop();
     HTTPCall http_call = popHTTPCall();
-    long timestampDiff = stol(http_call.data["timestamp"]) - timestamp;
+    long long timestampDiff = stoll(http_call.data["timestamp"]) - timestamp;
     CHECK(!http_call.use_post);
     CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
     CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
     CHECK(http_call.data["end_session"] == "1");
     CHECK(timestampDiff >= 0);
-    CHECK(timestampDiff <= 1);
+    CHECK(timestampDiff <= 100);//todo find out what the sweetspot is for the difference
   }
 }

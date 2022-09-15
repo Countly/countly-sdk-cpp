@@ -18,7 +18,15 @@ if (NOT WIN32 AND NOT BUILD_SHARED_LIBS AND NOT COUNTLY_USE_CUSTOM_HTTP)
   message(FATAL_ERROR "You must provide a custom HTTP function when compiling statically.")
 endif()
 
+set(COUNTLY_PUBLIC_HEADERS
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/constants.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/event.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/logger_module.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/views_module.hpp)
+
 add_library(countly
+  ${COUNTLY_PUBLIC_HEADERS}
   ${CMAKE_CURRENT_SOURCE_DIR}/src/countly.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/views_module.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/logger_module.cpp
@@ -29,6 +37,7 @@ target_include_directories(countly
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 set_target_properties(countly PROPERTIES
+    PUBLIC_HEADER "${COUNTLY_PUBLIC_HEADERS}"
     CXX_STANDARD 14
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO)
@@ -104,3 +113,5 @@ if(COUNTLY_BUILD_SAMPLE)
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO)
 endif()
+
+install(TARGETS countly ARCHIVE DESTINATION lib PUBLIC_HEADER DESTINATION include/countly)
