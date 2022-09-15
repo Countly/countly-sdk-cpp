@@ -102,8 +102,6 @@ Countly::HTTPResponse fakeSendHTTP(bool use_post, const std::string &url, const 
   return response;
 }
 
-void logToConsole(Countly::LogLevel level, const std::string &message) { std::cout << level << '\t' << message << std::endl; }
-
 long long getUnixTimestamp() {
   const std::chrono::system_clock::time_point now = Countly::getTimestamp();
   const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
@@ -124,16 +122,9 @@ TEST_CASE("urlencoding is correct") {
   CHECK(Countly::encodeURL("测试") == "%E6%B5%8B%E8%AF%95");
 }
 
-#ifdef COUNTLY_USE_CUSTOM_SHA256
-std::string customChecksumCalculator(const std::string &data) {
-  std::string result = data.c_str();
-  result.append("-custom_sha");
-  return result;
-}
-
-void printLog(Countly::LogLevel level, const std::string &msg) {
+void printLog(LogLevel level, const std::string &msg) {
   CHECK(msg == "message");
-  CHECK(level == Countly::LogLevel::DEBUG);
+  CHECK(level == LogLevel::DEBUG);
 }
 
 TEST_CASE("Logger function validation") {
@@ -143,10 +134,18 @@ TEST_CASE("Logger function validation") {
   countly.setLogger(printLog);
   CHECK(countly.getLogger() != nullptr);
 
-  countly.getLogger()(Countly::LogLevel::DEBUG, "message");
+  countly.getLogger()(LogLevel::DEBUG, "message");
 
   countly.setLogger(nullptr);
   CHECK(countly.getLogger() == nullptr);
+}
+
+#ifdef COUNTLY_USE_CUSTOM_SHA256
+
+std::string customChecksumCalculator(const std::string &data) {
+  std::string result = data.c_str();
+  result.append("-custom_sha");
+  return result;
 }
 
 TEST_CASE("custom sha256 function validation") {
@@ -186,7 +185,6 @@ TEST_CASE("forms are serialized correctly") {
 TEST_CASE("events are sent correctly") {
   Countly &countly = Countly::getInstance();
 
-  countly.setLogger(logToConsole);
   countly.setHTTPClient(fakeSendHTTP);
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   countly.enableRemoteConfig();
