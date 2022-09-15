@@ -1,6 +1,9 @@
 #include "countly.hpp"
 #include "doctest.h"
 using namespace cly;
+
+void clearSDK() { Countly::halt(); }
+
 std::string customSha256(const std::string &data) { return "SHA256"; }
 
 HTTPResponse customClient(bool f, const std::string &a, const std::string &b) {
@@ -71,6 +74,7 @@ TEST_CASE("validate configuration all setters") {
     CHECK(config.metrics["_carrier"] == "Carrier");
     CHECK(config.metrics["_resolution"] == "800x600");
     CHECK(config.metrics["_device"] == "pc");
-    Countly::clearSDK();
+
+    clearSDK();
   }
 }

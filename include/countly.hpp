@@ -210,7 +210,6 @@ public:
   inline const CountlyConfiguration &getConfiguration() { return *configuration.get(); }
 
   static void halt();
-  static void clearSDK() { halt(); }
 #endif
   
 
@@ -276,7 +275,6 @@ private:
   bool remote_config_enabled = false;
   nlohmann::json remote_config;
 };
-//std::unique_ptr<Countly> Countly::_sharedInstance;
 } // namespace cly
 
 #endif
