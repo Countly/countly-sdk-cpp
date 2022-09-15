@@ -16,6 +16,7 @@ HTTPResponse customClient(bool f, const std::string &a, const std::string &b) {
 
 TEST_CASE("validate configuration all setters") {
   SUBCASE("default values") {
+    clearSDK();
     Countly &ct = Countly::getInstance();
     const CountlyConfiguration config = ct.getConfiguration();
     CHECK(config.serverUrl == "");
@@ -35,6 +36,7 @@ TEST_CASE("validate configuration all setters") {
   }
 
   SUBCASE("validate values") {
+    clearSDK();
     Countly &ct = Countly::getInstance();
     SHA256Function funPtr = customSha256;
     HTTPClientFunction clientPtr = customClient;
@@ -74,7 +76,5 @@ TEST_CASE("validate configuration all setters") {
     CHECK(config.metrics["_carrier"] == "Carrier");
     CHECK(config.metrics["_resolution"] == "800x600");
     CHECK(config.metrics["_device"] == "pc");
-
-    clearSDK();
   }
 }
