@@ -7,7 +7,6 @@
 * When making network requests, the SDK will now unlock it's mutex.
 * Fixed a bug that caused an exception on windows when encoding data that contains special characters. 
 
-
 22.02.0
 * Added 10-second time-outs for all windows HTTP transactions.
 * Added ability to record views.
