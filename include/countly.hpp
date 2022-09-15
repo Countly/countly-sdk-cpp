@@ -208,6 +208,17 @@ public:
     return v;
   }
 
+  /**
+   * Convert request queue into list.
+   * Warning: This method is for debugging purposes, and it is going to be removed in the future.
+   * You should not be using this method.
+   * @return a vector object containing events.
+   */
+  const std::vector<std::string> debugReturnStateOfRQ() {
+    std::vector<std::string> v(request_queue.begin(), request_queue.end());
+    return v;
+  }
+
 private:
   void _deleteThread();
   void _sendIndependantLocationRequest();

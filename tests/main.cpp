@@ -5,6 +5,7 @@
 #include <map>
 #include <string>
 #include <thread>
+#include <chrono>
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 
@@ -14,6 +15,7 @@
 #include "nlohmann/json.hpp"
 using json = nlohmann::json;
 using namespace cly;
+using namespace std::literals::chrono_literals;
 
 #define COUNTLY_TEST_APP_KEY "a32cb06789a6e99958d628378ee66bf8583a454f"
 #define COUNTLY_TEST_DEVICE_ID "11732aa3-19a6-4272-9057-e3411f1938be"
@@ -111,6 +113,8 @@ long long getUnixTimestamp() {
 }
 
 HTTPCall popHTTPCall() {
+  std::this_thread::sleep_for(5s);
+
   CHECK(!http_call_queue.empty());
   HTTPCall oldest_call = http_call_queue.front();
   http_call_queue.pop_front();
@@ -199,23 +203,22 @@ TEST_CASE("events are sent correctly") {
   long long timestamp;
 
   SUBCASE("session begins") {
-    timestamp = getUnixTimestamp();
     countly.beginSession();
+
+    SUBCASE("remote config is fetched") {
+      HTTPCall http_call = popHTTPCall();
+      CHECK(!http_call.use_post);
+      CHECK(http_call.url == "/o/sdk");
+      CHECK(http_call.data["method"] == "fetch_remote_config");
+    }
+
     HTTPCall http_call = popHTTPCall();
-    long long timestampDiff = stoll(http_call.data["timestamp"]) - timestamp;
-    CHECK(!http_call.use_post);
+    timestamp = getUnixTimestamp();
+    long long timestampDiff = timestamp - stoll(http_call.data["timestamp"]);
     CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
     CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
     CHECK(http_call.data["begin_session"] == "1");
     CHECK(timestampDiff >= 0);
-    CHECK(timestampDiff <= 100);//todo find out what the sweetspot is for the difference
-  }
-
-  SUBCASE("remote config is fetched") {
-    HTTPCall http_call = popHTTPCall();
-    CHECK(!http_call.use_post);
-    CHECK(http_call.url == "/o/sdk");
-    CHECK(http_call.data["method"] == "fetch_remote_config");
   }
 
   SUBCASE("single event is sent") {
@@ -306,6 +309,9 @@ TEST_CASE("events are sent correctly") {
   timestamp = getUnixTimestamp();
   SUBCASE("session ends") {
     countly.stop();
+    std::vector<std::string> requests = countly.debugReturnStateOfRQ();
+    std::string data = requests.at(requests.size() - 1);
+    fakeSendHTTP(false, "", data);
     HTTPCall http_call = popHTTPCall();
     long long timestampDiff = stoll(http_call.data["timestamp"]) - timestamp;
     CHECK(!http_call.use_post);
@@ -313,6 +319,5 @@ TEST_CASE("events are sent correctly") {
     CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
     CHECK(http_call.data["end_session"] == "1");
     CHECK(timestampDiff >= 0);
-    CHECK(timestampDiff <= 100);//todo find out what the sweetspot is for the difference
   }
 }
