@@ -1,8 +1,7 @@
 #include "countly.hpp"
 #include "doctest.h"
+#include "test_utils.hpp"
 using namespace cly;
-
-void clearSDK() { Countly::halt(); }
 
 std::string customSha256(const std::string &data) { return "SHA256"; }
 
