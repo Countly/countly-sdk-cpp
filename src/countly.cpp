@@ -31,7 +31,7 @@ namespace cly {
 Countly::Countly() {
   views_module = nullptr;
   logger.reset(new cly::LoggerModule());
-  configuration.reset(new cly::CountlyConfiguration());
+  configuration.reset(new cly::CountlyConfiguration("", ""));
 
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
   curl_global_init(CURL_GLOBAL_ALL);

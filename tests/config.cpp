@@ -45,12 +45,14 @@ TEST_CASE("validate configuration all setters") {
     ct.setSha256(funPtr);
     ct.setHTTPClient(clientPtr);
     ct.SetMetrics("Windows 10", "10.22", "pc", "800x600", "Carrier", "1.0");
-    // Server and port
-    ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, false);
+
     ct.SetMaxEventsPerMessage(10);
     ct.setAutomaticSessionUpdateInterval(5);
     ct.setSalt("salt");
 
+    // Server and port
+    ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, false);
+    
     const CountlyConfiguration config = ct.getConfiguration();
     CHECK(config.serverUrl == "https://try.count.ly");
     CHECK(config.appKey == "YOUR_APP_KEY");

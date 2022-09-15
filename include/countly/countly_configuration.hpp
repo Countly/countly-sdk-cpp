@@ -60,6 +60,11 @@ struct CountlyConfiguration {
   HTTPClientFunction http_client_function = nullptr;
 
   nlohmann::json metrics;
+
+  CountlyConfiguration(std::string appKey, std::string serverUrl) {
+    this->appKey = appKey;
+    this->serverUrl = serverUrl;
+  }
 };
 } // namespace cly
 #endif
