@@ -44,14 +44,13 @@ public:
 
   void setLogger(void (*fun)(LogLevel level, const std::string &message));
 
-
-  #ifdef COUNTLY_BUILD_TESTS
+#ifdef COUNTLY_BUILD_TESTS
   /*
   This function should not be used as it will be removed in a future release. It is
   currently added as a temporary workaround.
   */
   inline std::function<void(LogLevel, const std::string &)> getLogger() { return logger->getLogger(); }
-  #endif
+#endif
 
   void setSha256(cly::SHA256Function fun);
 
@@ -202,17 +201,16 @@ public:
 
 #ifdef COUNTLY_USE_SQLITE
     return {};
-#endif
-
+#else
     std::vector<std::string> v(event_queue.begin(), event_queue.end());
     return v;
+#endif
   }
 
   inline const CountlyConfiguration &getConfiguration() { return *configuration.get(); }
 
   static void halt();
 #endif
-  
 
 private:
   void _deleteThread();
@@ -240,7 +238,6 @@ private:
   std::chrono::system_clock::duration getSessionDuration();
 
   void updateLoop();
-
 
   bool use_https = false;
 

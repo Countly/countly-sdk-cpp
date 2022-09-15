@@ -862,7 +862,7 @@ HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
 
 #ifdef COUNTLY_USE_CUSTOM_HTTP
   if (!configuration->http_client_function) {
-    log(:LogLevel::FATAL, "Missing HTTP client function");
+    log(LogLevel::FATAL, "Missing HTTP client function");
     return response;
   }
 
