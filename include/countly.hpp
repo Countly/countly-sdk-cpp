@@ -2,6 +2,7 @@
 #define COUNTLY_HPP_
 
 #include "countly/constants.hpp"
+#include "countly/countly_configuration.hpp"
 
 #include <chrono>
 #include <functional>
@@ -41,24 +42,18 @@ public:
 
   void setSalt(const std::string &value);
 
-  enum LogLevel { DEBUG = 1, INFO = 2, WARNING = 3, ERROR = 4, FATAL = 5 };
-
   void setLogger(void (*fun)(LogLevel level, const std::string &message));
 
+#ifdef COUNTLY_BUILD_TESTS
   /*
   This function should not be used as it will be removed in a future release. It is
   currently added as a temporary workaround.
   */
-  inline std::function<void(LogLevel, const std::string &)> getLogger() { return logger_function; }
-
-  struct HTTPResponse {
-    bool success;
-    nlohmann::json data;
-  };
+  inline std::function<void(LogLevel, const std::string &)> getLogger() { return logger->getLogger(); }
+#endif
 
   void setSha256(cly::SHA256Function fun);
 
-  using HTTPClientFunction = std::function<HTTPResponse(bool, const std::string &, const std::string &)>;
   void setHTTPClient(HTTPClientFunction fun);
 
   void setMetrics(const std::string &os, const std::string &os_version, const std::string &device, const std::string &resolution, const std::string &carrier, const std::string &app_version);
@@ -192,7 +187,7 @@ public:
   }
 
   /* Provide 'updateInterval' in seconds. */
-  inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) { _auto_session_update_interval = updateInterval; }
+  inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) { configuration->sessionDuration = updateInterval; }
 
   /**
    * Convert event queue into list.
@@ -200,13 +195,22 @@ public:
    * You should not be using this method.
    * @return a vector object containing events.
    */
+
+#ifdef COUNTLY_BUILD_TESTS
   const std::vector<std::string> debugReturnStateOfEQ() {
+
 #ifdef COUNTLY_USE_SQLITE
     return {};
-#endif
+#else
     std::vector<std::string> v(event_queue.begin(), event_queue.end());
     return v;
+#endif
   }
+
+  inline const CountlyConfiguration &getConfiguration() { return *configuration.get(); }
+
+  static void halt();
+#endif
 
 private:
   void _deleteThread();
@@ -235,15 +239,7 @@ private:
 
   void updateLoop();
 
-  cly::SHA256Function sha256_function;
-  HTTPClientFunction http_client_function;
-  void (*logger_function)(LogLevel level, const std::string &message) = nullptr;
-
-  std::string host;
-
-  int port = 0;
   bool use_https = false;
-  bool always_use_post = false;
 
   bool began_session = false;
   bool is_being_disposed = false;
@@ -252,10 +248,10 @@ private:
   std::chrono::system_clock::time_point last_sent_session_request;
 
   nlohmann::json session_params;
-  std::string salt;
 
   std::unique_ptr<std::thread> thread;
   std::unique_ptr<cly::ViewsModule> views_module;
+  std::shared_ptr<cly::CountlyConfiguration> configuration;
   std::shared_ptr<cly::LoggerModule> logger;
 
   std::mutex mutex;
@@ -265,7 +261,6 @@ private:
   bool stop_thread = false;
   bool running = false;
   size_t wait_milliseconds = COUNTLY_KEEPALIVE_INTERVAL;
-  unsigned short _auto_session_update_interval = 60; // value is in seconds;
 
   size_t max_events = COUNTLY_MAX_EVENTS_DEFAULT;
   std::deque<std::string> request_queue;

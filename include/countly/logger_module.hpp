@@ -20,6 +20,12 @@ public:
    */
   void setLogger(LoggerFunction logger);
 
+
+  /**
+   * Get custom logger function.
+   */
+  const LoggerFunction getLogger();
+
   /**
    * Print important information.
    *
