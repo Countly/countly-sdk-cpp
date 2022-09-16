@@ -12,8 +12,8 @@
 
 #ifndef COUNTLY_USE_CUSTOM_HTTP
 #ifdef _WIN32
-#include "Windows.h" //1: Order matters
 #include "WinHTTP.h"
+#include "Windows.h" //1: Order matters
 #undef ERROR
 #pragma comment(lib, "winhttp.lib")
 #else
@@ -68,8 +68,6 @@ public:
     return checksum_stream.str();
 #endif
   }
-
-  
 };
 
 RequestModule::RequestModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder) {
@@ -90,49 +88,49 @@ void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &
   impl->request_queue.push_back(request);
 }
 
-//void RequestModule::processQueue() {
-//  // make it thread safe
-//  while (!impl->request_queue.empty()) {
-//    std::string data = impl->request_queue.front();
-//    HTTPResponse response = impl->sendHTTP(data);
+// void RequestModule::processQueue() {
+//   // make it thread safe
+//   while (!impl->request_queue.empty()) {
+//     std::string data = impl->request_queue.front();
+//     HTTPResponse response = impl->sendHTTP(data);
 //
-//    if (!response.success) {
-//      break;
-//    }
+//     if (!response.success) {
+//       break;
+//     }
 //
-//    impl->request_queue.pop_back();
-//  }
-//}
+//     impl->request_queue.pop_back();
+//   }
+// }
 
-void RequestModule::processQueue(std::mutex &mutex) {
-  mutex.lock();
+void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
+  mutex->lock();
   // making sure that no other thread is processing the queue
   if (impl->is_queue_being_processed) {
-    mutex.unlock();
+    mutex->unlock();
     return;
   }
 
   // if this is the only thread, mark that processing is happening
   impl->is_queue_being_processed = true;
-  mutex.unlock();
+  mutex->unlock();
 
   while (true) {
-    mutex.lock();
+    mutex->lock();
     if (impl->request_queue.empty()) {
       // stop sending requests once the queue is empty
-      mutex.unlock();
+      mutex->unlock();
       break;
     }
 
     std::string data = impl->request_queue.front();
-    mutex.unlock();
+    mutex->unlock();
 
     HTTPResponse response = sendHTTP("/i", data);
 
-    mutex.lock();
+    mutex->lock();
     if (!response.success) {
       // if the request was not a success, abort sending and try again in the future
-      mutex.unlock();
+      mutex->unlock();
       break;
     }
 
@@ -142,13 +140,13 @@ void RequestModule::processQueue(std::mutex &mutex) {
       impl->request_queue.pop_front();
     }
 
-    mutex.unlock();
+    mutex->unlock();
   }
 
-  mutex.lock();
+  mutex->lock();
   // mark that no thread is processing the request queue
   impl->is_queue_being_processed = false;
-  mutex.unlock();
+  mutex->unlock();
 }
 
 HTTPResponse RequestModule::sendHTTP(const std::string &path, std::string data) {

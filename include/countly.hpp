@@ -24,7 +24,7 @@
 #include "countly/logger_module.hpp"
 #include "countly/views_module.hpp"
 #include <countly/request_builder.hpp>
-#include <request_module.cpp>
+#include <countly/request_module.hpp>
 
 namespace cly {
 class Countly : public cly::CountlyDelegates {
@@ -249,8 +249,7 @@ private:
   std::shared_ptr<cly::LoggerModule> logger;
   std::shared_ptr<cly::RequestBuilder> requestBuilder;
   std::unique_ptr<cly::RequestModule> requestModule;
-
-  std::mutex mutex;
+  std::shared_ptr<std::mutex> mutex = std::make_shared<std::mutex>();
 
   bool is_queue_being_processed = false;
   bool enable_automatic_session = false;

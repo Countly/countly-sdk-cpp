@@ -2,13 +2,13 @@
 #define REQUEST_MODULE_HPP_
 #include <map>
 #include <memory>
-#include <string>
 #include <mutex>
+#include <string>
 
 #include "countly/constants.hpp"
+#include "countly/countly_configuration.hpp"
 #include "countly/event.hpp"
 #include "countly/logger_module.hpp"
-#include "countly/countly_configuration.hpp"
 #include "countly/request_builder.hpp"
 
 #ifdef _WIN32
@@ -28,7 +28,7 @@ public:
    * SDK central execution call for processing requests in the request queue.
    * Only one sender is active at a time. Requests are processed in order.
    */
-  void processQueue(std::mutex mutex);
+  void processQueue(std::shared_ptr<std::mutex> mutex);
 
   void addRequestToQueue(const std::map<std::string, std::string> &data);
 

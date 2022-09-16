@@ -62,33 +62,33 @@ void Countly::halt() { _sharedInstance.reset(new Countly()); }
 #endif
 
 void Countly::alwaysUsePost(bool value) {
-  mutex.lock();
+  mutex->lock();
   configuration->forcePost = value;
-  mutex.unlock();
+  mutex->unlock();
 }
 
 void Countly::setSalt(const std::string &value) {
-  mutex.lock();
+  mutex->lock();
   configuration->salt = value;
-  mutex.unlock();
+  mutex->unlock();
 }
 
 void Countly::setLogger(void (*fun)(LogLevel level, const std::string &message)) {
-  mutex.lock();
+  mutex->lock();
   logger->setLogger(fun);
-  mutex.unlock();
+  mutex->unlock();
 }
 
 void Countly::setHTTPClient(HTTPClientFunction fun) {
-  mutex.lock();
+  mutex->lock();
   configuration->http_client_function = fun;
-  mutex.unlock();
+  mutex->unlock();
 }
 
 void Countly::setSha256(SHA256Function fun) {
-  mutex.lock();
+  mutex->lock();
   configuration->sha256_function = fun;
-  mutex.unlock();
+  mutex->unlock();
 }
 
 void Countly::setMetrics(const std::string &os, const std::string &os_version, const std::string &device, const std::string &resolution, const std::string &carrier, const std::string &app_version) {
@@ -117,34 +117,34 @@ void Countly::setMetrics(const std::string &os, const std::string &os_version, c
 }
 
 void Countly::setUserDetails(const std::map<std::string, std::string> &value) {
-  mutex.lock();
+  mutex->lock();
   session_params["user_details"] = value;
 
   if (!is_sdk_initialized) {
     log(LogLevel::ERROR, "[Countly][setUserDetails] Can not send user detail if the SDK has not been initialized.");
-    mutex.unlock();
+    mutex->unlock();
     return;
   }
 
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"user_details", session_params["user_details"].dump()}};
 
   requestModule->addRequestToQueue(data);
-  mutex.unlock();
+  mutex->unlock();
 }
 
 void Countly::setCustomUserDetails(const std::map<std::string, std::string> &value) {
-  mutex.lock();
+  mutex->lock();
   session_params["user_details"]["custom"] = value;
 
   if (!is_sdk_initialized) {
     log(LogLevel::ERROR, "[Countly][setCustomUserDetails] Can not send user detail if the SDK has not been initialized.");
-    mutex.unlock();
+    mutex->unlock();
     return;
   }
 
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"user_details", session_params["user_details"].dump()}};
   requestModule->addRequestToQueue(data);
-  mutex.unlock();
+  mutex->unlock();
 }
 
 #pragma region User location
@@ -168,7 +168,7 @@ void Countly::setLocation(double lattitude, double longitude) {
 }
 
 void Countly::setLocation(const std::string &countryCode, const std::string &city, const std::string &gpsCoordinates, const std::string &ipAddress) {
-  mutex.lock();
+  mutex->lock();
   log(LogLevel::INFO, "[Countly][setLocation] SetLocation : countryCode = " + countryCode + ", city = " + city + ", gpsCoordinates = " + gpsCoordinates + ", ipAddress = " + ipAddress);
 
   if ((!countryCode.empty() && city.empty()) || (!city.empty() && countryCode.empty())) {
@@ -180,7 +180,7 @@ void Countly::setLocation(const std::string &countryCode, const std::string &cit
   session_params["location"] = gpsCoordinates;
   session_params["country_code"] = countryCode;
 
-  mutex.unlock();
+  mutex->unlock();
 
   if (is_sdk_initialized) {
     _sendIndependantLocationRequest();
@@ -188,7 +188,7 @@ void Countly::setLocation(const std::string &countryCode, const std::string &cit
 }
 
 void Countly::_sendIndependantLocationRequest() {
-  mutex.lock();
+  mutex->lock();
   log(LogLevel::DEBUG, "[Countly] [_sendIndependantLocationRequest]");
 
   /*
@@ -223,32 +223,32 @@ void Countly::_sendIndependantLocationRequest() {
     requestModule->addRequestToQueue(data);
   }
 
-  mutex.unlock();
+  mutex->unlock();
 }
 
 #pragma endregion User location
 
 #pragma region Device Id
 void Countly::setDeviceID(const std::string &value, bool same_user) {
-  mutex.lock();
+  mutex->lock();
   configuration->deviceId = value;
   log(LogLevel::INFO, "[Countly][changeDeviceIdWithMerge] setDeviceID = '" + value + "'");
 
   // Checking old and new devices ids are same
   if (session_params.contains("device_id") && session_params["device_id"].get<std::string>() == value) {
     log(LogLevel::DEBUG, "[Countly][setDeviceID] new device id and old device id are same.");
-    mutex.unlock();
+    mutex->unlock();
     return;
   }
 
   if (!session_params.contains("device_id")) {
     session_params["device_id"] = value;
     log(LogLevel::DEBUG, "[Countly][setDeviceID] no device was set, setting device id");
-    mutex.unlock();
+    mutex->unlock();
     return;
   }
 
-  mutex.unlock();
+  mutex->unlock();
   if (!is_sdk_initialized) {
     log(LogLevel::ERROR, "[Countly][setDeviceID] Can not change the device id if the SDK has not been initialized.");
     return;
@@ -263,7 +263,7 @@ void Countly::setDeviceID(const std::string &value, bool same_user) {
 
 /* Change device ID with merge after SDK has been initialized.*/
 void Countly::_changeDeviceIdWithMerge(const std::string &value) {
-  mutex.lock();
+  mutex->lock();
   log(LogLevel::DEBUG, "[Countly][changeDeviceIdWithMerge] deviceId = '" + value + "'");
 
   session_params["old_device_id"] = session_params["device_id"];
@@ -280,7 +280,7 @@ void Countly::_changeDeviceIdWithMerge(const std::string &value) {
   requestModule->addRequestToQueue(data);
 
   session_params.erase("old_device_id");
-  mutex.unlock();
+  mutex->unlock();
 }
 
 /* Change device ID without merge after SDK has been initialized.*/
@@ -291,20 +291,20 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
   flushEvents();
   if (began_session) {
     endSession();
-    mutex.lock();
+    mutex->lock();
     session_params["device_id"] = value;
-    mutex.unlock();
+    mutex->unlock();
     beginSession();
   } else {
-    mutex.lock();
+    mutex->lock();
     session_params["device_id"] = value;
-    mutex.unlock();
+    mutex->unlock();
   }
 }
 #pragma endregion Device Id
 
 void Countly::start(const std::string &app_key, const std::string &host, int port, bool start_thread) {
-  mutex.lock();
+  mutex->lock();
   log(LogLevel::INFO, "[Countly][start]");
   enable_automatic_session = start_thread;
   start_thread = true;
@@ -330,15 +330,17 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
     configuration->port = port;
   }
 
+  requestBuilder.reset(new RequestBuilder(configuration, logger));
+  requestModule.reset(new RequestModule(configuration, logger, requestBuilder));
   views_module.reset(new cly::ViewsModule(this, logger));
 
   is_sdk_initialized = true; // after this point SDK is initialized.
 
   if (!running) {
 
-    mutex.unlock();
+    mutex->unlock();
     beginSession();
-    mutex.lock();
+    mutex->lock();
 
     if (start_thread) {
       stop_thread = false;
@@ -352,7 +354,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
       }
     }
   }
-  mutex.unlock();
+  mutex->unlock();
 }
 
 /**
@@ -371,9 +373,9 @@ void Countly::stop() {
 }
 
 void Countly::_deleteThread() {
-  mutex.lock();
+  mutex->lock();
   stop_thread = true;
-  mutex.unlock();
+  mutex->unlock();
   if (thread && thread->joinable()) {
     try {
       thread->join();
@@ -385,13 +387,13 @@ void Countly::_deleteThread() {
 }
 
 void Countly::setUpdateInterval(size_t milliseconds) {
-  mutex.lock();
+  mutex->lock();
   wait_milliseconds = milliseconds;
-  mutex.unlock();
+  mutex->unlock();
 }
 
 void Countly::addEvent(const cly::Event &event) {
-  mutex.lock();
+  mutex->lock();
 #ifndef COUNTLY_USE_SQLITE
   if (event_queue.size() == configuration->eventQueueThreshold) {
     log(LogLevel::WARNING, "Event queue is full, dropping the oldest event to insert a new one");
@@ -400,7 +402,7 @@ void Countly::addEvent(const cly::Event &event) {
   event_queue.push_back(event.serialize());
 #else
   if (database_path.empty()) {
-    mutex.unlock();
+    mutex->unlock();
     log(LogLevel::FATAL, "Cannot add event, sqlite database path is not set");
     return;
   }
@@ -424,11 +426,11 @@ void Countly::addEvent(const cly::Event &event) {
   }
   sqlite3_close(database);
 #endif
-  mutex.unlock();
+  mutex->unlock();
 }
 
 void Countly::setMaxEvents(size_t value) {
-  mutex.lock();
+  mutex->lock();
   configuration->eventQueueThreshold = value;
 #ifndef COUNTLY_USE_SQLITE
   if (event_queue.size() > configuration->eventQueueThreshold) {
@@ -436,7 +438,7 @@ void Countly::setMaxEvents(size_t value) {
     event_queue.resize(configuration->eventQueueThreshold);
   }
 #endif
-  mutex.unlock();
+  mutex->unlock();
 }
 
 void Countly::flushEvents(std::chrono::seconds timeout) {
@@ -444,18 +446,18 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
   bool update_failed;
   while (timeout.count() != 0) {
 #ifndef COUNTLY_USE_SQLITE
-    mutex.lock();
+    mutex->lock();
     if (event_queue.empty()) {
-      mutex.unlock();
+      mutex->unlock();
       break;
     }
-    mutex.unlock();
+    mutex->unlock();
 
     update_failed = !updateSession();
 #else
-    mutex.lock();
+    mutex->lock();
     if (database_path.empty()) {
-      mutex.unlock();
+      mutex->unlock();
       log(LogLevel::FATAL, "Cannot flush events, sqlite database path is not set");
       return;
     }
@@ -466,9 +468,9 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
     char *error_message;
 
     update_failed = true;
-    mutex.lock();
+    mutex->lock();
     return_value = sqlite3_open(database_path.c_str(), &database);
-    mutex.unlock();
+    mutex->unlock();
     if (return_value == SQLITE_OK) {
       return_value = sqlite3_get_table(database, "SELECT COUNT(*) FROM events;", &table, &row_count, &column_count, &error_message);
       if (return_value == SQLITE_OK) {
@@ -512,10 +514,10 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
 }
 
 bool Countly::beginSession() {
-  mutex.lock();
+  mutex->lock();
   log(LogLevel::INFO, "[Countly][beginSession]");
   if (began_session) {
-    mutex.unlock();
+    mutex->unlock();
     return true;
   }
 
@@ -554,7 +556,7 @@ bool Countly::beginSession() {
   session_params.erase("user_details");
   last_sent_session_request = Countly::getTimestamp();
   began_session = true;
-  mutex.unlock();
+  mutex->unlock();
 
   if (remote_config_enabled) {
     updateRemoteConfig();
@@ -563,14 +565,14 @@ bool Countly::beginSession() {
 }
 
 bool Countly::updateSession() {
-  mutex.lock();
+  mutex->lock();
   if (!began_session) {
-    mutex.unlock();
+    mutex->unlock();
     if (!beginSession()) {
       return false;
     }
 
-    mutex.lock();
+    mutex->lock();
     began_session = true;
   }
 
@@ -586,7 +588,7 @@ bool Countly::updateSession() {
   }
 #else
   if (database_path.empty()) {
-    mutex.unlock();
+    mutex->unlock();
     log(LogLevel::FATAL, "Cannot fetch events, sqlite database path is not set");
     return false;
   }
@@ -626,9 +628,9 @@ bool Countly::updateSession() {
   sqlite3_close(database);
 #endif
 
-  mutex.unlock();
+  mutex->unlock();
   auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
-  mutex.lock();
+  mutex->lock();
 
   if (duration.count() >= configuration->sessionDuration) {
     log(LogLevel::DEBUG, "[Countly][updateSession] sending session update.");
@@ -666,7 +668,7 @@ bool Countly::updateSession() {
   }
 #endif
 
-  mutex.unlock();
+  mutex->unlock();
   return true;
 }
 
@@ -676,12 +678,12 @@ bool Countly::endSession() {
   const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
   const auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration(now));
 
-  mutex.lock();
+  mutex->lock();
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"session_duration", std::to_string(duration.count())}, {"timestamp", std::to_string(timestamp.count())}, {"end_session", "1"}};
 
   if (is_being_disposed) {
     // if SDK is being destroyed, don't attempt to send the end-session request.
-    mutex.unlock();
+    mutex->unlock();
     return false;
   }
 
@@ -689,12 +691,11 @@ bool Countly::endSession() {
 
   last_sent_session_request = now;
   began_session = false;
-  mutex.unlock();
+  mutex->unlock();
   return true;
 }
 
 std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chrono::system_clock::now(); }
-
 
 #ifdef COUNTLY_USE_SQLITE
 void Countly::setDatabasePath(const std::string &path) {
@@ -703,7 +704,7 @@ void Countly::setDatabasePath(const std::string &path) {
   char **table;
   char *error_message;
 
-  mutex.lock();
+  mutex->lock();
   database_path = path;
 
   return_value = sqlite3_open(database_path.c_str(), &database);
@@ -719,7 +720,7 @@ void Countly::setDatabasePath(const std::string &path) {
     database_path.clear();
   }
   sqlite3_close(database);
-  mutex.unlock();
+  mutex->unlock();
 }
 #endif
 
@@ -758,9 +759,9 @@ std::string Countly::calculateChecksum(const std::string &salt, const std::strin
 }
 
 std::chrono::system_clock::duration Countly::getSessionDuration(std::chrono::system_clock::time_point now) {
-  mutex.lock();
+  mutex->lock();
   std::chrono::system_clock::duration duration = now - last_sent_session_request;
-  mutex.unlock();
+  mutex->unlock();
   return duration;
 }
 
@@ -768,55 +769,55 @@ std::chrono::system_clock::duration Countly::getSessionDuration() { return Count
 
 void Countly::updateLoop() {
   log(LogLevel::DEBUG, "[Countly][updateLoop]");
-  mutex.lock();
+  mutex->lock();
   running = true;
-  mutex.unlock();
+  mutex->unlock();
   while (true) {
-    mutex.lock();
+    mutex->lock();
     if (stop_thread) {
       stop_thread = false;
-      mutex.unlock();
+      mutex->unlock();
       break;
     }
     size_t last_wait_milliseconds = wait_milliseconds;
-    mutex.unlock();
+    mutex->unlock();
     std::this_thread::sleep_for(std::chrono::milliseconds(last_wait_milliseconds));
     if (enable_automatic_session) {
       updateSession();
     }
     requestModule->processQueue(mutex);
   }
-  mutex.lock();
+  mutex->lock();
   running = false;
-  mutex.unlock();
+  mutex->unlock();
 }
 
 void Countly::enableRemoteConfig() {
-  mutex.lock();
+  mutex->lock();
   remote_config_enabled = true;
-  mutex.unlock();
+  mutex->unlock();
 }
 
 void Countly::_fetchRemoteConfig(const std::map<std::string, std::string> &data) {
   HTTPResponse response = requestModule->sendHTTP("/o/sdk", requestBuilder->serializeData(data));
-  mutex.lock();
+  mutex->lock();
   if (response.success) {
     remote_config = response.data;
   }
-  mutex.unlock();
+  mutex->unlock();
 }
 
 void Countly::updateRemoteConfig() {
-  mutex.lock();
+  mutex->lock();
   if (!session_params["app_key"].is_string() || !session_params["device_id"].is_string()) {
 
     log(LogLevel::ERROR, "Error updating remote config, app key or device id is missing");
-    mutex.unlock();
+    mutex->unlock();
     return;
   }
   std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
 
-  mutex.unlock();
+  mutex->unlock();
 
   // Fetch remote config asynchronously
   std::thread _thread(&Countly::_fetchRemoteConfig, this, data);
@@ -824,25 +825,25 @@ void Countly::updateRemoteConfig() {
 }
 
 nlohmann::json Countly::getRemoteConfigValue(const std::string &key) {
-  mutex.lock();
+  mutex->lock();
   nlohmann::json value = remote_config[key];
-  mutex.unlock();
+  mutex->unlock();
   return value;
 }
 
 void Countly::_updateRemoteConfigWithSpecificValues(const std::map<std::string, std::string> &data) {
   HTTPResponse response = requestModule->sendHTTP("/o/sdk", requestBuilder->serializeData(data));
-  mutex.lock();
+  mutex->lock();
   if (response.success) {
     for (auto it = response.data.begin(); it != response.data.end(); ++it) {
       remote_config[it.key()] = it.value();
     }
   }
-  mutex.unlock();
+  mutex->unlock();
 }
 
 void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
-  mutex.lock();
+  mutex->lock();
   std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
 
   {
@@ -852,7 +853,7 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
     }
     data["keys"] = keys_json.dump();
   }
-  mutex.unlock();
+  mutex->unlock();
 
   // Fetch remote config asynchronously
   std::thread _thread(&Countly::_updateRemoteConfigWithSpecificValues, this, data);
@@ -860,7 +861,7 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
 }
 
 void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
-  mutex.lock();
+  mutex->lock();
   std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
 
   {
@@ -870,7 +871,7 @@ void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
     }
     data["omit_keys"] = keys_json.dump();
   }
-  mutex.unlock();
+  mutex->unlock();
 
   // Fetch remote config asynchronously
   std::thread _thread(&Countly::_updateRemoteConfigWithSpecificValues, this, data);
