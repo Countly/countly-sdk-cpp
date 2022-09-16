@@ -12,17 +12,6 @@
 
 #include "countly.hpp"
 
-#ifndef COUNTLY_USE_CUSTOM_HTTP
-#ifdef _WIN32
-#include "Windows.h"
-#include "WinHTTP.h"
-#undef ERROR
-#pragma comment(lib, "winhttp.lib")
-#else
-#include "curl/curl.h"
-#endif
-#endif
-
 #ifdef COUNTLY_USE_SQLITE
 #include "sqlite3.h"
 #endif
@@ -313,22 +302,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   configuration->appKey = app_key;
   configuration->serverUrl = host;
 
-  if (configuration->serverUrl.find("http://") == 0) {
-    use_https = false;
-  } else if (configuration->serverUrl.find("https://") == 0) {
-    use_https = true;
-  } else {
-    use_https = false;
-    configuration->serverUrl.insert(0, "http://");
-  }
-
   session_params["app_key"] = app_key;
-
-  if (port <= 0) {
-    configuration->port = use_https ? 443 : 80;
-  } else {
-    configuration->port = port;
-  }
 
   requestBuilder.reset(new RequestBuilder(configuration, logger));
   requestModule.reset(new RequestModule(configuration, logger, requestBuilder));

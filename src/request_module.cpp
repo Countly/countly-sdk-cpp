@@ -12,8 +12,8 @@
 
 #ifndef COUNTLY_USE_CUSTOM_HTTP
 #ifdef _WIN32
+#include "Windows.h" 
 #include "WinHTTP.h"
-#include "Windows.h" //1: Order matters
 #undef ERROR
 #pragma comment(lib, "winhttp.lib")
 #else
@@ -25,9 +25,9 @@
 namespace cly {
 class RequestModule::RequestModuleImpl {
 private:
-  bool use_https = true;
 
 public:
+  bool use_https = true;
   bool is_queue_being_processed = false;
   std::deque<std::string> request_queue;
   std::shared_ptr<CountlyConfiguration> _configuration;
@@ -38,6 +38,10 @@ public:
       use_https = false;
     } else if (_configuration->serverUrl.find("https://") == 0) {
       use_https = true;
+    }
+
+    if (_configuration->port <= 0) {
+      _configuration->port = use_https ? 443 : 80;
     }
   }
 
@@ -86,21 +90,7 @@ void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &
 
   std::string &request = impl->_requestBuilder->buildRequest(data);
   impl->request_queue.push_back(request);
-}
-
-// void RequestModule::processQueue() {
-//   // make it thread safe
-//   while (!impl->request_queue.empty()) {
-//     std::string data = impl->request_queue.front();
-//     HTTPResponse response = impl->sendHTTP(data);
-//
-//     if (!response.success) {
-//       break;
-//     }
-//
-//     impl->request_queue.pop_back();
-//   }
-// }
+} 
 
 void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
   mutex->lock();
@@ -149,7 +139,7 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
   mutex->unlock();
 }
 
-HTTPResponse RequestModule::sendHTTP(const std::string &path, std::string data) {
+HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
   bool use_post = impl->_configuration->forcePost || (data.size() > COUNTLY_POST_THRESHOLD);
   impl->_logger->log(LogLevel::DEBUG, "[Countly][sendHTTP] data: " + data);
   if (!impl->_configuration->salt.empty()) {
@@ -190,7 +180,7 @@ HTTPResponse RequestModule::sendHTTP(const std::string &path, std::string data) 
                        10000,  // nSendTimeout: 10sec (default 30sec).
                        10000); // nReceiveTimeout: 10sec (default 30sec).
 
-    size_t scheme_offset = use_https ? (sizeof("https://") - 1) : (sizeof("http://") - 1);
+    size_t scheme_offset = impl->use_https ? (sizeof("https://") - 1) : (sizeof("http://") - 1);
     size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, impl->_configuration->serverUrl.c_str() + scheme_offset, -1, nullptr, 0);
     wchar_t *wide_hostname = new wchar_t[buffer_size];
     MultiByteToWideChar(CP_ACP, 0, impl->_configuration->serverUrl.c_str() + scheme_offset, -1, wide_hostname, buffer_size);
@@ -210,7 +200,7 @@ HTTPResponse RequestModule::sendHTTP(const std::string &path, std::string data) 
     wchar_t *wide_path = new wchar_t[buffer_size];
     MultiByteToWideChar(CP_ACP, 0, path.c_str(), -1, wide_path, buffer_size);
 
-    hRequest = WinHttpOpenRequest(hConnect, use_post ? L"POST" : L"GET", wide_path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, use_https ? WINHTTP_FLAG_SECURE : 0);
+    hRequest = WinHttpOpenRequest(hConnect, use_post ? L"POST" : L"GET", wide_path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, impl->use_https ? WINHTTP_FLAG_SECURE : 0);
     delete[] wide_path;
   }
 

@@ -22,7 +22,7 @@ public:
   ~RequestModule();
   RequestModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder);
 
-  HTTPResponse sendHTTP(const std::string &path, std::string data);
+  HTTPResponse sendHTTP(std::string path, std::string data);
 
   /**
    * SDK central execution call for processing requests in the request queue.

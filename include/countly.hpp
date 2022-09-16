@@ -232,15 +232,11 @@ private:
   std::chrono::system_clock::duration getSessionDuration();
 
   void updateLoop();
-
-  bool use_https = false;
-
   bool began_session = false;
   bool is_being_disposed = false;
   bool is_sdk_initialized = false;
 
   std::chrono::system_clock::time_point last_sent_session_request;
-
   nlohmann::json session_params;
 
   std::unique_ptr<std::thread> thread;
