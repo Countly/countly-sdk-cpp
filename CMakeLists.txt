@@ -30,6 +30,8 @@ add_library(countly
   ${CMAKE_CURRENT_SOURCE_DIR}/src/countly.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/views_module.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/logger_module.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/request_module.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/request_builder.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/event.cpp)
 
 target_include_directories(countly
