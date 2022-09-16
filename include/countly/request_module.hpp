@@ -3,6 +3,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <mutex>
 
 #include "countly/constants.hpp"
 #include "countly/event.hpp"
@@ -21,7 +22,14 @@ public:
   ~RequestModule();
   RequestModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder);
 
-  void processQueue();
+  HTTPResponse sendHTTP(const std::string &path, std::string data);
+
+  /**
+   * SDK central execution call for processing requests in the request queue.
+   * Only one sender is active at a time. Requests are processed in order.
+   */
+  void processQueue(std::mutex mutex);
+
   void addRequestToQueue(const std::map<std::string, std::string> &data);
 
 private:

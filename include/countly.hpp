@@ -23,6 +23,8 @@
 #include "countly/event.hpp"
 #include "countly/logger_module.hpp"
 #include "countly/views_module.hpp"
+#include <countly/request_builder.hpp>
+#include <request_module.cpp>
 
 namespace cly {
 class Countly : public cly::CountlyDelegates {
@@ -119,10 +121,6 @@ public:
   void updateRemoteConfigExcept(std::string *keys, size_t key_count);
 
   static std::chrono::system_clock::time_point getTimestamp();
-
-  static std::string encodeURL(const std::string &data);
-
-  static std::string serializeForm(const std::map<std::string, std::string> data);
 
   std::string calculateChecksum(const std::string &salt, const std::string &data);
 
@@ -225,10 +223,6 @@ private:
   void _updateRemoteConfigWithSpecificValues(const std::map<std::string, std::string> &data);
 #pragma endregion Remote_Config_Helper_Methods
 
-  void processRequestQueue();
-  void addToRequestQueue(const std::string &data);
-  HTTPResponse sendHTTP(std::string path, std::string data);
-
   void _changeDeviceIdWithMerge(const std::string &value);
 
   void _changeDeviceIdWithoutMerge(const std::string &value);
@@ -253,6 +247,8 @@ private:
   std::unique_ptr<cly::ViewsModule> views_module;
   std::shared_ptr<cly::CountlyConfiguration> configuration;
   std::shared_ptr<cly::LoggerModule> logger;
+  std::shared_ptr<cly::RequestBuilder> requestBuilder;
+  std::unique_ptr<cly::RequestModule> requestModule;
 
   std::mutex mutex;
 
@@ -263,7 +259,6 @@ private:
   size_t wait_milliseconds = COUNTLY_KEEPALIVE_INTERVAL;
 
   size_t max_events = COUNTLY_MAX_EVENTS_DEFAULT;
-  std::deque<std::string> request_queue;
 #ifndef COUNTLY_USE_SQLITE
   std::deque<std::string> event_queue;
 #else

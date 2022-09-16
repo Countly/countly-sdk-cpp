@@ -128,7 +128,7 @@ void Countly::setUserDetails(const std::map<std::string, std::string> &value) {
 
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"user_details", session_params["user_details"].dump()}};
 
-  addToRequestQueue(Countly::serializeForm(data));
+  requestModule->addRequestToQueue(data);
   mutex.unlock();
 }
 
@@ -143,8 +143,7 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string> &val
   }
 
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"user_details", session_params["user_details"].dump()}};
-
-  addToRequestQueue(Countly::serializeForm(data));
+  requestModule->addRequestToQueue(data);
   mutex.unlock();
 }
 
@@ -221,7 +220,7 @@ void Countly::_sendIndependantLocationRequest() {
     data["app_key"] = session_params["app_key"].get<std::string>();
     data["device_id"] = session_params["device_id"].get<std::string>();
     data["timestamp"] = std::to_string(timestamp.count());
-    addToRequestQueue(Countly::serializeForm(data));
+    requestModule->addRequestToQueue(data);
   }
 
   mutex.unlock();
@@ -278,7 +277,7 @@ void Countly::_changeDeviceIdWithMerge(const std::string &value) {
       {"old_device_id", session_params["old_device_id"].get<std::string>()},
       {"timestamp", std::to_string(timestamp.count())},
   };
-  addToRequestQueue(Countly::serializeForm(data));
+  requestModule->addRequestToQueue(data);
 
   session_params.erase("old_device_id");
   mutex.unlock();
@@ -551,7 +550,7 @@ bool Countly::beginSession() {
     data["metrics"] = configuration->metrics.dump();
   }
 
-  addToRequestQueue(Countly::serializeForm(data));
+  requestModule->addRequestToQueue(data);
   session_params.erase("user_details");
   last_sent_session_request = Countly::getTimestamp();
   began_session = true;
@@ -634,7 +633,7 @@ bool Countly::updateSession() {
   if (duration.count() >= configuration->sessionDuration) {
     log(LogLevel::DEBUG, "[Countly][updateSession] sending session update.");
     std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"session_duration", std::to_string(duration.count())}};
-    addToRequestQueue(Countly::serializeForm(data));
+    requestModule->addRequestToQueue(data);
 
     last_sent_session_request += duration;
   }
@@ -643,7 +642,7 @@ bool Countly::updateSession() {
     log(LogLevel::DEBUG, "[Countly][updateSession] sending event.");
     std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"events", events.dump()}};
 
-    addToRequestQueue(Countly::serializeForm(data));
+    requestModule->addRequestToQueue(data);
   }
 
 #ifndef COUNTLY_USE_SQLITE
@@ -686,7 +685,7 @@ bool Countly::endSession() {
     return false;
   }
 
-  addToRequestQueue(Countly::serializeForm(data));
+  requestModule->addRequestToQueue(data);
 
   last_sent_session_request = now;
   began_session = false;
@@ -696,32 +695,6 @@ bool Countly::endSession() {
 
 std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chrono::system_clock::now(); }
 
-std::string Countly::encodeURL(const std::string &data) {
-  std::ostringstream encoded;
-
-  for (unsigned char character : data) {
-    if (std::isalnum(character) || character == '.' || character == '_' || character == '~') {
-      encoded << character;
-    } else {
-      encoded << '%' << std::setw(2) << std::hex << std::setfill('0') << std::uppercase << (unsigned int)((unsigned char)character);
-    }
-  }
-
-  return encoded.str();
-}
-
-std::string Countly::serializeForm(const std::map<std::string, std::string> data) {
-  std::ostringstream serialized;
-
-  for (const auto &key_value : data) {
-    serialized << key_value.first << "=" << Countly::encodeURL(key_value.second) << '&';
-  }
-
-  std::string serialized_string = serialized.str();
-  serialized_string.resize(serialized_string.size() - 1);
-
-  return serialized_string;
-}
 
 #ifdef COUNTLY_USE_SQLITE
 void Countly::setDatabasePath(const std::string &path) {
@@ -784,240 +757,6 @@ std::string Countly::calculateChecksum(const std::string &salt, const std::strin
 #endif
 }
 
-/**
- * SDK central execution call for processing requests in the request queue.
- * Only one sender is active at a time. Requests are processed in order.
- */
-void Countly::processRequestQueue() {
-  mutex.lock();
-  // making sure that no other thread is processing the queue
-  if (is_queue_being_processed) {
-    mutex.unlock();
-    return;
-  }
-
-  // if this is the only thread, mark that processing is happening
-  is_queue_being_processed = true;
-  mutex.unlock();
-
-  while (true) {
-    mutex.lock();
-    if (request_queue.empty()) {
-      // stop sending requests once the queue is empty
-      mutex.unlock();
-      break;
-    }
-
-    std::string data = request_queue.front();
-    mutex.unlock();
-
-    HTTPResponse response = sendHTTP("/i", data);
-
-    mutex.lock();
-    if (!response.success) {
-      // if the request was not a success, abort sending and try again in the future
-      mutex.unlock();
-      break;
-    }
-
-    if (request_queue.front() == data) {
-      // we pop the front only if it is still the same request
-      // the queue might have changed while we were sending the request
-      request_queue.pop_front();
-    }
-
-    mutex.unlock();
-  }
-
-  mutex.lock();
-  // mark that no thread is processing the request queue
-  is_queue_being_processed = false;
-  mutex.unlock();
-}
-
-void Countly::addToRequestQueue(const std::string &data) {
-  if (request_queue.size() >= 1000) {
-    log(LogLevel::WARNING, "[Countly][addToRequestQueue] Request Queue is full. Dropping the oldest request.");
-    request_queue.pop_front();
-  }
-
-  request_queue.push_back(data);
-}
-
-HTTPResponse Countly::sendHTTP(std::string path, std::string data) {
-  bool use_post = configuration->forcePost || (data.size() > COUNTLY_POST_THRESHOLD);
-  log(LogLevel::DEBUG, "[Countly][sendHTTP] data: " + data);
-  if (!configuration->salt.empty()) {
-    std::string checksum = calculateChecksum(configuration->salt, data);
-    if (!data.empty()) {
-      data += '&';
-    }
-
-    data += "checksum256=" + checksum;
-    log(LogLevel::DEBUG, "[Countly][sendHTTP] with checksum, data: " + data);
-  }
-
-  HTTPResponse response;
-  response.success = false;
-
-#ifdef COUNTLY_USE_CUSTOM_HTTP
-  if (!configuration->http_client_function) {
-    log(LogLevel::FATAL, "Missing HTTP client function");
-    return response;
-  }
-
-  return configuration->http_client_function(use_post, path, data);
-#else
-  if (configuration->http_client_function) {
-    return configuration->http_client_function(use_post, path, data);
-  }
-#ifdef _WIN32
-  HINTERNET hSession = nullptr;
-  HINTERNET hConnect = nullptr;
-  HINTERNET hRequest = nullptr;
-
-  hSession = WinHttpOpen(NULL, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-  if (hSession) {
-    // Set way Shorter timeouts:
-    WinHttpSetTimeouts(hSession,
-                       10000,  // nResolveTimeout: 10sec (default 'infinite').
-                       10000,  // nConnectTimeout: 10sec (default 60sec).
-                       10000,  // nSendTimeout: 10sec (default 30sec).
-                       10000); // nReceiveTimeout: 10sec (default 30sec).
-
-    size_t scheme_offset = use_https ? (sizeof("https://") - 1) : (sizeof("http://") - 1);
-    size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, configuration->serverUrl.c_str() + scheme_offset, -1, nullptr, 0);
-    wchar_t *wide_hostname = new wchar_t[buffer_size];
-    MultiByteToWideChar(CP_ACP, 0, configuration->serverUrl.c_str() + scheme_offset, -1, wide_hostname, buffer_size);
-
-    hConnect = WinHttpConnect(hSession, wide_hostname, configuration->port, 0);
-
-    delete[] wide_hostname;
-  }
-
-  if (hConnect) {
-    if (!use_post) {
-      path += '?';
-      path += data;
-    }
-
-    size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, path.c_str(), -1, nullptr, 0);
-    wchar_t *wide_path = new wchar_t[buffer_size];
-    MultiByteToWideChar(CP_ACP, 0, path.c_str(), -1, wide_path, buffer_size);
-
-    hRequest = WinHttpOpenRequest(hConnect, use_post ? L"POST" : L"GET", wide_path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, use_https ? WINHTTP_FLAG_SECURE : 0);
-    delete[] wide_path;
-  }
-
-  if (hRequest) {
-    LPCWSTR headers = use_post ? L"content-type:application/x-www-form-urlencoded" : WINHTTP_NO_ADDITIONAL_HEADERS;
-    bool ok = WinHttpSendRequest(hRequest, headers, 0, use_post ? (LPVOID)data.data() : WINHTTP_NO_REQUEST_DATA, use_post ? data.size() : 0, use_post ? data.size() : 0, 0) != 0;
-    if (ok) {
-      ok = WinHttpReceiveResponse(hRequest, NULL);
-      if (ok) {
-        DWORD dwStatusCode = 0;
-        DWORD dwSize = sizeof(dwStatusCode);
-        WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &dwStatusCode, &dwSize, WINHTTP_NO_HEADER_INDEX);
-        response.success = (dwStatusCode >= 200 && dwStatusCode < 300);
-        if (response.success) {
-          DWORD n_bytes_available;
-          bool error_reading_body = false;
-          std::string body;
-          do {
-            n_bytes_available = 0;
-            if (!WinHttpQueryDataAvailable(hRequest, &n_bytes_available)) {
-              error_reading_body = true;
-              break;
-            }
-
-            if (n_bytes_available == 0) {
-              break;
-            }
-
-            char *body_part = new char[n_bytes_available + 1];
-            memset(body_part, 0, n_bytes_available + 1);
-            DWORD n_bytes_read = 0;
-
-            if (!WinHttpReadData(hRequest, body_part, n_bytes_available, &n_bytes_read)) {
-              error_reading_body = true;
-              delete[] body_part;
-              break;
-            }
-
-            body += body_part;
-            delete[] body_part;
-          } while (n_bytes_available > 0);
-
-          if (!body.empty()) {
-            const nlohmann::json &parseResult = nlohmann::json::parse(body, nullptr, false);
-            if (parseResult.is_discarded()) {
-              log(LogLevel::WARNING, "[Countly][sendHTTP] Returned response from the server was not a valid JSON.");
-            } else {
-              response.data = parseResult;
-            }
-          }
-        }
-      }
-    }
-
-    WinHttpCloseHandle(hRequest);
-  }
-
-  if (hConnect) {
-    WinHttpCloseHandle(hConnect);
-  }
-
-  if (hSession) {
-    WinHttpCloseHandle(hSession);
-  }
-#else
-  CURL *curl;
-  CURLcode curl_code;
-  curl = curl_easy_init();
-  if (curl) {
-    std::ostringstream full_url_stream;
-    full_url_stream << configuration->serverUrl << ':' << std::dec << configuration->port << path;
-
-    if (!use_post) {
-      full_url_stream << '?' << data;
-      curl_easy_setopt(curl, CURLOPT_HTTPGET, 1);
-    } else {
-      curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.c_str());
-    }
-
-    log(LogLevel::DEBUG, "[Countly][sendHTTP] request: " + full_url_stream.str());
-
-    std::string full_url = full_url_stream.str();
-    curl_easy_setopt(curl, CURLOPT_URL, full_url.c_str());
-
-    std::string body;
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, countly_curl_write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
-
-    curl_code = curl_easy_perform(curl);
-    if (curl_code == CURLE_OK) {
-
-      long status_code;
-      curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
-      response.success = (status_code >= 200 && status_code < 300);
-
-      if (!body.empty()) {
-        const nlohmann::json &parseResult = nlohmann::json::parse(body, nullptr, false);
-        if (parseResult.is_discarded()) {
-          log(LogLevel::WARNING, "[Countly][sendHTTP] Returned response from the server was not a valid JSON.");
-        } else {
-          response.data = parseResult;
-        }
-      }
-    }
-    curl_easy_cleanup(curl);
-  }
-#endif
-  log(LogLevel::DEBUG, "[Countly][sendHTTP] response: " + response.data.dump());
-  return response;
-#endif
-}
-
 std::chrono::system_clock::duration Countly::getSessionDuration(std::chrono::system_clock::time_point now) {
   mutex.lock();
   std::chrono::system_clock::duration duration = now - last_sent_session_request;
@@ -1045,8 +784,7 @@ void Countly::updateLoop() {
     if (enable_automatic_session) {
       updateSession();
     }
-
-    processRequestQueue();
+    requestModule->processQueue(mutex);
   }
   mutex.lock();
   running = false;
@@ -1060,7 +798,7 @@ void Countly::enableRemoteConfig() {
 }
 
 void Countly::_fetchRemoteConfig(const std::map<std::string, std::string> &data) {
-  HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
+  HTTPResponse response = requestModule->sendHTTP("/o/sdk", requestBuilder->serializeData(data));
   mutex.lock();
   if (response.success) {
     remote_config = response.data;
@@ -1093,7 +831,7 @@ nlohmann::json Countly::getRemoteConfigValue(const std::string &key) {
 }
 
 void Countly::_updateRemoteConfigWithSpecificValues(const std::map<std::string, std::string> &data) {
-  HTTPResponse response = sendHTTP("/o/sdk", serializeForm(data));
+  HTTPResponse response = requestModule->sendHTTP("/o/sdk", requestBuilder->serializeData(data));
   mutex.lock();
   if (response.success) {
     for (auto it = response.data.begin(); it != response.data.end(); ++it) {
