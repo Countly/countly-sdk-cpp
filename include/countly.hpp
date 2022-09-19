@@ -221,6 +221,8 @@ public:
   */
   inline void processRQDebug() { processRequestQueue(); }
 
+  inline void clearRequestQueue() { request_queue.clear(); }
+
   inline const CountlyConfiguration &getConfiguration() { return *configuration.get(); }
 
   static void halt();
