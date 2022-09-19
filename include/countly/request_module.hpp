@@ -32,6 +32,14 @@ public:
 
   void addRequestToQueue(const std::map<std::string, std::string> &data);
 
+  /**
+   * Clear request queue.
+   * Warning: This method is for debugging purposes, and it is going to be removed in the future.
+   * You should not be using this method.
+   * @return a vector object containing requests.
+   */
+  void clearRequestQueue();
+
 private:
   class RequestModuleImpl;
   std::unique_ptr<RequestModuleImpl> impl;

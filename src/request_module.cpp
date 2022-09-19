@@ -12,7 +12,7 @@
 
 #ifndef COUNTLY_USE_CUSTOM_HTTP
 #ifdef _WIN32
-#include "Windows.h" 
+#include "Windows.h"
 #include "WinHTTP.h"
 #undef ERROR
 #pragma comment(lib, "winhttp.lib")
@@ -25,7 +25,6 @@
 namespace cly {
 class RequestModule::RequestModuleImpl {
 private:
-
 public:
   bool use_https = true;
   bool is_queue_being_processed = false;
@@ -90,7 +89,9 @@ void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &
 
   std::string &request = impl->_requestBuilder->buildRequest(data);
   impl->request_queue.push_back(request);
-} 
+}
+
+void RequestModule::clearRequestQueue() { impl->request_queue.clear(); }
 
 void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
   mutex->lock();

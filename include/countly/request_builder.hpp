@@ -16,9 +16,10 @@ private:
 public:
   RequestBuilder(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger);
   ~RequestBuilder();
-  std::string encodeURL(const std::string &data);
+  static std::string encodeURL(const std::string &data);
+  static std::string serializeData(const std::map<std::string, std::string> &data);
   std::string buildRequest(const std::map<std::string, std::string> &data);
-  std::string serializeData(const std::map<std::string, std::string> &data);
+  
 };
 } // namespace cly
 #endif
