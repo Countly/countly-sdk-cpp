@@ -46,14 +46,6 @@ public:
 
   void setLogger(void (*fun)(LogLevel level, const std::string &message));
 
-#ifdef COUNTLY_BUILD_TESTS
-  /*
-  This function should not be used as it will be removed in a future release. It is
-  currently added as a temporary workaround.
-  */
-  inline std::function<void(LogLevel, const std::string &)> getLogger() { return logger->getLogger(); }
-#endif
-
   void setSha256(cly::SHA256Function fun);
 
   void setHTTPClient(HTTPClientFunction fun);
@@ -187,14 +179,13 @@ public:
   /* Provide 'updateInterval' in seconds. */
   inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) { configuration->sessionDuration = updateInterval; }
 
+#ifdef COUNTLY_BUILD_TESTS
   /**
    * Convert event queue into list.
    * Warning: This method is for debugging purposes, and it is going to be removed in the future.
    * You should not be using this method.
    * @return a vector object containing events.
    */
-
-#ifdef COUNTLY_BUILD_TESTS
   const std::vector<std::string> debugReturnStateOfEQ() {
 
 #ifdef COUNTLY_USE_SQLITE
@@ -204,6 +195,31 @@ public:
     return v;
 #endif
   }
+
+  /**
+   * Convert request queue into list.
+   * Warning: This method is for debugging purposes, and it is going to be removed in the future.
+   * You should not be using this method.
+   * @return a vector object containing events.
+   */
+  const std::vector<std::string> debugReturnStateOfRQ() {
+    std::vector<std::string> v(request_queue.begin(), request_queue.end());
+    return v;
+  }
+
+  /**
+  * This function should not be used as it will be removed in a future release.
+  * It is currently added as a temporary workaround.
+  */
+  inline std::function<void(LogLevel, const std::string &)> getLogger() { return logger->getLogger(); }
+
+  /**
+  * This function should not be used as it will be removed in a future release.
+  * It is currently added as a temporary workaround.
+  */
+  inline void processRQDebug() { processRequestQueue(); }
+
+  inline void clearRequestQueue() { request_queue.clear(); }
 
   inline const CountlyConfiguration &getConfiguration() { return *configuration.get(); }
 
