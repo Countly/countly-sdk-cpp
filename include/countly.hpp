@@ -23,6 +23,8 @@
 #include "countly/event.hpp"
 #include "countly/logger_module.hpp"
 #include "countly/views_module.hpp"
+#include <countly/request_builder.hpp>
+#include <countly/request_module.hpp>
 
 namespace cly {
 class Countly : public cly::CountlyDelegates {
@@ -112,10 +114,6 @@ public:
 
   static std::chrono::system_clock::time_point getTimestamp();
 
-  static std::string encodeURL(const std::string &data);
-
-  static std::string serializeForm(const std::map<std::string, std::string> data);
-
   std::string calculateChecksum(const std::string &salt, const std::string &data);
 
 #ifdef COUNTLY_USE_SQLITE
@@ -199,29 +197,26 @@ public:
   }
 
   /**
-   * Convert request queue into list.
-   * Warning: This method is for debugging purposes, and it is going to be removed in the future.
-   * You should not be using this method.
-   * @return a vector object containing events.
+   * This function should not be used as it will be removed in a future release.
+   * It is currently added as a temporary workaround.
    */
-  const std::vector<std::string> debugReturnStateOfRQ() {
-    std::vector<std::string> v(request_queue.begin(), request_queue.end());
-    return v;
-  }
-
-  /**
-  * This function should not be used as it will be removed in a future release.
-  * It is currently added as a temporary workaround.
-  */
   inline std::function<void(LogLevel, const std::string &)> getLogger() { return logger->getLogger(); }
 
   /**
-  * This function should not be used as it will be removed in a future release.
-  * It is currently added as a temporary workaround.
-  */
-  inline void processRQDebug() { processRequestQueue(); }
+   * This function should not be used as it will be removed in a future release.
+   * It is currently added as a temporary workaround.
+   */
+  inline void processRQDebug() {
+    if (is_sdk_initialized) {
+      requestModule->processQueue(mutex);
+    }
+  }
 
-  inline void clearRequestQueue() { request_queue.clear(); }
+  inline void clearRequestQueue() {
+    if (is_sdk_initialized) {
+      requestModule->clearRequestQueue();
+    }
+  }
 
   inline const CountlyConfiguration &getConfiguration() { return *configuration.get(); }
 
@@ -241,10 +236,6 @@ private:
   void _updateRemoteConfigWithSpecificValues(const std::map<std::string, std::string> &data);
 #pragma endregion Remote_Config_Helper_Methods
 
-  void processRequestQueue();
-  void addToRequestQueue(const std::string &data);
-  HTTPResponse sendHTTP(std::string path, std::string data);
-
   void _changeDeviceIdWithMerge(const std::string &value);
 
   void _changeDeviceIdWithoutMerge(const std::string &value);
@@ -254,15 +245,11 @@ private:
   std::chrono::system_clock::duration getSessionDuration();
 
   void updateLoop();
-
-  bool use_https = false;
-
   bool began_session = false;
   bool is_being_disposed = false;
   bool is_sdk_initialized = false;
 
   std::chrono::system_clock::time_point last_sent_session_request;
-
   nlohmann::json session_params;
 
   std::unique_ptr<std::thread> thread;
@@ -270,6 +257,8 @@ private:
   std::shared_ptr<cly::CountlyConfiguration> configuration;
   std::shared_ptr<cly::LoggerModule> logger;
 
+  std::shared_ptr<cly::RequestBuilder> requestBuilder;
+  std::unique_ptr<cly::RequestModule> requestModule;
   std::shared_ptr<std::mutex> mutex = std::make_shared<std::mutex>();
 
   bool is_queue_being_processed = false;
@@ -279,7 +268,6 @@ private:
   size_t wait_milliseconds = COUNTLY_KEEPALIVE_INTERVAL;
 
   size_t max_events = COUNTLY_MAX_EVENTS_DEFAULT;
-  std::deque<std::string> request_queue;
 #ifndef COUNTLY_USE_SQLITE
   std::deque<std::string> event_queue;
 #else
@@ -290,5 +278,4 @@ private:
   nlohmann::json remote_config;
 };
 } // namespace cly
-
 #endif
