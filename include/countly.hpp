@@ -270,7 +270,7 @@ private:
   std::shared_ptr<cly::CountlyConfiguration> configuration;
   std::shared_ptr<cly::LoggerModule> logger;
 
-  std::mutex mutex;
+  std::shared_ptr<std::mutex> mutex = std::make_shared<std::mutex>();
 
   bool is_queue_being_processed = false;
   bool enable_automatic_session = false;
