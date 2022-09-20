@@ -5,15 +5,9 @@
 #include <mutex>
 #include <string>
 
-#include "countly/constants.hpp"
 #include "countly/countly_configuration.hpp"
-#include "countly/event.hpp"
 #include "countly/logger_module.hpp"
 #include "countly/request_builder.hpp"
-
-#ifdef _WIN32
-#undef ERROR
-#endif
 
 namespace cly {
 class RequestModule {

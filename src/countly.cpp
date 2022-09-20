@@ -133,6 +133,7 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string> &val
 
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"user_details", session_params["user_details"].dump()}};
   requestModule->addRequestToQueue(data);
+
   mutex->unlock();
 }
 

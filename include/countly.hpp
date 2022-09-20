@@ -196,30 +196,27 @@ public:
 #endif
   }
 
-  ///**
-  // * Convert request queue into list.
-  // * Warning: This method is for debugging purposes, and it is going to be removed in the future.
-  // * You should not be using this method.
-  // * @return a vector object containing requests.
-  // */
-  //const std::vector<std::string> debugReturnStateOfRQ() {
-  //  std::vector<std::string> v(request_queue.begin(), request_queue.end());
-  //  return v;
-  //}
-
   /**
-  * This function should not be used as it will be removed in a future release.
-  * It is currently added as a temporary workaround.
-  */
+   * This function should not be used as it will be removed in a future release.
+   * It is currently added as a temporary workaround.
+   */
   inline std::function<void(LogLevel, const std::string &)> getLogger() { return logger->getLogger(); }
 
   /**
-  * This function should not be used as it will be removed in a future release.
-  * It is currently added as a temporary workaround.
-  */
-  inline void processRQDebug() { requestModule->processQueue(mutex); }
+   * This function should not be used as it will be removed in a future release.
+   * It is currently added as a temporary workaround.
+   */
+  inline void processRQDebug() {
+    if (is_sdk_initialized) {
+      requestModule->processQueue(mutex);
+    }
+  }
 
-  inline void clearRequestQueue() { requestModule->clearRequestQueue(); }
+  inline void clearRequestQueue() {
+    if (is_sdk_initialized) {
+      requestModule->clearRequestQueue();
+    }
+  }
 
   inline const CountlyConfiguration &getConfiguration() { return *configuration.get(); }
 
@@ -259,6 +256,7 @@ private:
   std::unique_ptr<cly::ViewsModule> views_module;
   std::shared_ptr<cly::CountlyConfiguration> configuration;
   std::shared_ptr<cly::LoggerModule> logger;
+
   std::shared_ptr<cly::RequestBuilder> requestBuilder;
   std::unique_ptr<cly::RequestModule> requestModule;
   std::shared_ptr<std::mutex> mutex = std::make_shared<std::mutex>();
@@ -280,5 +278,4 @@ private:
   nlohmann::json remote_config;
 };
 } // namespace cly
-
 #endif
