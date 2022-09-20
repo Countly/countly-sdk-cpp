@@ -35,6 +35,9 @@ public:
       use_https = false;
     } else if (_configuration->serverUrl.find("https://") == 0) {
       use_https = true;
+    } else {
+      use_https = false;
+      _configuration->serverUrl.insert(0, "http://");
     }
 
     if (_configuration->port <= 0) {
