@@ -4,7 +4,6 @@
 #include <chrono>
 #include <deque>
 #include <iomanip>
-#include <string>
 
 #ifndef COUNTLY_USE_CUSTOM_SHA256
 #include "openssl/sha.h"
@@ -19,7 +18,6 @@
 #else
 #include "curl/curl.h"
 #endif
-#include <mutex>
 #endif
 
 namespace cly {
@@ -82,7 +80,7 @@ RequestModule::RequestModule(std::shared_ptr<CountlyConfiguration> config, std::
 RequestModule::~RequestModule() { impl.reset(); }
 
 void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &data) {
-  if (impl->_configuration->requestQueueThreshold == impl->request_queue.size()) {
+  if (impl->_configuration->requestQueueThreshold <= impl->request_queue.size()) {
     impl->_logger->log(LogLevel::WARNING, cly::utils::format_string("[RequestModule] addRequestToQueue: Request Queue is full. Dropping the oldest request."));
     impl->request_queue.pop_front();
   }
