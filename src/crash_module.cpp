@@ -1,9 +1,15 @@
 #include "countly/crash_module.hpp"
 #include "countly/request_module.hpp"
 
+#include <algorithm>
+#include <deque>
+#include <iostream>
+#include <iterator>
+
 namespace cly {
 class CrashModule::CrashModuleImpl {
 public:
+  std::deque<std::string> _breadCrumbs;
   std::shared_ptr<CountlyConfiguration> _configuration;
   std::shared_ptr<LoggerModule> _logger;
   std::shared_ptr<RequestModule> _requestModule;
@@ -20,23 +26,42 @@ CrashModule::CrashModule(std::shared_ptr<CountlyConfiguration> config, std::shar
   impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[CrashModule] Initialized"));
 }
 
-/// <summary>
-/// Adds string value to a list which is later sent over as logs whenever a cash is reported by system.
-/// </summary>
-/// <param name="value">a bread crumb for the crash report</param>
-void addBreadcrumb(std::string value);
+void CrashModule::addBreadcrumb(const std::string &value) {
+  impl->_logger->log(LogLevel::INFO, "[CrashModule] addBreadcrumb : " + value);
 
-/// <summary>
-/// Public method that sends crash details to the server. Set param "fatal" to false for Custom Logged errors
-/// </summary>
-/// <param name="error">a string that contain detailed description of the exception.</param>
-/// <param name="stackTrace">a string that describes the contents of the call-stack.</param>
-/// <param name="type">the type of the log message</param>
-/// <param name="segments">custom key/values to be reported</param>
-/// <param name="fatal">For automatically captured errors, you should set to <code>true</code>, whereas on logged errors it should be <code>false</code></param>
-/// <returns></returns>
-void CrashModule::recordException(std::string error, std::string stackTrace, bool fatal, std::map<std::string, std::string> crashMetrics, std::map<std::string, std::string> segmentation) {}
+  if (impl->_breadCrumbs.size() >= impl->_configuration->breadcrumbsThreshold) {
+    impl->_breadCrumbs.pop_front();
+  }
 
-void addBreadcrumb(std::string value) {}
+  impl->_breadCrumbs.push_back(value);
+}
+
+void CrashModule::recordException(const std::string &title, const std::string &stackTrace, const bool fatal, const std::map<std::string, std::string> &crashMetrics, const std::map<std::string, std::string> &segmentation) {
+
+  impl->_logger->log(LogLevel::INFO, cly::utils::format_string("[CrashModule] recordException: title = %s, stackTrace = %s", title.c_str(), stackTrace.c_str()));
+
+  if (title.empty()) {
+    impl->_logger->log(LogLevel::WARNING, "[CrashModule] recordException : The parameter 'title' can't be empty");
+  }
+
+  if (stackTrace.empty()) {
+    impl->_logger->log(LogLevel::WARNING, "[CrashModule] recordException : The parameter 'stackTrace' can't be empty");
+  }
+
+  std::ostringstream outstream;
+  std::copy(impl->_breadCrumbs.begin(), impl->_breadCrumbs.end(), std::ostream_iterator<std::string>(outstream, "\n"));
+
+  nlohmann::json crash(crashMetrics);
+  nlohmann::json segments(segmentation);
+
+  crash["_name"] = title;
+  crash["_error"] = stackTrace;
+  crash["_logs"] = outstream.str();
+  crash["_custom"] = segments;
+  crash["_nonfatal"] = !fatal;
+
+  std::map<std::string, std::string> data = {{"crash", crash.dump()}};
+  impl->_requestModule->addRequestToQueue(data);
+}
 
 } // namespace cly

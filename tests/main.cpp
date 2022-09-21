@@ -7,13 +7,13 @@
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 
-#include "countly.hpp"
 #include "doctest.h"
 
 #include "nlohmann/json.hpp"
 #include "test_utils.hpp"
 using json = nlohmann::json;
 using namespace cly;
+using namespace test_utils;
 
 TEST_CASE("urlencoding is correct") {
   CHECK(RequestBuilder::encodeURL("hello world") == "hello%20world");

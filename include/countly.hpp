@@ -25,6 +25,7 @@
 #include "countly/views_module.hpp"
 #include <countly/request_builder.hpp>
 #include <countly/request_module.hpp>
+#include <countly/crash_module.hpp>
 
 namespace cly {
 class Countly : public cly::CountlyDelegates {
@@ -124,7 +125,7 @@ public:
 #ifdef COUNTLY_USE_SQLITE
     setDatabasePath(path);
 #elif defined _WIN32
-    //UNREFERENCED_PARAMETER(path);
+    UNREFERENCED_PARAMETER(path);
 #endif
   }
 
@@ -141,6 +142,7 @@ public:
   void Stop() { stop(); }
 
   inline cly::ViewsModule &views() const { return *views_module.get(); }
+  inline cly::CrashModule &crash() const { return *crash_module.get(); }
 
   void RecordEvent(const std::string &key, int count) override { addEvent(cly::Event(key, count)); }
 
@@ -253,12 +255,13 @@ private:
   nlohmann::json session_params;
 
   std::unique_ptr<std::thread> thread;
+  std::unique_ptr<cly::CrashModule> crash_module;
   std::unique_ptr<cly::ViewsModule> views_module;
   std::shared_ptr<cly::CountlyConfiguration> configuration;
   std::shared_ptr<cly::LoggerModule> logger;
 
   std::shared_ptr<cly::RequestBuilder> requestBuilder;
-  std::unique_ptr<cly::RequestModule> requestModule;
+  std::shared_ptr<cly::RequestModule> requestModule;
   std::shared_ptr<std::mutex> mutex = std::make_shared<std::mutex>();
 
   bool is_queue_being_processed = false;

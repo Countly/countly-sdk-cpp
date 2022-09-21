@@ -35,12 +35,13 @@ int main() {
   Countly &ct = Countly::getInstance();
   ct.alwaysUsePost(true);
   ct.setDeviceID("test-device-id");
+  // ct.setSalt("test-salt");
 
   ct.setLogger(printLog);
   // OS, OS_version, device, resolution, carrier, app_version);
   ct.SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Carrier", "1.0");
   // Server and port
-  ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, true);
+  ct.start("8c1d653f8f474be24958b282d5e9b4c4209ee552", "https://master.count.ly", 443, true);
   ct.SetMaxEventsPerMessage(10);
   ct.setAutomaticSessionUpdateInterval(5);
 
@@ -58,6 +59,7 @@ int main() {
     cout << "9) Change device id without server merge" << endl;
     cout << "10) Set user location" << endl;
     cout << "11) Record a view" << endl;
+    cout << "12) Record a crash" << endl;
     cout << "0) Exit" << endl;
     int a;
     cin >> a;
@@ -123,6 +125,23 @@ int main() {
       // Close an opened view
       ct.views().closeViewWithID(viewID);
     } break;
+    case 12: {
+      std::map<std::string, std::string> segmentation = {
+          {"platform", "ubuntu"},
+          {"time", "60"},
+      };
+
+      std::map<std::string, std::string> metrics = {
+          {"_run", "199222"}, {"_app_version", "1.0"}, {"_disk_current", "654321"}, {"_disk_total", "10585852"}, {"_os_version", "11.1"},
+      };
+
+      ct.crash().addBreadcrumb("first");
+      ct.crash().addBreadcrumb("second");
+      ct.crash().recordException("null pointer exception", "stacktrack", true, metrics, segmentation);
+
+    }
+
+    break;
     case 0:
       flag = false;
       break;

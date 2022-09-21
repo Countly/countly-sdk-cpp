@@ -18,6 +18,7 @@
 
 namespace cly {
 Countly::Countly() {
+  crash_module = nullptr;
   views_module = nullptr;
   logger.reset(new cly::LoggerModule());
   configuration.reset(new cly::CountlyConfiguration("", ""));
@@ -30,6 +31,7 @@ Countly::Countly() {
 Countly::~Countly() {
   is_being_disposed = true;
   stop();
+  crash_module.reset();
   views_module.reset();
   logger.reset();
 
@@ -307,6 +309,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 
   requestBuilder.reset(new RequestBuilder(configuration, logger));
   requestModule.reset(new RequestModule(configuration, logger, requestBuilder));
+  crash_module.reset(new cly::CrashModule(configuration, logger, requestModule));
   views_module.reset(new cly::ViewsModule(this, logger));
 
   is_sdk_initialized = true; // after this point SDK is initialized.

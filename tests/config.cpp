@@ -2,6 +2,7 @@
 #include "doctest.h"
 #include "test_utils.hpp"
 using namespace cly;
+using namespace test_utils;
 
 std::string customSha256(const std::string &data) { return "SHA256"; }
 
