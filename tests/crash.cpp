@@ -22,6 +22,7 @@ TEST_CASE("crash unit tests") {
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
 
   SUBCASE("record crash") {
+    // clear the request queue, it contains session begin request
     countly.clearRequestQueue();
 
     std::map<std::string, std::string> segmentation = {
@@ -29,13 +30,13 @@ TEST_CASE("crash unit tests") {
         {"time", "60"},
     };
 
-    std::map<std::string, std::string> metrics = {
+    std::map<std::string, std::string> crashMetrics = {
         {"_run", "199222"}, {"_app_version", "1.0"}, {"_disk_current", "654321"}, {"_disk_total", "10585852"}, {"_os_version", "11.1"},
     };
 
     countly.crash().addBreadcrumb("first");
     countly.crash().addBreadcrumb("second");
-    countly.crash().recordException("null pointer exception", "stackTrack", true, metrics, segmentation);
+    countly.crash().recordException("null pointer exception", "stackTrack", true, crashMetrics, segmentation);
 
     countly.processRQDebug();
 
@@ -47,7 +48,7 @@ TEST_CASE("crash unit tests") {
     CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
     CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
     CHECK(timestampDiff >= 0);
-    CHECK(timestampDiff <= 50000);
+    CHECK(timestampDiff <= 1000);
 
     nlohmann::json c = nlohmann::json::parse(http_call.data["crash"]);
 
