@@ -28,7 +28,7 @@ public:
    * @param title: a string that contains description of the exception.
    * @param stackTrace: a string that describes the contents of the call-stack.
    * @param segmentation: custom key/values to be reported
-   * @param crashMetrics: contains crash information e.g app version, OS.
+   * @param crashMetrics: contains device information e.g app version, OS.
    * In crash metrics all values except '_os', '_app_version' and '_error' are optional.
    * @param fatal: For automatically captured errors, you should set to 'true', whereas on logged errors it should be 'false'.
    */

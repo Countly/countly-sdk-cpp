@@ -1,7 +1,7 @@
 22.06.1
 * !! Major breaking change !! We are removing the 'LogLevel' enum out of the 'Countly' class which will change how that enum can be referenced. 'Countly::LogLevel' will not work, you will have to use 'cly::LogLevel' instead.
 * Added functionality to record crash.
-* Added ability to add bread crumbs.
+* Added ability to leave breadcrumbs.
 
 22.06.0
 * !! Major breaking change !! We are adding the 'cly' namespace on 'Countly' class which will change how that class can be referenced. 'Countly::' will not work, you will have to use 'cly::Countly::' instead.

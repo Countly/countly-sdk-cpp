@@ -309,7 +309,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 
   requestBuilder.reset(new RequestBuilder(configuration, logger));
   requestModule.reset(new RequestModule(configuration, logger, requestBuilder));
-  crash_module.reset(new cly::CrashModule(configuration, logger, requestModule));
+  crash_module.reset(new cly::CrashModule(configuration, logger, requestModule, mutex));
   views_module.reset(new cly::ViewsModule(this, logger));
 
   is_sdk_initialized = true; // after this point SDK is initialized.
