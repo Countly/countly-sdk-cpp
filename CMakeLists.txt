@@ -23,6 +23,9 @@ set(COUNTLY_PUBLIC_HEADERS
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/constants.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/event.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/logger_module.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/crash_module.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/request_module.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/request_builder.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/views_module.hpp)
 
 add_library(countly
@@ -31,6 +34,7 @@ add_library(countly
   ${CMAKE_CURRENT_SOURCE_DIR}/src/views_module.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/logger_module.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/request_module.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/crash_module.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/request_builder.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/event.cpp)
 
@@ -85,6 +89,7 @@ if(COUNTLY_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/views.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/session.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/event.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/crash.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/config.cpp)
 
     target_compile_definitions(countly-tests PRIVATE COUNTLY_BUILD_TESTS)

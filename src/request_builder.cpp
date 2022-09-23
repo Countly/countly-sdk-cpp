@@ -26,9 +26,7 @@ std::string RequestBuilder::buildRequest(const std::map<std::string, std::string
   const std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
   const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
 
-  std::map<std::string, std::string> request = {{"app_key", _configuration->appKey},
-                                                //  {"device_id", _configuration->deviceId},
-                                                {"timestamp", std::to_string(timestamp.count())}};
+  std::map<std::string, std::string> request = {{"app_key", _configuration->appKey}, {"device_id", _configuration->deviceId}, {"timestamp", std::to_string(timestamp.count())}};
 
   request.insert(data.begin(), data.end());
   return serializeData(request);
@@ -42,8 +40,10 @@ std::string RequestBuilder::serializeData(const std::map<std::string, std::strin
   }
 
   std::string serialized_string = serialized.str();
-  serialized_string.resize(serialized_string.size() - 1);
-
+  if (serialized_string.size() > 0 ) {
+    serialized_string.resize(serialized_string.size() - 1);
+  }
+  
   return serialized_string;
 }
 } // namespace cly

@@ -91,9 +91,9 @@ public:
   void _closeViewWithName(const std::string &name) {
     std::shared_ptr<ViewModuleImpl::ViewInfo> v = findViewByName(name);
     if (v == nullptr) {
-      cly::LogLevel::WARNING, cly::utils::format_string("[ViewModuleImpl] _closeViewWithName:  Couldn't found "
+      _logger->log(cly::LogLevel::WARNING, cly::utils::format_string("[ViewModuleImpl] _closeViewWithName:  Couldn't found "
                                                         "view with name = %s",
-                                                        name.c_str());
+                                                        name.c_str()));
       return;
     }
     _recordView(v, {}, false);
@@ -102,9 +102,9 @@ public:
   void _closeViewWithID(const std::string &viewId) {
 
     if (_viewsStartTime.find(viewId) == _viewsStartTime.end()) {
-      cly::LogLevel::WARNING, cly::utils::format_string("[ViewModuleImpl] _closeViewWithID:  Couldn't found "
+      _logger->log(cly::LogLevel::WARNING, cly::utils::format_string("[ViewModuleImpl] _closeViewWithID:  Couldn't found "
                                                         "view with viewId = %s",
-                                                        viewId.c_str());
+                                                        viewId.c_str()));
       return;
     }
 
