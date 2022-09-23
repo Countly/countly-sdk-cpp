@@ -57,13 +57,18 @@ TEST_CASE("crash unit tests") {
     // clear the request queue, it contains session begin request
     countly.clearRequestQueue();
 
+    // crash metrics
     std::map<std::string, std::string> crashMetrics = {
         {"_run", "199222"}, {"_app_version", "1.0"}, {"_disk_current", "654321"}, {"_disk_total", "10585852"}, {"_os", "windows"},
     };
 
+    // record crash with crash metrics
     countly.crash().recordException("Divided By Zero", "stackTrack", true, crashMetrics);
 
+    // start processing request queue
     countly.processRQDebug();
+
+    // validate crash request
     validateCrashParams("Divided By Zero", "stackTrack", true, "", crashMetrics, {});
   }
 
@@ -71,9 +76,13 @@ TEST_CASE("crash unit tests") {
     // clear the request queue, it contains session begin request
     countly.clearRequestQueue();
 
+    // record fatal exception with empty title and stack trace
     countly.crash().recordException("", "", true, {});
 
+    // start processing request queue
     countly.processRQDebug();
+
+    // validate crash request
     validateCrashParams("", "", true, "", {}, {});
   }
 
@@ -81,25 +90,37 @@ TEST_CASE("crash unit tests") {
     // clear the request queue, it contains session begin request
     countly.clearRequestQueue();
 
+    // crash segmentation
     std::map<std::string, std::string> segmentation = {
         {"platform", "ubuntu"},
         {"time", "60"},
     };
 
+    // crash metrics
     std::map<std::string, std::string> crashMetrics = {
         {"_run", "199222"}, {"_app_version", "1.0"}, {"_disk_current", "654321"}, {"_disk_total", "10585852"}, {"_os_version", "11.1"},
     };
 
+    // leave breadcrumb
     countly.crash().addBreadcrumb("first");
     countly.crash().recordException("null pointer exception", "stackTrack", false, crashMetrics, segmentation);
 
+    // start processing request queue
     countly.processRQDebug();
+
+    // validate crash request
     validateCrashParams("null pointer exception", "stackTrack", false, "first\n", crashMetrics, {});
 
+    // leave breadcrumb
     countly.crash().addBreadcrumb("second");
+
+    // record crash with crash metrics and segmentation
     countly.crash().recordException("Divided By Zero", "stackTrack", true, crashMetrics, segmentation);
 
+    // start processing request queue
     countly.processRQDebug();
+
+    // validate crash request
     validateCrashParams("Divided By Zero", "stackTrack", true, "first\nsecond\n", crashMetrics, segmentation);
   }
 }

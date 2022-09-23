@@ -61,7 +61,7 @@ int main() {
     cout << "9) Change device id without server merge" << endl;
     cout << "10) Set user location" << endl;
     cout << "11) Record a view" << endl;
-    cout << "12) Record a crash" << endl;
+    cout << "12) Leave breadcrumb" << endl;
     cout << "13) Record a crash with bread crumbs and segmentation" << endl;
     cout << "0) Exit" << endl;
     int a;
@@ -129,12 +129,11 @@ int main() {
       ct.views().closeViewWithID(viewID);
     } break;
     case 12: {
-      std::map<std::string, std::string> crashMetrics = {
-          {"_run", "199222"}, {"_app_version", "1.0"}, {"_disk_current", "654321"}, {"_disk_total", "10585852"}, {"_os", "windows"},
-      };
+      const std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
+      const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
 
-      ct.crash().recordException("null pointer exception", "stack trace", true, crashMetrics);
-    }
+      ct.crash().addBreadcrumb(std::to_string(timestamp.count()));
+    } break;
     case 13: {
       std::map<std::string, std::string> segmentation = {
           {"platform", "ubuntu"},
@@ -145,13 +144,8 @@ int main() {
           {"_run", "199222"}, {"_app_version", "1.0"}, {"_disk_current", "654321"}, {"_disk_total", "10585852"}, {"_os", "windows"},
       };
 
-      ct.crash().addBreadcrumb("first");
-      ct.crash().addBreadcrumb("second");
       ct.crash().recordException("Divided by zero", "stack trace", true, crashMetrics, segmentation);
-
-    }
-
-    break;
+    } break;
     case 0:
       flag = false;
       break;

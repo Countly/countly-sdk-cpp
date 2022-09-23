@@ -29,7 +29,7 @@ public:
    * @param stackTrace: a string that describes the contents of the call-stack.
    * @param segmentation: custom key/values to be reported
    * @param crashMetrics: contains device information e.g app version, OS.
-   * In crash metrics all values except '_os', '_app_version' and '_error' are optional.
+   * In crash metrics '_os', '_app_version' and '_error' are mandatory.
    * @param fatal: For automatically captured errors, you should set to 'true', whereas on logged errors it should be 'false'.
    */
   void recordException(const std::string &title, const std::string &stackTrace, const bool fatal, const std::map<std::string, std::string> &crashMetrics, const std::map<std::string, std::string> &segmentation = {});
