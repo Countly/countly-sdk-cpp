@@ -55,7 +55,7 @@ public:
       return {};
     }
 
-    return sha256_function(salted_data);
+    return _configuration->sha256_function(salted_data);
 #else
     unsigned char checksum[SHA256_DIGEST_LENGTH];
     SHA256_CTX sha256;
