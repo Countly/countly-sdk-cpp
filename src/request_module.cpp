@@ -91,13 +91,19 @@ RequestModule::~RequestModule() {
 #endif 
 }
 
+static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n_bytes, std::string *body) {
+  size_t data_size = byte_size * n_bytes;
+  body->append((const char *)data, data_size);
+  return data_size;
+}
+
 void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &data) {
   if (impl->_configuration->requestQueueThreshold <= impl->request_queue.size()) {
     impl->_logger->log(LogLevel::WARNING, cly::utils::format_string("[RequestModule] addRequestToQueue: Request Queue is full. Dropping the oldest request."));
     impl->request_queue.pop_front();
   }
 
-  std::string &request = impl->_requestBuilder->buildRequest(data);
+  const std::string &request = impl->_requestBuilder->buildRequest(data);
   impl->request_queue.push_back(request);
 }
 
