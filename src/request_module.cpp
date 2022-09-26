@@ -84,7 +84,12 @@ RequestModule::RequestModule(std::shared_ptr<CountlyConfiguration> config, std::
 #endif
 }
 
-RequestModule::~RequestModule() { impl.reset(); }
+RequestModule::~RequestModule() {
+  impl.reset();
+#if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP) 
+  curl_global_cleanup();
+#endif 
+}
 
 void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &data) {
   if (impl->_configuration->requestQueueThreshold <= impl->request_queue.size()) {
