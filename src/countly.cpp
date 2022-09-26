@@ -30,10 +30,6 @@ Countly::~Countly() {
   crash_module.reset();
   views_module.reset();
   logger.reset();
-
-#if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
-  curl_global_cleanup();
-#endif
 }
 
 std::unique_ptr<Countly> _sharedInstance;
