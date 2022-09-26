@@ -78,9 +78,24 @@ RequestModule::RequestModule(std::shared_ptr<CountlyConfiguration> config, std::
   impl.reset(new RequestModuleImpl(config, logger, requestBuilder));
 
   impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] Initialized"));
+
+#if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
+  curl_global_init(CURL_GLOBAL_ALL);
+#endif
 }
 
-RequestModule::~RequestModule() { impl.reset(); }
+RequestModule::~RequestModule() {
+  impl.reset();
+#if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP) 
+  curl_global_cleanup();
+#endif 
+}
+
+static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n_bytes, std::string *body) {
+  size_t data_size = byte_size * n_bytes;
+  body->append((const char *)data, data_size);
+  return data_size;
+}
 
 void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &data) {
   if (impl->_configuration->requestQueueThreshold <= impl->request_queue.size()) {
@@ -88,7 +103,7 @@ void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &
     impl->request_queue.pop_front();
   }
 
-  std::string &request = impl->_requestBuilder->buildRequest(data);
+  const std::string &request = impl->_requestBuilder->buildRequest(data);
   impl->request_queue.push_back(request);
 }
 
