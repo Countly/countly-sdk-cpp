@@ -78,6 +78,10 @@ RequestModule::RequestModule(std::shared_ptr<CountlyConfiguration> config, std::
   impl.reset(new RequestModuleImpl(config, logger, requestBuilder));
 
   impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] Initialized"));
+
+#if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
+  curl_global_init(CURL_GLOBAL_ALL);
+#endif
 }
 
 RequestModule::~RequestModule() { impl.reset(); }
