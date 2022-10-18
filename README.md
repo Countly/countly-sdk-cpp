@@ -6,7 +6,8 @@ This repository contains the portable Countly C++ SDK.
 
 ## What's Countly?
 
-[Countly](http://count.ly) is an innovative, real-time, open source mobile analytics and push notifications platform. It collects data from mobile devices, and visualizes this information to analyze mobile application usage and end-user behavior. There are two parts of Countly: [the server that collects and analyzes data](http://github.com/countly/countly-server), and mobile SDK that sends this data. Both parts are open source with different licensing terms.
+[Countly](http://count.ly) is an innovative, real-time, open source mobile analytics and push notifications platform. It collects data from mobile devices, and visualizes this information to analyze mobile application usage and end-user behavior.
+There are two parts of Countly: [the server that collects and analyzes data](http://github.com/countly/countly-server), and mobile SDK that sends this data. Both parts are open source with different licensing terms.
 
 * **Slack user?** [Join our Slack community](http://slack.count.ly:3000/)
 * **Questions?** [Ask in our Community forum](http://community.count.ly)
@@ -26,9 +27,9 @@ Security is very important to us. If you discover any issue regarding security, 
 Countly C++ SDK has been designed to work with very few dependencies in order to be available on most platforms.
 In order to build this SDK, you need:
 
-- a C++ compiler with C++14 support
-- libcurl (with openssl) and its headers if you are on *nix
-- cmake >= 3.13
+* a C++ compiler with C++14 support
+* libcurl (with openssl) and its headers if you are on *nix
+* cmake >= 3.13
 
 First, clone the repository with its submodules:
 
@@ -102,6 +103,7 @@ To run unit tests associated with 'SQLITE' and 'Custom SHA-256' build executable
 ``` shell
 cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=1 -DCOUNTLY_USE_CUSTOM_SHA256=1 -B build
 ```
+
 ## Other Github resources
 
 This SDK needs one of the following Countly Editions to work:
@@ -122,11 +124,15 @@ If you like Countly, [why not use one of our badges](https://count.ly/brand-asse
 
 <a href="https://count.ly/f/badge" rel="nofollow"><img style="width:145px;height:60px" src="https://count.ly/badges/dark.svg?v2" alt="Countly - Product Analytics" /></a>
 
-    <a href="https://count.ly/f/badge" rel="nofollow"><img style="width:145px;height:60px" src="https://count.ly/badges/dark.svg" alt="Countly - Product Analytics" /></a>
+```JS
+<a href="https://count.ly/f/badge" rel="nofollow"><img style="width:145px;height:60px" src="https://count.ly/badges/dark.svg" alt="Countly - Product Analytics" /></a>
+```
 
 <a href="https://count.ly/f/badge" rel="nofollow"><img style="width:145px;height:60px" src="https://count.ly/badges/light.svg?v2" alt="Countly - Product Analytics" /></a>
 
-    <a href="https://count.ly/f/badge" rel="nofollow"><img style="width:145px;height:60px" src="https://count.ly/badges/light.svg" alt="Countly - Product Analytics" /></a>
+```JS
+<a href="https://count.ly/f/badge" rel="nofollow"><img style="width:145px;height:60px" src="https://count.ly/badges/light.svg" alt="Countly - Product Analytics" /></a>
+```
 
 ### Support
 
