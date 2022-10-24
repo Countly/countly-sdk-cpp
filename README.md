@@ -1,61 +1,34 @@
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/f3268a85b0034b68aa4fc47c9dce596c)](https://www.codacy.com/gh/Countly/countly-sdk-cpp/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=Countly/countly-sdk-cpp&amp;utm_campaign=Badge_Grade)
+
 # Countly C++ SDK
 
-![travis build status](https://img.shields.io/travis/Countly/countly-sdk-cpp?style=flat-square)
+This repository contains the Countly C++ SDK, which can be integrated into C++ applications. The Countly C++ SDK is intended to be used with [Countly Community Edition](https://github.com/Countly/countly-server) or [Countly Enterprise Edition](https://count.ly/product).
 
-This repository contains the portable Countly C++ SDK. 
+## What is Countly?
+[Countly](https://count.ly) is a product analytics solution and innovation enabler that helps teams track product performance and customer journey and behavior across [mobile](https://count.ly/mobile-analytics), [web](http://count.ly/web-analytics),
+and [desktop](https://count.ly/desktop-analytics) applications. [Ensuring privacy by design](https://count.ly/privacy-by-design), Countly allows you to innovate and enhance your products to provide personalized and customized customer experiences, and meet key business and revenue goals.
 
-## What's Countly?
+Track, measure, and take action - all without leaving Countly.
 
-[Countly](http://count.ly) is an innovative, real-time, open source mobile analytics and push notifications platform. It collects data from mobile devices, and visualizes this information to analyze mobile application usage and end-user behavior.
-There are two parts of Countly: [the server that collects and analyzes data](http://github.com/countly/countly-server), and mobile SDK that sends this data. Both parts are open source with different licensing terms.
+* **Slack user?** [Join our Slack Community](https://slack.count.ly)
+* **Questions or feature requests?** [Post in our Community Forum](https://support.count.ly/hc/en-us/community/topics)
+* **Looking for the Countly Server?** [Countly Community Edition repository](https://github.com/Countly/countly-server)
+* **Looking for other Countly SDKs?** [An overview of all Countly SDKs for mobile, web and desktop](https://support.count.ly/hc/en-us/articles/360037236571-Downloading-and-Installing-SDKs#officially-supported-sdks)
 
-* **Slack user?** [Join our Slack community](http://slack.count.ly:3000/)
-* **Questions?** [Ask in our Community forum](http://community.count.ly)
+## Integrating Countly SDK in your projects
 
-## About
+Link to the script and call helper methods based on what you want to track: sessions, views, clicks, custom events, user data, etc. and for much more [check out our documentation](https://support.count.ly/hc/en-us/articles/4416163384857-C-).
 
-This repository includes the Countly C++ SDK.
+For information about how to add the SDK to your project, please check [this section of the documentation](https://support.count.ly/hc/en-us/articles/4416163384857-C-#adding-the-sdk-to-the-project).
 
-Need help? See [Countly SDK for C++](https://support.count.ly/hc/en-us/articles/4416163384857-C-) documentation at [Countly Resources](http://resources.count.ly), or ask us on our [Countly Analytics Community Slack channel](http://slack.count.ly).
+You can find minimal SDK integration information for your project in [this section of the documentation](https://support.count.ly/hc/en-us/articles/4416163384857-C-#minimal-setup).
 
-## Security
+For an example integration of this SDK, you can have a look [here](https://github.com/Countly/countly-sdk-cpp/tree/master/examples).
 
-Security is very important to us. If you discover any issue regarding security, please disclose the information responsibly by sending an email to security@count.ly and **not by creating a GitHub issue**.
-
-## Dependencies and building
-
-Countly C++ SDK has been designed to work with very few dependencies in order to be available on most platforms.
-In order to build this SDK, you need:
-
-* a C++ compiler with C++14 support
-* libcurl (with openssl) and its headers if you are on *nix
-* cmake >= 3.13
-
-First, clone the repository with its submodules:
-
-``` shell
-git clone --recursive https://github.com/Countly/countly-sdk-cpp
-```
-
-If you want to use SQLite to store session data persistently, build sqlite:
-
-``` shell
-# assuming we are on project root
-cd vendor/sqlite
-cmake -D BUILD_SHARED_LIBS=1 -B build . # out of source build, we don't like clutter :)
-# we define `BUILD_SHARED_LIBS` because sqlite's cmake file compiles statically by default for some reason
-cd build
-make # you might want to add something like -j8 to parallelize the build process
-```
-
-The cmake build flow is pretty straightforward:
-
-``` shell
-# assuming we are on project root again
-ccmake -B build . # this will launch a TUI, configure the build as you see fit
-cd build
-make
-```
+This SDK supports the following features:
+* [Analytics](https://support.count.ly/hc/en-us/articles/4431589003545-Analytics)
+* [User Profiles](https://support.count.ly/hc/en-us/articles/4403281285913-User-Profiles)
+* [A/B Testing](https://support.count.ly/hc/en-us/articles/4416496362393-A-B-Testing-)
 
 ## Usage
 
@@ -104,23 +77,11 @@ To run unit tests associated with 'SQLITE' and 'Custom SHA-256' build executable
 cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=1 -DCOUNTLY_USE_CUSTOM_SHA256=1 -B build
 ```
 
-## Other Github resources
-
-This SDK needs one of the following Countly Editions to work:
-
-* Countly Community Edition, [downloadable from Github](https://github.com/Countly/countly-server)
-* [Countly Enterprise Edition](http://count.ly/product)
-
-For more information about Countly Enterprise Edition, see [comparison of different Countly editions](https://count.ly/compare/)
-
-There are also other Countly SDK repositories (both official and community supported) on [Countly resources](http://resources.count.ly/v1.0/docs/downloading-sdks).
-
-## How can I help you with your efforts?
-Glad you asked. We need ideas, feedback and constructive comments. All your suggestions will be taken care with utmost importance. We are on [Twitter](http://twitter.com/gocountly) and [Facebook](http://www.facebook.com/Countly) if you would like to keep up with our fast progress!
+## Security
+Security is very important to us. If you discover any issue regarding security, please disclose the information responsibly by sending an email to security@count.ly and **not by creating a GitHub issue**.
 
 ## Badges
-
-If you like Countly, [why not use one of our badges](https://count.ly/brand-assets) and give a link back to us, so others know about this wonderful platform?
+If you like Countly, [why not use one of our badges](https://count.ly/brand-assets) and give a link back to us so others know about this wonderful platform?
 
 <a href="https://count.ly/f/badge" rel="nofollow"><img style="width:145px;height:60px" src="https://count.ly/badges/dark.svg?v2" alt="Countly - Product Analytics" /></a>
 
@@ -134,6 +95,7 @@ If you like Countly, [why not use one of our badges](https://count.ly/brand-asse
 <a href="https://count.ly/f/badge" rel="nofollow"><img style="width:145px;height:60px" src="https://count.ly/badges/light.svg" alt="Countly - Product Analytics" /></a>
 ```
 
-### Support
+## How can I help you with your efforts?
+Glad you asked! We need ideas, feedback and constructive comments. All your suggestions will be taken care of with utmost importance. For feature requests and engaging with the community, join [our Slack Community](https://slack.count.ly) or [Community Forum](https://support.count.ly/hc/en-us/community/topics).
 
-For Community support, visit [http://community.count.ly](http://community.count.ly "Countly Community Forum").
+We are on [Twitter](http://twitter.com/gocountly), [Facebook](https://www.facebook.com/Countly) and [LinkedIn](https://www.linkedin.com/company/countly) if you would like to keep up with Countly related updates.
