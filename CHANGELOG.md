@@ -1,5 +1,5 @@
 22.06.2
-* Fixed a bug while adding metrics in request.
+* Fixed a bug due to which metrics were not sent with begin session requests.
 
 22.06.1
 * !! Major breaking change !! We are removing the 'LogLevel' enum out of the 'Countly' class which will change how that enum can be referenced. 'Countly::LogLevel' will not work, you will have to use 'cly::LogLevel' instead.
