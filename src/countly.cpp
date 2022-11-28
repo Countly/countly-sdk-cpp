@@ -518,9 +518,10 @@ bool Countly::beginSession() {
     session_params.erase("user_details");
   }
 
-  if (session_params.contains("metrics")) {
+  if (configuration->metrics.contains("metrics")) {
     data["metrics"] = configuration->metrics.dump();
   }
+  
 
   requestModule->addRequestToQueue(data);
   session_params.erase("user_details");
