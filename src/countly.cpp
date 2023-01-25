@@ -518,7 +518,7 @@ bool Countly::beginSession() {
     session_params.erase("user_details");
   }
 
-  if (configuration->metrics.contains("metrics")) {
+  if (configuration->metrics.size() > 0) {
     data["metrics"] = configuration->metrics.dump();
   }
   
