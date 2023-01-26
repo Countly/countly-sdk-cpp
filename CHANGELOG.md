@@ -1,5 +1,5 @@
 
-22.09.0
+22.06.3
 * Fixed a bug where empty metrics were sent with session begin request.
 
 22.06.2
