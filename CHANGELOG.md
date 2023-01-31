@@ -1,7 +1,7 @@
 
 
 22.09.0
-* Fixed a bug where 'mutex' was being locked twice.
+* Fixed a bug where 'mutex' was being locked twice when built with the 'COUNTLY_USE_SQLITE' flag.
 
 22.06.3
 * Fixed a bug where empty metrics were sent with session begin request.
