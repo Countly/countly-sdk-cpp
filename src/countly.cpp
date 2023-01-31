@@ -438,7 +438,6 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
     char *error_message;
 
     update_failed = true;
-    mutex->lock();
     return_value = sqlite3_open(database_path.c_str(), &database);
     mutex->unlock();
     if (return_value == SQLITE_OK) {
