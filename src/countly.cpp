@@ -290,19 +290,6 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
 void Countly::start(const std::string &app_key, const std::string &host, int port, bool start_thread) {
   mutex->lock();
   log(LogLevel::INFO, "[Countly][start]");
-  enable_automatic_session = start_thread;
-  start_thread = true;
-
-  configuration->port = port;
-  configuration->appKey = app_key;
-  configuration->serverUrl = host;
-
-  session_params["app_key"] = app_key;
-
-  requestBuilder.reset(new RequestBuilder(configuration, logger));
-  requestModule.reset(new RequestModule(configuration, logger, requestBuilder));
-  crash_module.reset(new cly::CrashModule(configuration, logger, requestModule, mutex));
-  views_module.reset(new cly::ViewsModule(this, logger));
 
 #ifdef COUNTLY_USE_SQLITE
   log(LogLevel::INFO, "[Countly][start] 'COUNTLY_USE_SQLITE' is defined");
@@ -321,6 +308,20 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 #else
   log(LogLevel::INFO, "[Countly][start] 'COUNTLY_USE_CUSTOM_SHA256' is not defined");
 #endif
+
+  enable_automatic_session = start_thread;
+  start_thread = true;
+
+  configuration->port = port;
+  configuration->appKey = app_key;
+  configuration->serverUrl = host;
+
+  session_params["app_key"] = app_key;
+
+  requestBuilder.reset(new RequestBuilder(configuration, logger));
+  requestModule.reset(new RequestModule(configuration, logger, requestBuilder));
+  crash_module.reset(new cly::CrashModule(configuration, logger, requestModule, mutex));
+  views_module.reset(new cly::ViewsModule(this, logger));
 
   is_sdk_initialized = true; // after this point SDK is initialized.
 
