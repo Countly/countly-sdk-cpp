@@ -304,6 +304,24 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   crash_module.reset(new cly::CrashModule(configuration, logger, requestModule, mutex));
   views_module.reset(new cly::ViewsModule(this, logger));
 
+#ifdef COUNTLY_USE_SQLITE
+  log(LogLevel::INFO, "[Countly][start] 'COUNTLY_USE_SQLITE' is defined");
+#else
+  log(LogLevel::INFO, "[Countly][start] 'COUNTLY_USE_SQLITE' is not defined");
+#endif
+
+#ifdef COUNTLY_USE_CUSTOM_HTTP
+  log(LogLevel::INFO, "[Countly][start] 'COUNTLY_USE_CUSTOM_HTTP' is defined");
+#else
+  log(LogLevel::INFO, "[Countly][start] 'COUNTLY_USE_CUSTOM_HTTP' is not defined");
+#endif
+
+#ifdef COUNTLY_USE_CUSTOM_SHA256
+  log(LogLevel::INFO, "[Countly][start] 'COUNTLY_USE_CUSTOM_SHA256' is defined");
+#else
+  log(LogLevel::INFO, "[Countly][start] 'COUNTLY_USE_CUSTOM_SHA256' is not defined");
+#endif
+
   is_sdk_initialized = true; // after this point SDK is initialized.
 
   if (!running) {
