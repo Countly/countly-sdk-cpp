@@ -9,6 +9,7 @@
 #include <random>
 #include <sstream>
 #include <string>
+#include <climits>
 #include "nlohmann/json.hpp"
 
 #define COUNTLY_SDK_NAME "cpp-native-unknown"
