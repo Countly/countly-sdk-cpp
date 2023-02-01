@@ -290,6 +290,25 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
 void Countly::start(const std::string &app_key, const std::string &host, int port, bool start_thread) {
   mutex->lock();
   log(LogLevel::INFO, "[Countly][start]");
+
+#ifdef COUNTLY_USE_SQLITE
+  log(LogLevel::INFO, "[Countly][start] 'COUNTLY_USE_SQLITE' is defined");
+#else
+  log(LogLevel::INFO, "[Countly][start] 'COUNTLY_USE_SQLITE' is not defined");
+#endif
+
+#ifdef COUNTLY_USE_CUSTOM_HTTP
+  log(LogLevel::INFO, "[Countly][start] 'COUNTLY_USE_CUSTOM_HTTP' is defined");
+#else
+  log(LogLevel::INFO, "[Countly][start] 'COUNTLY_USE_CUSTOM_HTTP' is not defined");
+#endif
+
+#ifdef COUNTLY_USE_CUSTOM_SHA256
+  log(LogLevel::INFO, "[Countly][start] 'COUNTLY_USE_CUSTOM_SHA256' is defined");
+#else
+  log(LogLevel::INFO, "[Countly][start] 'COUNTLY_USE_CUSTOM_SHA256' is not defined");
+#endif
+
   enable_automatic_session = start_thread;
   start_thread = true;
 
