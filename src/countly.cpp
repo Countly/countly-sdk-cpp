@@ -318,6 +318,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 
   session_params["app_key"] = app_key;
 
+  storageModule.reset(new RequestBuilder(configuration, logger));
   requestBuilder.reset(new RequestBuilder(configuration, logger));
   requestModule.reset(new RequestModule(configuration, logger, requestBuilder));
   crash_module.reset(new cly::CrashModule(configuration, logger, requestModule, mutex));

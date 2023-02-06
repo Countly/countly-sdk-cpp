@@ -34,6 +34,7 @@ set(COUNTLY_PUBLIC_HEADERS
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/crash_module.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/request_module.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/request_builder.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/storage_module.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/views_module.hpp)
 
 add_library(countly
@@ -44,6 +45,7 @@ add_library(countly
   ${CMAKE_CURRENT_SOURCE_DIR}/src/request_module.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/crash_module.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/request_builder.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/storage_module.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/event.cpp)
 
 target_include_directories(countly

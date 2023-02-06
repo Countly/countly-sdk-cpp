@@ -23,6 +23,7 @@
 #include "countly/event.hpp"
 #include "countly/logger_module.hpp"
 #include "countly/views_module.hpp"
+#include <countly/storage_module.hpp>
 #include <countly/request_builder.hpp>
 #include <countly/request_module.hpp>
 #include <countly/crash_module.hpp>
@@ -33,6 +34,8 @@ public:
   Countly();
 
   ~Countly();
+
+  // Returns the singleton instance of Countly
   static Countly &getInstance();
 
   // Do not implicitly generate the copy constructor, this is a singleton.
@@ -257,11 +260,12 @@ private:
   std::unique_ptr<std::thread> thread;
   std::unique_ptr<cly::CrashModule> crash_module;
   std::unique_ptr<cly::ViewsModule> views_module;
+
   std::shared_ptr<cly::CountlyConfiguration> configuration;
   std::shared_ptr<cly::LoggerModule> logger;
-
   std::shared_ptr<cly::RequestBuilder> requestBuilder;
   std::shared_ptr<cly::RequestModule> requestModule;
+  std::shared_ptr<cly::StorageModule> storageModule;
   std::shared_ptr<std::mutex> mutex = std::make_shared<std::mutex>();
 
   bool is_queue_being_processed = false;
