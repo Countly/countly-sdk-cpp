@@ -309,6 +309,12 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   log(LogLevel::INFO, "[Countly][start] 'COUNTLY_USE_CUSTOM_SHA256' is not defined");
 #endif
 
+#ifdef _WIN32
+  log(LogLevel::INFO, "[Countly][start] '_WIN32' is defined");
+#else
+  log(LogLevel::INFO, "[Countly][start] '_WIN32' is not defined");
+#endif
+
   enable_automatic_session = start_thread;
   start_thread = true;
 
@@ -318,7 +324,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 
   session_params["app_key"] = app_key;
 
-  storageModule.reset(new RequestBuilder(configuration, logger));
+  storageModule.reset(new StorageModule(configuration, logger));
   requestBuilder.reset(new RequestBuilder(configuration, logger));
   requestModule.reset(new RequestModule(configuration, logger, requestBuilder));
   crash_module.reset(new cly::CrashModule(configuration, logger, requestModule, mutex));

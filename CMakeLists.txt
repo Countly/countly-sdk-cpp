@@ -1,11 +1,13 @@
 cmake_minimum_required(VERSION 3.0)
 
+# Acquire countly version from constant
 file(READ ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/constants.hpp COUNTLY_HPP_CONTENTS)
 string(REGEX MATCH "#define COUNTLY_SDK_VERSION \"[^\"]+\"" COUNTLY_SDK_VERSION ${COUNTLY_HPP_CONTENTS})
 string(REGEX REPLACE "#define COUNTLY_SDK_VERSION \"([^\"]+)\"" "\\1" COUNTLY_SDK_VERSION ${COUNTLY_SDK_VERSION})
 
 project(countly VERSION ${COUNTLY_SDK_VERSION} LANGUAGES CXX)
 
+# setup configuration options and their default values
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS  "Create a module definition (.def) on Windows." ON)
 option(COUNTLY_USE_CUSTOM_HTTP "Use a custom HTTP library" OFF)
@@ -26,10 +28,12 @@ if (NOT WIN32 AND NOT BUILD_SHARED_LIBS AND NOT COUNTLY_USE_CUSTOM_HTTP)
   message(FATAL_ERROR "You must provide a custom HTTP function when compiling statically.")
 endif()
 
+# Compile countly public headers
 set(COUNTLY_PUBLIC_HEADERS
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/constants.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/event.hpp
+
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/logger_module.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/crash_module.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/request_module.hpp
@@ -131,8 +135,13 @@ endif()
 if(COUNTLY_BUILD_SAMPLE)
   message("Building sample directories")
   add_executable(countly-sample
-    ${CMAKE_CURRENT_SOURCE_DIR}/examples/example_integration.cpp)
-
+  ${CMAKE_CURRENT_SOURCE_DIR}/examples/example_integration.cpp)
+  
+if(COUNTLY_USE_SQLITE)
+  message("Compiling definitions for sqlite")
+  target_compile_definitions(countly-sample PRIVATE COUNTLY_USE_SQLITE)
+  target_include_directories(countly-sample PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/sqlite)
+endif()
   target_include_directories(countly-sample PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/doctest/doctest)
   target_include_directories(countly-sample PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include)
   target_link_libraries(countly-sample countly)
