@@ -16,6 +16,10 @@ namespace cly {
       this->_configuration = config;
       this->_logger = logger;
     }
+    virtual ~StorageBase() {
+      _logger.reset();
+      _configuration.reset();
+    }
 
     virtual void init() = 0;
     virtual void RQClearAll() = 0;
