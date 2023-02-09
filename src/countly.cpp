@@ -5,8 +5,8 @@
 #include <string>
 #include <system_error>
 #include <thread>
-#include "countly/storage_module.hpp"
-#include "countly/sqlite_storage_module.hpp"
+#include "countly/storage_module_memory.hpp"
+#include "countly/storage_module_db.hpp"
 
 
 #ifndef COUNTLY_USE_CUSTOM_SHA256
@@ -328,10 +328,10 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   session_params["app_key"] = app_key;
 
 #ifdef COUNTLY_USE_SQLITE
-  // TODO storageModule.reset(new SqliteStorageModule(configuration, logger));
-  storageModule.reset(new StorageModule(configuration, logger));
+  // TODO storageModule.reset(new StorageModuleDB(configuration, logger));
+  storageModule.reset(new StorageModuleMemory(configuration, logger));
 #else
-  storageModule.reset(new StorageModule(configuration, logger));
+  storageModule.reset(new StorageModuleMemory(configuration, logger));
 #endif
 
 

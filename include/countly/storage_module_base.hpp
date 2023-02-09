@@ -1,22 +1,22 @@
-#ifndef STORAGE_BASE_HPP_
-#define STORAGE_BASE_HPP_
+#ifndef STORAGE_MODULE_BASE_HPP_
+#define STORAGE_MODULE_BASE_HPP_
 #include "countly/countly_configuration.hpp"
 #include "countly/logger_module.hpp"
 #include <string>
 
 namespace cly {
 
-  class StorageBase {
+  class StorageModuleBase {
     protected:
     std::shared_ptr<CountlyConfiguration> _configuration;
     std::shared_ptr<LoggerModule> _logger;
 
     public:
-    StorageBase(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger) {
+    StorageModuleBase(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger) {
       this->_configuration = config;
       this->_logger = logger;
     }
-    virtual ~StorageBase() {
+    virtual ~StorageModuleBase() {
       _logger.reset();
       _configuration.reset();
     }

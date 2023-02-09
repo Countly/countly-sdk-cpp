@@ -29,8 +29,8 @@ public:
   std::shared_ptr<CountlyConfiguration> _configuration;
   std::shared_ptr<LoggerModule> _logger;
   std::shared_ptr<RequestBuilder> _requestBuilder;
-  std::shared_ptr<StorageBase> _storageModule;
-  RequestModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageBase> storageModule ) : _configuration(config), _logger(logger), _requestBuilder(requestBuilder), _storageModule(storageModule) {
+  std::shared_ptr<StorageModuleBase> _storageModule;
+  RequestModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule ) : _configuration(config), _logger(logger), _requestBuilder(requestBuilder), _storageModule(storageModule) {
     if (_configuration->serverUrl.find("http://") == 0) {
       use_https = false;
     } else if (_configuration->serverUrl.find("https://") == 0) {
@@ -74,7 +74,7 @@ public:
   }
 };
 
-RequestModule::RequestModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageBase> storageModule) {
+RequestModule::RequestModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule) {
   impl.reset(new RequestModuleImpl(config, logger, requestBuilder, storageModule));
 
   impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] Initialized"));
