@@ -328,7 +328,8 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   session_params["app_key"] = app_key;
 
 #ifdef COUNTLY_USE_SQLITE
-  storageModule.reset(new SqliteStorageModule(configuration, logger));
+  // TODO storageModule.reset(new SqliteStorageModule(configuration, logger));
+  storageModule.reset(new StorageModule(configuration, logger));
 #else
   storageModule.reset(new StorageModule(configuration, logger));
 #endif
@@ -606,6 +607,7 @@ bool Countly::updateSession() {
     return false;
   }
 
+  log(LogLevel::DEBUG, "[Countly][updateSession] fetching events from storage.");
   sqlite3 *database;
   int return_value, row_count, column_count;
   char **table;
@@ -628,6 +630,8 @@ bool Countly::updateSession() {
         event_id_stream << table[event_index * column_count] << ',';
         events.push_back(nlohmann::json::parse(table[(event_index * column_count) + 1]));
       }
+
+     log(LogLevel::DEBUG, "[Countly][updateSession] events = " + events.dump());
 
       event_id_stream.seekp(-1, event_id_stream.cur);
       event_id_stream << ')';
@@ -664,6 +668,7 @@ bool Countly::updateSession() {
   event_queue.clear();
 #else
   if (!event_ids.empty()) {
+    log(LogLevel::DEBUG, "[Countly][updateSession] Removing events from storage: " + event_ids);
     // we attempt to clear the events in the database only if there were any events collected previously
     return_value = sqlite3_open(database_path.c_str(), &database);
     if (return_value == SQLITE_OK) {
@@ -712,6 +717,8 @@ std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chro
 
 #ifdef COUNTLY_USE_SQLITE
 void Countly::setDatabasePath(const std::string &path) {
+  log(LogLevel::INFO, "[Countly][setDatabasePath] path = " + path);
+
   sqlite3 *database;
   int return_value, row_count, column_count;
   char **table;
