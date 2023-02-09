@@ -23,13 +23,13 @@ TEST_CASE("Storage module tests memory") {
   shared_ptr<cly::CountlyConfiguration> configuration;
   configuration.reset(new cly::CountlyConfiguration("", ""));
   StorageBase *storageModule = new StorageModule(configuration, logger);
-  
-  SUBCASE("add request") {
+
+  SUBCASE("validate RQInsertAtEnd method") {
     storageModule->RQInsertAtEnd("request");
     CHECK(storageModule->RQCount() == 1);
   }
 
-   SUBCASE("validate RQPeekFront request") {
+   SUBCASE("validate RQPeekFront method") {
    CHECK(storageModule->RQCount() == 0);
    storageModule->RQInsertAtEnd("request");
    CHECK(storageModule->RQCount() == 1);
@@ -38,7 +38,7 @@ TEST_CASE("Storage module tests memory") {
    CHECK(storageModule->RQCount() == 1);
   }
 
-  SUBCASE("validate RQRemoveFront request") {
+  SUBCASE("validate RQRemoveFront method") {
    CHECK(storageModule->RQCount() == 0);
    storageModule->RQInsertAtEnd("request");
 
@@ -47,7 +47,7 @@ TEST_CASE("Storage module tests memory") {
    CHECK(storageModule->RQCount() == 0);
   }
 
-  SUBCASE("validate RQClearAll request") {
+  SUBCASE("validate RQClearAll method") {
    CHECK(storageModule->RQCount() == 0);
    storageModule->RQInsertAtEnd("request");
    
