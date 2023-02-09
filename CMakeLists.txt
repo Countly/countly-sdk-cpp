@@ -109,6 +109,7 @@ if(COUNTLY_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/views.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/session.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/storage.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/event.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/crash.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/config.cpp)

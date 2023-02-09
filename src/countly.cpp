@@ -325,8 +325,9 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   session_params["app_key"] = app_key;
 
   storageModule.reset(new StorageModule(configuration, logger));
+  storageModule.init();
   requestBuilder.reset(new RequestBuilder(configuration, logger));
-  requestModule.reset(new RequestModule(configuration, logger, requestBuilder));
+  requestModule.reset(new RequestModule(configuration, logger, requestBuilder, storageModule));
   crash_module.reset(new cly::CrashModule(configuration, logger, requestModule, mutex));
   views_module.reset(new cly::ViewsModule(this, logger));
 
@@ -397,6 +398,12 @@ void Countly::addEvent(const cly::Event &event) {
   }
   event_queue.push_back(event.serialize());
 #else
+ addEventToSqlite(event);
+#endif
+  mutex->unlock();
+}
+#ifdef COUNTLY_USE_SQLITE
+void Countly::addEventToSqlite(const cly::Event &event) {
   if (database_path.empty()) {
     mutex->unlock();
     log(LogLevel::FATAL, "Cannot add event, sqlite database path is not set");
@@ -421,9 +428,8 @@ void Countly::addEvent(const cly::Event &event) {
     }
   }
   sqlite3_close(database);
-#endif
-  mutex->unlock();
 }
+#endif
 
 void Countly::setMaxEvents(size_t value) {
   mutex->lock();

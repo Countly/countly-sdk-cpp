@@ -8,13 +8,14 @@
 #include "countly/countly_configuration.hpp"
 #include "countly/logger_module.hpp"
 #include "countly/request_builder.hpp"
+#include "countly/storage_module.hpp"
 
 namespace cly {
 class RequestModule {
 
 public:
   ~RequestModule();
-  RequestModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder);
+  RequestModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModule> storageModule);
 
   HTTPResponse sendHTTP(std::string path, std::string data);
 

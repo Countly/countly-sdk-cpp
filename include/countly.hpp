@@ -96,6 +96,8 @@ public:
 
   void addEvent(const cly::Event &event);
 
+  void addEventToSqlite(const cly::Event &event);
+
   void setMaxEvents(size_t value);
 
   void flushEvents(std::chrono::seconds timeout = std::chrono::seconds(30));

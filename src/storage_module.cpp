@@ -10,5 +10,24 @@ StorageModule::StorageModule(std::shared_ptr<CountlyConfiguration> config, std::
 
 StorageModule::~StorageModule() {}
 
-
+void StorageModule::RQRemoveFront() {
+    request_queue.pop_front();
 }
+
+int StorageModule::RQCount() {
+    return request_queue.size();
+}
+
+void StorageModule::RQInsertAtEnd(const std::string &request) {
+    request_queue.push_back(request);
+}
+
+void StorageModule::RQClearAll() {
+    request_queue.clear();
+}
+
+std::string& StorageModule::RQPeekFront() {
+    request_queue.front();
+}
+
+};

@@ -1,5 +1,6 @@
 #include "countly/request_module.hpp"
 #include "countly/request_builder.hpp"
+#include "countly/storage_module.hpp"
 
 #include <chrono>
 #include <deque>
@@ -26,11 +27,11 @@ private:
 public:
   bool use_https = true;
   bool is_queue_being_processed = false;
-  std::deque<std::string> request_queue;
   std::shared_ptr<CountlyConfiguration> _configuration;
   std::shared_ptr<LoggerModule> _logger;
   std::shared_ptr<RequestBuilder> _requestBuilder;
-  RequestModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder) : _configuration(config), _logger(logger), _requestBuilder(requestBuilder) {
+  std::shared_ptr<StorageModule> _storageModule;
+  RequestModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModule> storageModule ) : _configuration(config), _logger(logger), _requestBuilder(requestBuilder), _storageModule(storageModule) {
     if (_configuration->serverUrl.find("http://") == 0) {
       use_https = false;
     } else if (_configuration->serverUrl.find("https://") == 0) {
@@ -98,16 +99,16 @@ static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n
 }
 
 void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &data) {
-  if (impl->_configuration->requestQueueThreshold <= impl->request_queue.size()) {
+  if (impl->_configuration->requestQueueThreshold <= impl->_storageModule->RQCount()) {
     impl->_logger->log(LogLevel::WARNING, cly::utils::format_string("[RequestModule] addRequestToQueue: Request Queue is full. Dropping the oldest request."));
-    impl->request_queue.pop_front();
+    impl->_storageModule->RQRemoveFront();
   }
 
   const std::string &request = impl->_requestBuilder->buildRequest(data);
-  impl->request_queue.push_back(request);
+    impl->_storageModule->RQInsertAtEnd(request);
 }
 
-void RequestModule::clearRequestQueue() { impl->request_queue.clear(); }
+void RequestModule::clearRequestQueue() { impl->_storageModule->RQClearAll(); }
 
 void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
   mutex->lock();
@@ -123,13 +124,13 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
 
   while (true) {
     mutex->lock();
-    if (impl->request_queue.empty()) {
+    if (impl->_storageModule->RQCount() == 0 ) {
       // stop sending requests once the queue is empty
       mutex->unlock();
       break;
     }
 
-    std::string data = impl->request_queue.front();
+    std::string data = impl->_storageModule->RQPeekFront();
     mutex->unlock();
 
     HTTPResponse response = sendHTTP("/i", data);
@@ -141,10 +142,10 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
       break;
     }
 
-    if (impl->request_queue.front() == data) {
+    if (impl->_storageModule->RQPeekFront() == data) {
       // we pop the front only if it is still the same request
       // the queue might have changed while we were sending the request
-      impl->request_queue.pop_front();
+      impl->_storageModule->RQRemoveFront();
     }
 
     mutex->unlock();
