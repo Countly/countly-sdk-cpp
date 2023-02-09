@@ -1,5 +1,8 @@
 #ifndef STORAGE_BASE_HPP_
 #define STORAGE_BASE_HPP_
+#include "countly/countly_configuration.hpp"
+#include "countly/logger_module.hpp"
+#include <string>
 
 namespace cly {
 
@@ -21,6 +24,7 @@ namespace cly {
     virtual void RQRemoveFront() = 0;
     virtual int RQCount() = 0;
   };
+
 }
 
 #endif
