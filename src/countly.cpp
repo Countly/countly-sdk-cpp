@@ -324,13 +324,17 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 
   session_params["app_key"] = app_key;
 
+#ifdef COUNTLY_USE_SQLITE
   storageModule.reset(new StorageModule(configuration, logger));
-  storageModule.init();
+#else
+  storageModule.reset(new StorageModule(configuration, logger));
+#endif
   requestBuilder.reset(new RequestBuilder(configuration, logger));
   requestModule.reset(new RequestModule(configuration, logger, requestBuilder, storageModule));
   crash_module.reset(new cly::CrashModule(configuration, logger, requestModule, mutex));
   views_module.reset(new cly::ViewsModule(this, logger));
 
+  storageModule->init();
   is_sdk_initialized = true; // after this point SDK is initialized.
 
   if (!running) {

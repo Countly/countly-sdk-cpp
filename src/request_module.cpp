@@ -75,8 +75,8 @@ public:
   }
 };
 
-RequestModule::RequestModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder) {
-  impl.reset(new RequestModuleImpl(config, logger, requestBuilder));
+RequestModule::RequestModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModule> storageModule) {
+  impl.reset(new RequestModuleImpl(config, logger, requestBuilder, storageModule));
 
   impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] Initialized"));
 

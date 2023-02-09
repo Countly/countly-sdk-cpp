@@ -1,5 +1,5 @@
-#ifndef STORAGE_MODULE_HPP_
-#define STORAGE_MODULE_HPP_
+#ifndef SQLITE_STORAGE_MODULE_HPP_
+#define SQLITE_STORAGE_MODULE_HPP_
 #include "countly/countly_configuration.hpp"
 #include "countly/logger_module.hpp"
 #include "countly/storage_base.hpp"
@@ -8,13 +8,12 @@
 #include <string>
 
 namespace cly {
-class StorageModule : StorageBase {
+class SqliteStorageModule : StorageBase {
 private:
-  std::deque<std::string> request_queue;
 
 public:
-  StorageModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger);
-  ~StorageModule();
+  SqliteStorageModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger);
+  ~SqliteStorageModule();
 
  std::string *RQPeekAll();
 

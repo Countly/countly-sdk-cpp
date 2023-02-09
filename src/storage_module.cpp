@@ -6,9 +6,14 @@
 
 
 namespace cly{
-StorageModule::StorageModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger) : _configuration(config), _logger(logger) {}
+StorageModule::StorageModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger) : StorageBase(config,logger) {
+
+}
 
 StorageModule::~StorageModule() {}
+
+void StorageModule::init() {
+}
 
 void StorageModule::RQRemoveFront() {
     request_queue.pop_front();
