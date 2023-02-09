@@ -23,7 +23,7 @@
 #include "countly/event.hpp"
 #include "countly/logger_module.hpp"
 #include "countly/views_module.hpp"
-#include <countly/storage_module.hpp>
+#include "countly/storage_base.hpp"
 #include <countly/request_builder.hpp>
 #include <countly/request_module.hpp>
 #include <countly/crash_module.hpp>
@@ -267,7 +267,7 @@ private:
   std::shared_ptr<cly::LoggerModule> logger;
   std::shared_ptr<cly::RequestBuilder> requestBuilder;
   std::shared_ptr<cly::RequestModule> requestModule;
-  std::shared_ptr<cly::StorageModule> storageModule;
+  std::shared_ptr<cly::StorageBase> storageModule;
   std::shared_ptr<std::mutex> mutex = std::make_shared<std::mutex>();
 
   bool is_queue_being_processed = false;

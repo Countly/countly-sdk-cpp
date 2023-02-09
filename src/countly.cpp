@@ -5,6 +5,9 @@
 #include <string>
 #include <system_error>
 #include <thread>
+#include "countly/storage_module.hpp"
+#include "countly/sqlite_storage_module.hpp"
+
 
 #ifndef COUNTLY_USE_CUSTOM_SHA256
 #include "openssl/sha.h"
@@ -325,10 +328,12 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   session_params["app_key"] = app_key;
 
 #ifdef COUNTLY_USE_SQLITE
-  storageModule.reset(new StorageModule(configuration, logger));
+  storageModule.reset(new SqliteStorageModule(configuration, logger));
 #else
   storageModule.reset(new StorageModule(configuration, logger));
 #endif
+
+
   requestBuilder.reset(new RequestBuilder(configuration, logger));
   requestModule.reset(new RequestModule(configuration, logger, requestBuilder, storageModule));
   crash_module.reset(new cly::CrashModule(configuration, logger, requestModule, mutex));
@@ -408,6 +413,8 @@ void Countly::addEvent(const cly::Event &event) {
 }
 #ifdef COUNTLY_USE_SQLITE
 void Countly::addEventToSqlite(const cly::Event &event) {
+  log(LogLevel::DEBUG, "[Countly][addEventToSqlite] event = " + event.serialize());
+
   if (database_path.empty()) {
     mutex->unlock();
     log(LogLevel::FATAL, "Cannot add event, sqlite database path is not set");

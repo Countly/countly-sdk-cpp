@@ -8,7 +8,7 @@
 #include <string>
 
 namespace cly {
-class SqliteStorageModule : StorageBase {
+class SqliteStorageModule : public StorageBase {
 private:
 
 public:

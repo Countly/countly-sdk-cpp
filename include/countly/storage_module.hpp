@@ -8,7 +8,7 @@
 #include <string>
 
 namespace cly {
-class StorageModule : StorageBase {
+class StorageModule : public StorageBase {
 private:
   std::deque<std::string> request_queue;
 
