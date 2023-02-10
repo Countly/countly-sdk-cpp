@@ -18,12 +18,12 @@ public:
 
   std::string *RQPeekAll();
 
-  virtual void init() override;
-  virtual void RQClearAll() override;
-  virtual void RQInsertAtEnd(const std::string &request) override;
-  virtual std::string &RQPeekFront() override;
-  virtual void RQRemoveFront() override;
-  virtual int RQCount() override;
+  void init() override;
+  void RQClearAll() override;
+  void RQInsertAtEnd(const std::string &request) override;
+  const std::string &RQPeekFront() override;
+  void RQRemoveFront() override;
+  int RQCount() override;
 };
 } // namespace cly
 #endif

@@ -30,7 +30,8 @@ public:
   std::shared_ptr<LoggerModule> _logger;
   std::shared_ptr<RequestBuilder> _requestBuilder;
   std::shared_ptr<StorageModuleBase> _storageModule;
-  RequestModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule ) : _configuration(config), _logger(logger), _requestBuilder(requestBuilder), _storageModule(storageModule) {
+  RequestModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule)
+      : _configuration(config), _logger(logger), _requestBuilder(requestBuilder), _storageModule(storageModule) {
     if (_configuration->serverUrl.find("http://") == 0) {
       use_https = false;
     } else if (_configuration->serverUrl.find("https://") == 0) {
@@ -86,9 +87,9 @@ RequestModule::RequestModule(std::shared_ptr<CountlyConfiguration> config, std::
 
 RequestModule::~RequestModule() {
   impl.reset();
-#if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP) 
+#if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
   curl_global_cleanup();
-#endif 
+#endif
 }
 
 static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n_bytes, std::string *body) {
@@ -104,7 +105,7 @@ void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &
   }
 
   const std::string &request = impl->_requestBuilder->buildRequest(data);
-    impl->_storageModule->RQInsertAtEnd(request);
+  impl->_storageModule->RQInsertAtEnd(request);
 }
 
 void RequestModule::clearRequestQueue() { impl->_storageModule->RQClearAll(); }
@@ -123,7 +124,7 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
 
   while (true) {
     mutex->lock();
-    if (impl->_storageModule->RQCount() == 0 ) {
+    if (impl->_storageModule->RQCount() == 0) {
       // stop sending requests once the queue is empty
       mutex->unlock();
       break;

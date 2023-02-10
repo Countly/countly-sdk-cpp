@@ -22,11 +22,11 @@
 #endif
 #include "countly/event.hpp"
 #include "countly/logger_module.hpp"
-#include "countly/views_module.hpp"
 #include "countly/storage_module_base.hpp"
+#include "countly/views_module.hpp"
+#include <countly/crash_module.hpp>
 #include <countly/request_builder.hpp>
 #include <countly/request_module.hpp>
-#include <countly/crash_module.hpp>
 
 namespace cly {
 class Countly : public cly::CountlyDelegates {

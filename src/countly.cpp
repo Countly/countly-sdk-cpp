@@ -1,3 +1,5 @@
+#include "countly/storage_module_db.hpp"
+#include "countly/storage_module_memory.hpp"
 #include <chrono>
 #include <iomanip>
 #include <iostream>
@@ -5,9 +7,6 @@
 #include <string>
 #include <system_error>
 #include <thread>
-#include "countly/storage_module_memory.hpp"
-#include "countly/storage_module_db.hpp"
-
 
 #ifndef COUNTLY_USE_CUSTOM_SHA256
 #include "openssl/sha.h"
@@ -333,14 +332,13 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 #else
   storageModule.reset(new StorageModuleMemory(configuration, logger));
 #endif
-
+  storageModule->init();
 
   requestBuilder.reset(new RequestBuilder(configuration, logger));
   requestModule.reset(new RequestModule(configuration, logger, requestBuilder, storageModule));
   crash_module.reset(new cly::CrashModule(configuration, logger, requestModule, mutex));
   views_module.reset(new cly::ViewsModule(this, logger));
 
-  storageModule->init();
   is_sdk_initialized = true; // after this point SDK is initialized.
 
   if (!running) {
@@ -408,7 +406,7 @@ void Countly::addEvent(const cly::Event &event) {
   }
   event_queue.push_back(event.serialize());
 #else
- addEventToSqlite(event);
+  addEventToSqlite(event);
 #endif
   mutex->unlock();
 }
@@ -564,7 +562,6 @@ bool Countly::beginSession() {
   if (configuration->metrics.size() > 0) {
     data["metrics"] = configuration->metrics.dump();
   }
-  
 
   requestModule->addRequestToQueue(data);
   session_params.erase("user_details");
@@ -631,7 +628,7 @@ bool Countly::updateSession() {
         events.push_back(nlohmann::json::parse(table[(event_index * column_count) + 1]));
       }
 
-     log(LogLevel::DEBUG, "[Countly][updateSession] events = " + events.dump());
+      log(LogLevel::DEBUG, "[Countly][updateSession] events count = " + events.size());
 
       event_id_stream.seekp(-1, event_id_stream.cur);
       event_id_stream << ')';
@@ -644,7 +641,6 @@ bool Countly::updateSession() {
   }
   sqlite3_close(database);
 #endif
-
   mutex->unlock();
   auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
   mutex->lock();

@@ -1,6 +1,6 @@
-#include "countly/storage_module_memory.hpp"
 #include "countly/storage_module_base.hpp"
 #include "countly/storage_module_db.hpp"
+#include "countly/storage_module_memory.hpp"
 #include "test_utils.hpp"
 
 #include "doctest.h"
@@ -10,43 +10,76 @@ using namespace cly;
 using namespace std;
 
 void addRequestTest(StorageModuleBase *storageModule) {
+  CHECK(storageModule->RQCount() == 0);
+
   storageModule->RQInsertAtEnd("request");
   CHECK(storageModule->RQCount() == 1);
+
+  storageModule->RQInsertAtEnd("request 1");
+  storageModule->RQInsertAtEnd("request 2");
+  storageModule->RQInsertAtEnd("request 3");
+  CHECK(storageModule->RQCount() == 4);
+
   delete storageModule;
 }
 
 void validateRQPeekFront(StorageModuleBase *storageModule) {
-   CHECK(storageModule->RQCount() == 0);
-   storageModule->RQInsertAtEnd("request");
-   CHECK(storageModule->RQCount() == 1);
+  CHECK(storageModule->RQCount() == 0);
+  storageModule->RQInsertAtEnd("request");
+  CHECK(storageModule->RQCount() == 1);
 
-   CHECK(storageModule->RQPeekFront() == "request");
-   CHECK(storageModule->RQCount() == 1);
-   delete storageModule;
+  CHECK(storageModule->RQPeekFront() == "request");
+  CHECK(storageModule->RQCount() == 1);
+
+  storageModule->RQInsertAtEnd("request 2");
+
+  CHECK(storageModule->RQPeekFront() == "request");
+  CHECK(storageModule->RQCount() == 2);
+  delete storageModule;
 }
 
 void validateRQRemoveFront(StorageModuleBase *storageModule) {
-   CHECK(storageModule->RQCount() == 0);
-   storageModule->RQInsertAtEnd("request");
+  CHECK(storageModule->RQCount() == 0);
+  storageModule->RQInsertAtEnd("request");
+  CHECK(storageModule->RQCount() == 1);
 
-   CHECK(storageModule->RQCount() == 1);
-   storageModule->RQRemoveFront();
-   CHECK(storageModule->RQCount() == 0);  
-   delete storageModule;
+  storageModule->RQRemoveFront();
+  CHECK(storageModule->RQCount() == 0);
 
+  storageModule->RQInsertAtEnd("request 1");
+  storageModule->RQInsertAtEnd("request 2");
+  storageModule->RQInsertAtEnd("request 3");
+  CHECK(storageModule->RQCount() == 3);
+
+  CHECK(storageModule->RQPeekFront() == "request 1");
+
+  storageModule->RQRemoveFront();
+  CHECK(storageModule->RQCount() == 2);
+
+  CHECK(storageModule->RQPeekFront() == "request 2");
+
+  delete storageModule;
 }
 
 void RQClearAll(StorageModuleBase *storageModule) {
-   CHECK(storageModule->RQCount() == 0);
-   storageModule->RQInsertAtEnd("request");
-   
-   CHECK(storageModule->RQCount() == 1);
-   storageModule->RQClearAll();
-   CHECK(storageModule->RQCount() == 0);  
-   delete storageModule;
+  CHECK(storageModule->RQCount() == 0);
+  storageModule->RQInsertAtEnd("request");
 
+  CHECK(storageModule->RQCount() == 1);
+
+  storageModule->RQClearAll();
+  CHECK(storageModule->RQCount() == 0);
+
+  storageModule->RQInsertAtEnd("request 1");
+  storageModule->RQInsertAtEnd("request 2");
+  storageModule->RQInsertAtEnd("request 3");
+  CHECK(storageModule->RQCount() == 3);
+
+  storageModule->RQClearAll();
+  CHECK(storageModule->RQCount() == 0);
+
+  delete storageModule;
 }
-
 
 TEST_CASE("Storage module tests memory") {
   test_utils::clearSDK();
@@ -57,22 +90,13 @@ TEST_CASE("Storage module tests memory") {
   configuration.reset(new cly::CountlyConfiguration("", ""));
   StorageModuleBase *storageModule = new StorageModuleMemory(configuration, logger);
 
-  SUBCASE("validate RQInsertAtEnd method") {
-    addRequestTest(storageModule);
-  }
+  SUBCASE("validate RQInsertAtEnd method") { addRequestTest(storageModule); }
 
-   SUBCASE("validate RQPeekFront method") {
-   validateRQPeekFront(storageModule);
-  }
+  SUBCASE("validate RQPeekFront method") { validateRQPeekFront(storageModule); }
 
-  SUBCASE("validate RQRemoveFront method") {
-     validateRQRemoveFront(storageModule);
+  SUBCASE("validate RQRemoveFront method") { validateRQRemoveFront(storageModule); }
 
-  }
-
-  SUBCASE("validate RQClearAll method") {
-    RQClearAll(storageModule);
-  }
+  SUBCASE("validate RQClearAll method") { RQClearAll(storageModule); }
 }
 
 // TEST_CASE("Storage module tests Sqlite") {
@@ -101,5 +125,3 @@ TEST_CASE("Storage module tests memory") {
 //     RQClearAll(storageModule);
 //   }
 // }
-
-
