@@ -410,9 +410,10 @@ void Countly::addEvent(const cly::Event &event) {
 #endif
   mutex->unlock();
 }
+
 #ifdef COUNTLY_USE_SQLITE
 void Countly::addEventToSqlite(const cly::Event &event) {
-  log(LogLevel::DEBUG, "[Countly][addEventToSqlite] event = " + event.serialize());
+  log(LogLevel::DEBUG, "[Countly][addEventToSqlite]");
 
   if (database_path.empty()) {
     mutex->unlock();
