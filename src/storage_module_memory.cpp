@@ -11,8 +11,15 @@ StorageModuleMemory::~StorageModuleMemory() {}
 
 void StorageModuleMemory::init() { _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] initialized."); }
 
-void StorageModuleMemory::RQRemoveFront(std::string &request) {
+void StorageModuleMemory::RQRemoveFront() {
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQRemoveFront");
+  if (request_queue.size() > 0) {
+    request_queue.pop_front();
+  }
+}
+
+void StorageModuleMemory::RQRemoveFront(std::string &request) {
+  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQRemoveFront request = " + request);
   if (request_queue.size() > 0 && request == request_queue.front()) {
     request_queue.pop_front();
   }

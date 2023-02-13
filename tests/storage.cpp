@@ -39,8 +39,17 @@ void validateRQPeekFront(StorageModuleBase *storageModule) {
 }
 
 void validateRQRemoveFront(StorageModuleBase *storageModule) {
+
+  // Try to remove the front request from an empty queue.
   CHECK(storageModule->RQCount() == 0);
+  storageModule->RQRemoveFront();
+
   storageModule->RQInsertAtEnd("request");
+  CHECK(storageModule->RQCount() == 1);
+
+  // Try to remove front request by providing wrong
+  std::string request = "front";
+  storageModule->RQRemoveFront(request);
   CHECK(storageModule->RQCount() == 1);
 
   storageModule->RQRemoveFront();
@@ -51,9 +60,15 @@ void validateRQRemoveFront(StorageModuleBase *storageModule) {
   storageModule->RQInsertAtEnd("request 3");
   CHECK(storageModule->RQCount() == 3);
 
+  // Removing the request from the queue which isn't on the front.
+  std::string request = "request 2";
+  storageModule->RQRemoveFront(request);
+  CHECK(storageModule->RQCount() == 3);
+
   CHECK(storageModule->RQPeekFront() == "request 1");
 
-  storageModule->RQRemoveFront();
+  request = "request 1";
+  storageModule->RQRemoveFront(request);
   CHECK(storageModule->RQCount() == 2);
 
   CHECK(storageModule->RQPeekFront() == "request 2");
@@ -81,7 +96,7 @@ void RQClearAll(StorageModuleBase *storageModule) {
   delete storageModule;
 }
 
-TEST_CASE("Storage module tests memory") {
+TEST_CASE("Test Memory Storage Module") {
   test_utils::clearSDK();
   shared_ptr<cly::LoggerModule> logger;
   logger.reset(new cly::LoggerModule());
@@ -90,13 +105,13 @@ TEST_CASE("Storage module tests memory") {
   configuration.reset(new cly::CountlyConfiguration("", ""));
   StorageModuleBase *storageModule = new StorageModuleMemory(configuration, logger);
 
-  SUBCASE("validate RQInsertAtEnd method") { addRequestTest(storageModule); }
+  SUBCASE("Validate storage method RQInsertAtEnd") { addRequestTest(storageModule); }
 
-  SUBCASE("validate RQPeekFront method") { validateRQPeekFront(storageModule); }
+  SUBCASE("Validate storage method RQPeekFront") { validateRQPeekFront(storageModule); }
 
-  SUBCASE("validate RQRemoveFront method") { validateRQRemoveFront(storageModule); }
+  SUBCASE("Validate storage method RQRemoveFront") { validateRQRemoveFront(storageModule); }
 
-  SUBCASE("validate RQClearAll method") { RQClearAll(storageModule); }
+  SUBCASE("Validate storage method RQClearAll") { RQClearAll(storageModule); }
 }
 
 // TEST_CASE("Storage module tests Sqlite") {

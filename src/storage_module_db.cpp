@@ -17,7 +17,13 @@ void StorageModuleDB::init() {
   // 3. Migration(if needed)
 }
 
-void StorageModuleDB::RQRemoveFront(std::string &request) { _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront"); }
+void StorageModuleDB::RQRemoveFront() {
+  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront");
+}
+
+void StorageModuleDB::RQRemoveFront(std::string &request) {
+  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront request = " + request);
+}
 
 int StorageModuleDB::RQCount() {
   int size = 0;

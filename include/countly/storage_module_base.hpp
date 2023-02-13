@@ -25,6 +25,7 @@ public:
   virtual void init() = 0;
   virtual int RQCount() = 0;
   virtual void RQClearAll() = 0;
+  virtual void RQRemoveFront() = 0;
   const virtual std::string &RQPeekFront() = 0;
   virtual std::vector<std::string> RQPeekAll() = 0;
   virtual void RQRemoveFront(std::string &request) = 0;
