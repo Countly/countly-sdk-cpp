@@ -11,9 +11,11 @@ StorageModuleMemory::~StorageModuleMemory() {}
 
 void StorageModuleMemory::init() { _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] initialized."); }
 
-void StorageModuleMemory::RQRemoveFront() {
+void StorageModuleMemory::RQRemoveFront(std::string &request) {
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQRemoveFront");
-  request_queue.pop_front();
+  if (request_queue.size() > 0 && request == request_queue.front()) {
+    request_queue.pop_front();
+  }
 }
 
 int StorageModuleMemory::RQCount() {
@@ -24,7 +26,18 @@ int StorageModuleMemory::RQCount() {
 
 void StorageModuleMemory::RQInsertAtEnd(const std::string &request) {
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQInsertAtEnd request = " + request);
-  request_queue.push_back(request);
+  if (request != "") {
+    request_queue.push_back(request);
+  }
+}
+
+std::vector<std::string> StorageModuleMemory::RQPeekAll() {
+  std::vector<std::string> v;
+  while (!request_queue.empty()) {
+    v.push_back(request_queue.front());
+  }
+
+  return v;
 }
 
 void StorageModuleMemory::RQClearAll() {
@@ -33,8 +46,12 @@ void StorageModuleMemory::RQClearAll() {
 }
 
 const std::string &StorageModuleMemory::RQPeekFront() {
-  std::string &front = request_queue.front();
-  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQPeekFront request = " + front);
+  std::string front = "";
+  if (request_queue.size() > 0) {
+    front = request_queue.front();
+    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQPeekFront request = " + front);
+  }
+
   return front;
 }
 

@@ -101,7 +101,10 @@ static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n
 void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &data) {
   if (impl->_configuration->requestQueueThreshold <= impl->_storageModule->RQCount()) {
     impl->_logger->log(LogLevel::WARNING, cly::utils::format_string("[RequestModule] addRequestToQueue: Request Queue is full. Dropping the oldest request."));
-    impl->_storageModule->RQRemoveFront();
+
+    // TODO Need to improve this
+    std::string front = impl->_storageModule->RQPeekFront();
+    impl->_storageModule->RQRemoveFront(front);
   }
 
   const std::string &request = impl->_requestBuilder->buildRequest(data);
@@ -145,7 +148,7 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
     if (impl->_storageModule->RQPeekFront() == data) {
       // we pop the front only if it is still the same request
       // the queue might have changed while we were sending the request
-      impl->_storageModule->RQRemoveFront();
+      impl->_storageModule->RQRemoveFront(data);
     }
 
     mutex->unlock();

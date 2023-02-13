@@ -14,14 +14,13 @@ public:
   StorageModuleDB(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger);
   ~StorageModuleDB();
 
-  std::string *RQPeekAll();
-
   void init() override;
-  void RQClearAll() override;
-  void RQInsertAtEnd(const std::string &request) override;
-  const std::string &RQPeekFront() override;
-  void RQRemoveFront() override;
   int RQCount() override;
+  void RQClearAll() override;
+  const std::string &RQPeekFront() override;
+  std::vector<std::string> RQPeekAll() override;
+  void RQRemoveFront(std::string &request) override;
+  void RQInsertAtEnd(const std::string &request) override;
 };
 } // namespace cly
 #endif

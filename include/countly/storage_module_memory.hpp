@@ -6,6 +6,7 @@
 #include <deque>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace cly {
 class StorageModuleMemory : public StorageModuleBase {
@@ -16,14 +17,13 @@ public:
   StorageModuleMemory(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger);
   ~StorageModuleMemory();
 
-  std::string *RQPeekAll();
-
   void init() override;
-  void RQClearAll() override;
-  void RQInsertAtEnd(const std::string &request) override;
-  const std::string &RQPeekFront() override;
-  void RQRemoveFront() override;
   int RQCount() override;
+  void RQClearAll() override;
+  const std::string &RQPeekFront() override;
+  std::vector<std::string> RQPeekAll() override;
+  void RQRemoveFront(std::string &request) override;
+  void RQInsertAtEnd(const std::string &request) override;
 };
 } // namespace cly
 #endif

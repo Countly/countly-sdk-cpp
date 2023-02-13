@@ -3,6 +3,7 @@
 #include "countly/countly_configuration.hpp"
 #include "countly/logger_module.hpp"
 #include <string>
+#include <vector>
 
 namespace cly {
 
@@ -22,11 +23,12 @@ public:
   }
 
   virtual void init() = 0;
-  virtual void RQClearAll() = 0;
-  virtual void RQInsertAtEnd(const std::string &request) = 0;
-  const virtual std::string &RQPeekFront() = 0;
-  virtual void RQRemoveFront() = 0;
   virtual int RQCount() = 0;
+  virtual void RQClearAll() = 0;
+  const virtual std::string &RQPeekFront() = 0;
+  virtual std::vector<std::string> RQPeekAll() = 0;
+  virtual void RQRemoveFront(std::string &request) = 0;
+  virtual void RQInsertAtEnd(const std::string &request) = 0;
 };
 
 } // namespace cly
