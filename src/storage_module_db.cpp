@@ -32,7 +32,7 @@ int StorageModuleDB::RQCount() {
   return 0;
 }
 
-std::vector<std::string> StorageModuleDB::RQPeekAll() {
+std::vector<std::string> &StorageModuleDB::RQPeekAll() {
   std::vector<std::string> v;
 
   return v;

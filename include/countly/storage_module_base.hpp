@@ -27,7 +27,7 @@ public:
   virtual void RQClearAll() = 0;
   virtual void RQRemoveFront() = 0;
   const virtual std::string &RQPeekFront() = 0;
-  virtual std::vector<std::string> RQPeekAll() = 0;
+  virtual std::vector<std::string> &RQPeekAll() = 0;
   virtual void RQRemoveFront(std::string &request) = 0;
   virtual void RQInsertAtEnd(const std::string &request) = 0;
 };
