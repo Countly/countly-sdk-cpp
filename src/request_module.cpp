@@ -142,11 +142,9 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
       break;
     }
 
-    if (impl->_storageModule->RQPeekFront() == data) {
-      // we pop the front only if it is still the same request
-      // the queue might have changed while we were sending the request
-      impl->_storageModule->RQRemoveFront(data);
-    }
+    // we pop the front only if it is still the same request
+    // the queue might have changed while we were sending the request
+    impl->_storageModule->RQRemoveFront(data);
 
     mutex->unlock();
   }
