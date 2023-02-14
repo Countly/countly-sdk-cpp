@@ -32,7 +32,7 @@ int StorageModuleDB::RQCount() {
   return 0;
 }
 
-std::vector<std::string> &StorageModuleDB::RQPeekAll() {
+std::vector<std::string> StorageModuleDB::RQPeekAll() {
   std::vector<std::string> v;
 
   return v;
@@ -42,7 +42,7 @@ void StorageModuleDB::RQInsertAtEnd(const std::string &request) { _logger->log(L
 
 void StorageModuleDB::RQClearAll() { _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQClearAll"); }
 
-const std::string &StorageModuleDB::RQPeekFront() {
+const std::string StorageModuleDB::RQPeekFront() {
   const std::string front = "";
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQPeekFront request = " + front);
   return front;

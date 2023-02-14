@@ -21,8 +21,8 @@ public:
   int RQCount() override;
   void RQClearAll() override;
   virtual void RQRemoveFront() override;
-  const std::string &RQPeekFront() override;
-  std::vector<std::string> &RQPeekAll() override;
+  const std::string RQPeekFront() override;
+  std::vector<std::string> RQPeekAll() override;
   void RQRemoveFront(std::string &request) override;
   void RQInsertAtEnd(const std::string &request) override;
 };

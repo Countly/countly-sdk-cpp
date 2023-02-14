@@ -38,10 +38,10 @@ void StorageModuleMemory::RQInsertAtEnd(const std::string &request) {
   }
 }
 
-std::vector<std::string> &StorageModuleMemory::RQPeekAll() {
+std::vector<std::string> StorageModuleMemory::RQPeekAll() {
   std::vector<std::string> v;
   for (int i = 0; i < request_queue.size(); ++i) {
-    v.push_back(request_queue.front());
+    v.push_back(request_queue.at(i));
   }
 
   return v;
@@ -52,7 +52,7 @@ void StorageModuleMemory::RQClearAll() {
   request_queue.clear();
 }
 
-const std::string &StorageModuleMemory::RQPeekFront() {
+const std::string StorageModuleMemory::RQPeekFront() {
   std::string front = "";
   if (request_queue.size() > 0) {
     front = request_queue.front();
