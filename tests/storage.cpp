@@ -39,25 +39,25 @@ void addRequestTest(StorageModuleBase *storageModule) {
  */
 void validateRQPeekFront(StorageModuleBase *storageModule) {
   // Try to get the front request while the queue is empty.
-  CHECK(storageModule->RQPeekFront() == "");
+  CHECK(storageModule->RQPeekFront() == nullptr);
   CHECK(storageModule->RQCount() == 0);
 
   storageModule->RQInsertAtEnd("request");
   CHECK(storageModule->RQCount() == 1);
 
-  CHECK(storageModule->RQPeekFront() == "request");
+  CHECK(storageModule->RQPeekFront()->_data == "request");
   CHECK(storageModule->RQCount() == 1);
 
   storageModule->RQInsertAtEnd("request 2");
 
-  CHECK(storageModule->RQPeekFront() == "request");
+  CHECK(storageModule->RQPeekFront()->_data == "request");
   CHECK(storageModule->RQCount() == 2);
   delete storageModule;
 }
 
 void validateRQRemoveFront(StorageModuleBase *storageModule) {
 
-  // Try to remove the front request from an empty queue.
+   //Try to remove the front request from an empty queue.
   CHECK(storageModule->RQCount() == 0);
   storageModule->RQRemoveFront();
 
@@ -65,7 +65,7 @@ void validateRQRemoveFront(StorageModuleBase *storageModule) {
   CHECK(storageModule->RQCount() == 1);
 
   // Try to remove front request by providing a wrong request
-  std::string request = "front";
+  const DataEntry *request = nullptr;
   storageModule->RQRemoveFront(request);
   CHECK(storageModule->RQCount() == 1);
 
@@ -78,17 +78,17 @@ void validateRQRemoveFront(StorageModuleBase *storageModule) {
   CHECK(storageModule->RQCount() == 3);
 
   // Try to remove the request from the queue which isn't on the front.
-  request = "request 2";
+  request = new DataEntry(0, "test");
   storageModule->RQRemoveFront(request);
   CHECK(storageModule->RQCount() == 3);
 
-  CHECK(storageModule->RQPeekFront() == "request 1");
+  CHECK(storageModule->RQPeekFront()->_data == "request 1");
 
-  request = "request 1";
+  request = storageModule->RQPeekFront();
   storageModule->RQRemoveFront(request);
   CHECK(storageModule->RQCount() == 2);
 
-  CHECK(storageModule->RQPeekFront() == "request 2");
+  CHECK(storageModule->RQPeekFront()->_data == "request 2");
 
   delete storageModule;
 }
@@ -99,7 +99,7 @@ void validateRQRemoveFront(StorageModuleBase *storageModule) {
  * @param *storageModule: a pointer to storage module.
  */
 void RQPeakAll(StorageModuleBase *storageModule) {
-  std::vector<std::string> requests = storageModule->RQPeekAll();
+  std::vector<DataEntry *> requests = storageModule->RQPeekAll();
   CHECK(storageModule->RQCount() == 0);
   CHECK(requests.size() == 0);
 
@@ -109,7 +109,7 @@ void RQPeakAll(StorageModuleBase *storageModule) {
   requests = storageModule->RQPeekAll();
   CHECK(storageModule->RQCount() == 1);
   CHECK(requests.size() == 1);
-  CHECK(requests.at(0) == "request");
+  CHECK(requests.at(0)->_data == "request");
 
   storageModule->RQInsertAtEnd("request 1");
   storageModule->RQInsertAtEnd("request 2");
@@ -119,10 +119,10 @@ void RQPeakAll(StorageModuleBase *storageModule) {
   requests = storageModule->RQPeekAll();
   CHECK(storageModule->RQCount() == 4);
   CHECK(requests.size() == 4);
-  CHECK(requests.at(0) == "request");
-  CHECK(requests.at(1) == "request 1");
-  CHECK(requests.at(2) == "request 2");
-  CHECK(requests.at(3) == "request 3");
+  CHECK(requests.at(0)->_data == "request");
+  CHECK(requests.at(1)->_data == "request 1");
+  CHECK(requests.at(2)->_data == "request 2");
+  CHECK(requests.at(3)->_data == "request 3");
 }
 
 /**

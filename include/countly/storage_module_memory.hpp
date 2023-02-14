@@ -11,7 +11,7 @@
 namespace cly {
 class StorageModuleMemory : public StorageModuleBase {
 private:
-  std::deque<std::string> request_queue;
+  std::deque<DataEntry *> request_queue;
 
 public:
   StorageModuleMemory(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger);
@@ -21,10 +21,10 @@ public:
   int RQCount() override;
   void RQClearAll() override;
   virtual void RQRemoveFront() override;
-  const std::string RQPeekFront() override;
-  std::vector<std::string> RQPeekAll() override;
-  void RQRemoveFront(std::string &request) override;
-  void RQInsertAtEnd(const std::string &request) override;
+  const DataEntry *RQPeekFront() override;
+  std::vector<DataEntry *> RQPeekAll() override;
+  void RQRemoveFront(const DataEntry *request) override;
+  void RQInsertAtEnd(const char *request) override;
 };
 } // namespace cly
 #endif

@@ -104,7 +104,7 @@ void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &
     impl->_storageModule->RQRemoveFront();
   }
 
-  const std::string &request = impl->_requestBuilder->buildRequest(data);
+  const char * request = impl->_requestBuilder->buildRequest(data).c_str();
   impl->_storageModule->RQInsertAtEnd(request);
 }
 
@@ -130,10 +130,10 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
       break;
     }
 
-    std::string data = impl->_storageModule->RQPeekFront();
-    mutex->unlock();
 
-    HTTPResponse response = sendHTTP("/i", data);
+    const DataEntry *data = impl->_storageModule->RQPeekFront();
+    mutex->unlock();
+    HTTPResponse response = sendHTTP("/i", data->_data);
 
     mutex->lock();
     if (!response.success) {
