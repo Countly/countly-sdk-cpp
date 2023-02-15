@@ -8,17 +8,21 @@
 namespace cly {
 
 class DataEntry {
-public:
+private:
   long long _id;
   std::string _data;
-  DataEntry(const long long id, const char * data) {
+
+public:
+  DataEntry(const long long id, const std::string &data) {
     this->_id = id;
     this->_data = data;
   }
 
-  ~DataEntry() { 
-	 
-  }
+  ~DataEntry() {}
+
+  long long getId() const { return _id; }
+
+  const std::string &getData() const { return _data; }
 };
 
 class StorageModuleBase {
@@ -43,7 +47,7 @@ public:
   const virtual DataEntry *RQPeekFront() = 0;
   virtual std::vector<DataEntry *> RQPeekAll() = 0;
   virtual void RQRemoveFront(const DataEntry *request) = 0;
-  virtual void RQInsertAtEnd(const char request[]) = 0;
+  virtual void RQInsertAtEnd(const std::string &request) = 0;
 };
 
 } // namespace cly

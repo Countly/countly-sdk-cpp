@@ -21,7 +21,7 @@ public:
   const DataEntry *RQPeekFront() override;
   std::vector<DataEntry *> RQPeekAll() override;
   void RQRemoveFront(const DataEntry *request) override;
-  void RQInsertAtEnd(const char *request) override;
+  void RQInsertAtEnd(const std::string &request) override;
 };
 } // namespace cly
 #endif

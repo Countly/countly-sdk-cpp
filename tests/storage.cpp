@@ -45,12 +45,12 @@ void validateRQPeekFront(StorageModuleBase *storageModule) {
   storageModule->RQInsertAtEnd("request");
   CHECK(storageModule->RQCount() == 1);
 
-  CHECK(storageModule->RQPeekFront()->_data == "request");
+  CHECK(storageModule->RQPeekFront()->getData() == "request");
   CHECK(storageModule->RQCount() == 1);
 
   storageModule->RQInsertAtEnd("request 2");
 
-  CHECK(storageModule->RQPeekFront()->_data == "request");
+  CHECK(storageModule->RQPeekFront()->getData() == "request");
   CHECK(storageModule->RQCount() == 2);
   delete storageModule;
 }
@@ -81,14 +81,13 @@ void validateRQRemoveFront(StorageModuleBase *storageModule) {
   request = new DataEntry(0, "test");
   storageModule->RQRemoveFront(request);
   CHECK(storageModule->RQCount() == 3);
-
-  CHECK(storageModule->RQPeekFront()->_data == "request 1");
+  CHECK(storageModule->RQPeekFront()->getData() == "request 1");
 
   request = storageModule->RQPeekFront();
   storageModule->RQRemoveFront(request);
   CHECK(storageModule->RQCount() == 2);
 
-  CHECK(storageModule->RQPeekFront()->_data == "request 2");
+  CHECK(storageModule->RQPeekFront()->getData() == "request 2");
 
   delete storageModule;
 }
@@ -109,7 +108,7 @@ void RQPeakAll(StorageModuleBase *storageModule) {
   requests = storageModule->RQPeekAll();
   CHECK(storageModule->RQCount() == 1);
   CHECK(requests.size() == 1);
-  CHECK(requests.at(0)->_data == "request");
+  CHECK(requests.at(0)->getData() == "request");
 
   storageModule->RQInsertAtEnd("request 1");
   storageModule->RQInsertAtEnd("request 2");
@@ -119,10 +118,10 @@ void RQPeakAll(StorageModuleBase *storageModule) {
   requests = storageModule->RQPeekAll();
   CHECK(storageModule->RQCount() == 4);
   CHECK(requests.size() == 4);
-  CHECK(requests.at(0)->_data == "request");
-  CHECK(requests.at(1)->_data == "request 1");
-  CHECK(requests.at(2)->_data == "request 2");
-  CHECK(requests.at(3)->_data == "request 3");
+  CHECK(requests.at(0)->getData() == "request");
+  CHECK(requests.at(1)->getData() == "request 1");
+  CHECK(requests.at(2)->getData() == "request 2");
+  CHECK(requests.at(3)->getData() == "request 3");
 }
 
 /**

@@ -19,7 +19,7 @@ void StorageModuleDB::init() {
 
 void StorageModuleDB::RQRemoveFront() { _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront"); }
 
-void StorageModuleDB::RQRemoveFront(const DataEntry *request) { _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront request = " + request->_data); }
+void StorageModuleDB::RQRemoveFront(const DataEntry *request) { _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront request = " + request->getData()); }
 
 int StorageModuleDB::RQCount() {
   int size = 0;
@@ -34,9 +34,8 @@ std::vector<DataEntry *> StorageModuleDB::RQPeekAll() {
   return v;
 }
 
-void StorageModuleDB::RQInsertAtEnd(const char *request) {
-  std::string req = request;
-  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQInsertAtEnd request = " + req);
+void StorageModuleDB::RQInsertAtEnd(const std::string &request) {
+  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQInsertAtEnd request = " + request);
 }
 
 void StorageModuleDB::RQClearAll() { _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQClearAll"); }

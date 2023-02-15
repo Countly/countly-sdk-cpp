@@ -19,8 +19,13 @@ void StorageModuleMemory::RQRemoveFront() {
 }
 
 void StorageModuleMemory::RQRemoveFront(const DataEntry *request) {
-  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQRemoveFront request = " + request->_data);
-  if (request_queue.size() > 0 && request != nullptr && request->_id == request_queue.front()->_id) {
+  if (request == nullptr) {
+    _logger->log(LogLevel::WARNING, "[Countly][StorageModuleMemory] RQRemoveFront the request pointer does not point to any valid object.");
+    return;
+  }
+
+  if (request_queue.size() > 0 && request->getId() == request_queue.front()->getId()) {
+    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQRemoveFront request = " + request->getData());
     request_queue.pop_front();
   }
 }
@@ -31,10 +36,9 @@ int StorageModuleMemory::RQCount() {
   return size;
 }
 
-void StorageModuleMemory::RQInsertAtEnd(const char *request) {
-  std::string req(request);
-  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQInsertAtEnd request = " + req);
-  if (req != "") {
+void StorageModuleMemory::RQInsertAtEnd(const std::string &request) {
+  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQInsertAtEnd request = " + request);
+  if (request != "") {
     DataEntry *entry = new DataEntry(1, request);
     request_queue.push_back(entry);
   }
@@ -58,10 +62,11 @@ const DataEntry *StorageModuleMemory::RQPeekFront() {
   DataEntry *front = nullptr;
   if (request_queue.size() > 0) {
     front = request_queue.front();
-    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQPeekFront request = " + front->_data);
+    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQPeekFront request = " + front->getData());
+  } else {
+    _logger->log(LogLevel::WARNING, "[Countly][StorageModuleMemory] RQPeekFront Request queue is empty.");
   }
 
   return front;
 }
-
 }; // namespace cly
