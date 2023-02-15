@@ -27,6 +27,7 @@ void StorageModuleMemory::RQRemoveFront(const DataEntry *request) {
   if (request_queue.size() > 0 && request->getId() == request_queue.front()->getId()) {
     _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQRemoveFront request = " + request->getData());
     request_queue.pop_front();
+    delete request;
   }
 }
 
