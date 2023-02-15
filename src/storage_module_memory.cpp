@@ -7,28 +7,36 @@
 namespace cly {
 StorageModuleMemory::StorageModuleMemory(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger) : StorageModuleBase(config, logger) {}
 
-StorageModuleMemory::~StorageModuleMemory() {}
+StorageModuleMemory::~StorageModuleMemory() {
+  _configuration.reset();
+  _logger.reset();
+}
 
 void StorageModuleMemory::init() { _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] initialized."); }
 
 void StorageModuleMemory::RQRemoveFront() {
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQRemoveFront");
   if (request_queue.size() > 0) {
+    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleMemory] RQRemoveFront: Pointer Count =" + request_queue.front().use_count());
     request_queue.pop_front();
+
   }
 }
 
-void StorageModuleMemory::RQRemoveFront(const DataEntry *request) {
+void StorageModuleMemory::RQRemoveFront(std::shared_ptr<DataEntry> request) {
+  _logger->log(LogLevel::ERROR, "[Countly][StorageModuleMemory] Pointer Count =" + request.use_count());
+
   if (request == nullptr) {
-    _logger->log(LogLevel::WARNING, "[Countly][StorageModuleMemory] RQRemoveFront the request pointer does not point to any valid object.");
     return;
   }
 
   if (request_queue.size() > 0 && request->getId() == request_queue.front()->getId()) {
     _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQRemoveFront request = " + request->getData());
+    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleMemory] RQRemoveFront: Pointer Count =" + request_queue.front().use_count());
     request_queue.pop_front();
-    delete request;
   }
+
+    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleMemory] RQRemoveFront: Pointer Count =" + request.use_count());
 }
 
 int StorageModuleMemory::RQCount() {
@@ -40,15 +48,26 @@ int StorageModuleMemory::RQCount() {
 void StorageModuleMemory::RQInsertAtEnd(const std::string &request) {
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQInsertAtEnd request = " + request);
   if (request != "") {
-    DataEntry *entry = new DataEntry(1, request);
+    _lastUsedId += 1;
+    std::shared_ptr<DataEntry> entry;
+    entry.reset(new DataEntry(_lastUsedId, request));
+    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleMemory] Pointer Count =" + entry.use_count());
+
     request_queue.push_back(entry);
+    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleMemory] Pointer Count =" + entry.use_count());
+
   }
 }
 
-std::vector<DataEntry *> StorageModuleMemory::RQPeekAll() {
-  std::vector<DataEntry *> v;
+std::vector<std::shared_ptr<DataEntry>> StorageModuleMemory::RQPeekAll() {
+  int qSize = request_queue.size();
+  std::vector<std::shared_ptr<DataEntry>> v(qSize);
   for (int i = 0; i < request_queue.size(); ++i) {
-    v.push_back(request_queue.at(i));
+    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleMemory] RQPeekAll: Pointer Count =" + request_queue.at(i).use_count());
+
+    v[i] = request_queue.at(i);
+    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleMemory] RQPeekAll: Pointer Count =" + request_queue.at(i).use_count());
+
   }
 
   return v;
@@ -59,14 +78,16 @@ void StorageModuleMemory::RQClearAll() {
   request_queue.clear();
 }
 
-const DataEntry *StorageModuleMemory::RQPeekFront() {
-  DataEntry *front = nullptr;
+const std::shared_ptr<DataEntry> StorageModuleMemory::RQPeekFront() {
+  std::shared_ptr<DataEntry> front = nullptr;
   if (request_queue.size() > 0) {
     front = request_queue.front();
-    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQPeekFront request = " + front->getData());
+    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQPeekFront: request = " + front->getData());
   } else {
-    _logger->log(LogLevel::WARNING, "[Countly][StorageModuleMemory] RQPeekFront Request queue is empty.");
+    _logger->log(LogLevel::WARNING, "[Countly][StorageModuleMemory] RQPeekFront: Request queue is empty.");
   }
+
+  _logger->log(LogLevel::WARNING, "[Countly][StorageModuleMemory] RQPeekFront: Pointer Count =" + front.use_count());
 
   return front;
 }

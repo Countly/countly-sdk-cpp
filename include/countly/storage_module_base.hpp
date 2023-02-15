@@ -44,9 +44,9 @@ public:
   virtual int RQCount() = 0;
   virtual void RQClearAll() = 0;
   virtual void RQRemoveFront() = 0;
-  const virtual DataEntry *RQPeekFront() = 0;
-  virtual std::vector<DataEntry *> RQPeekAll() = 0;
-  virtual void RQRemoveFront(const DataEntry *request) = 0;
+  const virtual std::shared_ptr<DataEntry> RQPeekFront() = 0;
+  virtual std::vector<std::shared_ptr<DataEntry>> RQPeekAll() = 0;
+  virtual void RQRemoveFront(std::shared_ptr<DataEntry> request) = 0;
   virtual void RQInsertAtEnd(const std::string &request) = 0;
 };
 

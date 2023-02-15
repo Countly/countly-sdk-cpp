@@ -65,7 +65,7 @@ void validateRQRemoveFront(StorageModuleBase *storageModule) {
   CHECK(storageModule->RQCount() == 1);
 
   // Try to remove front request by providing a wrong request
-  const DataEntry *request = nullptr;
+  std::shared_ptr<DataEntry> request = nullptr;
   storageModule->RQRemoveFront(request);
   CHECK(storageModule->RQCount() == 1);
 
@@ -77,8 +77,16 @@ void validateRQRemoveFront(StorageModuleBase *storageModule) {
   storageModule->RQInsertAtEnd("request 3");
   CHECK(storageModule->RQCount() == 3);
 
+std::vector<std::shared_ptr<DataEntry>>requests = storageModule->RQPeekAll();
+  CHECK(requests[0]->getData() == "request 1");
+  CHECK(requests[1]->getData() == "request 2");
+  CHECK(requests[2]->getData() == "request 3");
+  CHECK(requests[0]->getId() > 0);
+  CHECK((requests[0]->getId() + 1) == requests[1]->getId());
+  CHECK((requests[1]->getId() + 1) == requests[2]->getId());
+
   // Try to remove the request from the queue which isn't on the front.
-  request = new DataEntry(0, "test");
+  request.reset(new DataEntry(0, "test"));
   storageModule->RQRemoveFront(request);
   CHECK(storageModule->RQCount() == 3);
   CHECK(storageModule->RQPeekFront()->getData() == "request 1");
@@ -98,7 +106,7 @@ void validateRQRemoveFront(StorageModuleBase *storageModule) {
  * @param *storageModule: a pointer to storage module.
  */
 void RQPeakAll(StorageModuleBase *storageModule) {
-  std::vector<DataEntry *> requests = storageModule->RQPeekAll();
+  std::vector<std::shared_ptr<DataEntry>> requests = storageModule->RQPeekAll();
   CHECK(storageModule->RQCount() == 0);
   CHECK(requests.size() == 0);
 
