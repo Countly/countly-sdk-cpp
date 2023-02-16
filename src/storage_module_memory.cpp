@@ -19,7 +19,6 @@ void StorageModuleMemory::RQRemoveFront() {
   if (request_queue.size() > 0) {
     _logger->log(LogLevel::ERROR, "[Countly][StorageModuleMemory] RQRemoveFront: Pointer Count =" + request_queue.front().use_count());
     request_queue.pop_front();
-
   }
 }
 
@@ -36,7 +35,7 @@ void StorageModuleMemory::RQRemoveFront(std::shared_ptr<DataEntry> request) {
     request_queue.pop_front();
   }
 
-    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleMemory] RQRemoveFront: Pointer Count =" + request.use_count());
+  _logger->log(LogLevel::ERROR, "[Countly][StorageModuleMemory] RQRemoveFront: Pointer Count =" + request.use_count());
 }
 
 int StorageModuleMemory::RQCount() {
@@ -49,13 +48,12 @@ void StorageModuleMemory::RQInsertAtEnd(const std::string &request) {
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQInsertAtEnd request = " + request);
   if (request != "") {
     _lastUsedId += 1;
-    std::shared_ptr<DataEntry> entry;
+    std::shared_ptr<DataEntry> entry = std::make_shared<DataEntry>(_lastUsedId, request);
     entry.reset(new DataEntry(_lastUsedId, request));
     _logger->log(LogLevel::ERROR, "[Countly][StorageModuleMemory] Pointer Count =" + entry.use_count());
 
     request_queue.push_back(entry);
     _logger->log(LogLevel::ERROR, "[Countly][StorageModuleMemory] Pointer Count =" + entry.use_count());
-
   }
 }
 
@@ -67,7 +65,6 @@ std::vector<std::shared_ptr<DataEntry>> StorageModuleMemory::RQPeekAll() {
 
     v[i] = request_queue.at(i);
     _logger->log(LogLevel::ERROR, "[Countly][StorageModuleMemory] RQPeekAll: Pointer Count =" + request_queue.at(i).use_count());
-
   }
 
   return v;
