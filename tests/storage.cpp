@@ -10,6 +10,12 @@
 using namespace cly;
 using namespace std;
 
+void validateRequestsIds(std::vector<std::shared_ptr<DataEntry>> &requests, long long id) {
+  for (int i = 0; i < requests.size(); ++i) {
+    CHECK((requests[i]->getId()) == i + id);
+  }
+}
+
 /**
  * Validate method 'RQInsertAtEnd'.
  *
@@ -39,7 +45,8 @@ void addRequestTest(StorageModuleBase *storageModule) {
  */
 void validateRQPeekFront(StorageModuleBase *storageModule) {
   // Try to get the front request while the queue is empty.
-  CHECK(storageModule->RQPeekFront() == nullptr);
+  CHECK(storageModule->RQPeekFront()->getId() == -1);
+  CHECK(storageModule->RQPeekFront()->getData() == "");
   CHECK(storageModule->RQCount() == 0);
 
   storageModule->RQInsertAtEnd("request");
@@ -82,8 +89,7 @@ std::vector<std::shared_ptr<DataEntry>>requests = storageModule->RQPeekAll();
   CHECK(requests[1]->getData() == "request 2");
   CHECK(requests[2]->getData() == "request 3");
   CHECK(requests[0]->getId() > 0);
-  CHECK((requests[0]->getId() + 1) == requests[1]->getId());
-  CHECK((requests[1]->getId() + 1) == requests[2]->getId());
+  validateRequestsIds(requests, 2);
 
   // Try to remove the request from the queue which isn't on the front.
   request.reset(new DataEntry(0, "test"));
@@ -130,6 +136,8 @@ void RQPeakAll(StorageModuleBase *storageModule) {
   CHECK(requests.at(1)->getData() == "request 1");
   CHECK(requests.at(2)->getData() == "request 2");
   CHECK(requests.at(3)->getData() == "request 3");
+
+    validateRequestsIds(requests, 1);
 }
 
 /**

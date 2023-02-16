@@ -84,6 +84,7 @@ const std::shared_ptr<DataEntry> StorageModuleMemory::RQPeekFront() {
     front = request_queue.front();
     _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQPeekFront: request = " + front->getData());
   } else {
+    front.reset(new DataEntry(-1, ""));
     _logger->log(LogLevel::WARNING, "[Countly][StorageModuleMemory] RQPeekFront: Request queue is empty.");
   }
 
