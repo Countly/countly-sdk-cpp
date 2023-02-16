@@ -62,8 +62,12 @@ void validateRQPeekFront(StorageModuleBase *storageModule) {
   delete storageModule;
 }
 
+/**
+ * Validate method 'RQRemoveFront'.
+ *
+ * @param *storageModule: a pointer to storage module.
+ */
 void validateRQRemoveFront(StorageModuleBase *storageModule) {
-
   // Try to remove the front request from an empty queue.
   CHECK(storageModule->RQCount() == 0);
   storageModule->RQRemoveFront();
@@ -88,7 +92,6 @@ void validateRQRemoveFront(StorageModuleBase *storageModule) {
   CHECK(requests[0]->getData() == "request 1");
   CHECK(requests[1]->getData() == "request 2");
   CHECK(requests[2]->getData() == "request 3");
-  CHECK(requests[0]->getId() > 0);
   validateRequestsIds(requests, 2);
 
   // Try to remove the request from the queue which isn't on the front.
@@ -139,18 +142,23 @@ void RQPeakAll(StorageModuleBase *storageModule) {
 
   validateRequestsIds(requests, 1);
 
-  /* This scenario needs attention */
+  // validating 'RQPeekAll' method after inserting
   requests = storageModule->RQPeekAll(); // peaeking all requests
-  storageModule->RQClearAll(); // removing all from queue
-  CHECK(storageModule->RQCount() == 0);
-
   CHECK(requests.size() == 4);
+  CHECK(storageModule->RQCount() == 4);
   CHECK(requests.at(0)->getData() == "request");
   CHECK(requests.at(1)->getData() == "request 1");
   CHECK(requests.at(2)->getData() == "request 2");
   CHECK(requests.at(3)->getData() == "request 3");
 
   validateRequestsIds(requests, 1);
+
+  // validates 'RQPeekAll' mehtod after calling 'RQClearAll'
+  CHECK(requests.size() == 4);
+  storageModule->RQClearAll(); 
+  CHECK(storageModule->RQCount() == 0);
+  requests = storageModule->RQPeekAll();
+  CHECK(requests.size() == 0);
 }
 
 /**
@@ -159,7 +167,13 @@ void RQPeakAll(StorageModuleBase *storageModule) {
  * @param *storageModule: a pointer to storage module.
  */
 void RQClearAll(StorageModuleBase *storageModule) {
+  // Validating 'RQClearAll' and 'RQPeekAll' when queue is empty.
+  CHECK(storageModule->RQPeekAll().size() == 0);
   CHECK(storageModule->RQCount() == 0);
+  storageModule->RQClearAll();
+  CHECK(storageModule->RQCount() == 0);
+  CHECK(storageModule->RQPeekAll().size() == 0);
+
   storageModule->RQInsertAtEnd("request");
 
   CHECK(storageModule->RQCount() == 1);
@@ -174,6 +188,55 @@ void RQClearAll(StorageModuleBase *storageModule) {
 
   storageModule->RQClearAll();
   CHECK(storageModule->RQCount() == 0);
+
+  delete storageModule;
+}
+
+/**
+ * Validate method 'RQRemoveFront' with invalid request.
+ *
+ * @param *storageModule: a pointer to storage module.
+ */
+void validateInvalidRequestRemoval(StorageModuleBase *storageModule) {
+  // Try to remove front request by providing a wrong request
+  std::shared_ptr<DataEntry> request = make_shared<DataEntry>(-1, "");
+  storageModule->RQRemoveFront(request);
+  CHECK(storageModule->RQCount() == 0);
+
+  storageModule->RQInsertAtEnd("request");
+  CHECK(storageModule->RQCount() == 1);
+  storageModule->RQRemoveFront(request);
+  CHECK(storageModule->RQCount() == 1);
+
+  request = storageModule->RQPeekFront();
+  CHECK(storageModule->RQCount() == 1);
+
+  storageModule->RQRemoveFront();
+  CHECK(storageModule->RQCount() == 0);
+
+  storageModule->RQInsertAtEnd("request");
+  storageModule->RQRemoveFront(request);
+  CHECK(storageModule->RQCount() == 1);
+
+  delete storageModule;
+}
+
+/**
+ * Validate method 'RQRemoveFront' with invalid request.
+ *
+ * @param *storageModule: a pointer to storage module.
+ */
+void validateSameRequestRemove(StorageModuleBase *storageModule) {
+  storageModule->RQInsertAtEnd("request");
+  storageModule->RQInsertAtEnd("request");
+  CHECK(storageModule->RQCount() == 2);
+  CHECK(storageModule->RQPeekAll().size() == 2);
+
+  std::shared_ptr<DataEntry> front = storageModule->RQPeekFront();
+  storageModule->RQRemoveFront(front);
+  storageModule->RQRemoveFront(front);
+  CHECK(storageModule->RQCount() == 1);
+  CHECK(storageModule->RQPeekAll().size() == 1);
 
   delete storageModule;
 }
@@ -196,6 +259,10 @@ TEST_CASE("Test Memory Storage Module") {
   SUBCASE("Validate storage method RQClearAll") { RQClearAll(storageModule); }
 
   SUBCASE("Validate storage method RQPeakAll") { RQPeakAll(storageModule); }
+
+  SUBCASE("Validate removing same request multiple times") { validateSameRequestRemove(storageModule); }
+
+  SUBCASE("Validate removing request with worong id and already removed request") { validateInvalidRequestRemoval(storageModule); }
 }
 
 // TEST_CASE("Storage module tests Sqlite") {
