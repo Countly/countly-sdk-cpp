@@ -17,16 +17,25 @@ void validateRequestsIds(std::vector<std::shared_ptr<DataEntry>> &requests, long
 }
 
 /**
- * Validate method 'RQInsertAtEnd'.
+ * Validate method 'RQInsertAtEnd' with invalid request..
  *
  * @param *storageModule: a pointer to storage module.
  */
-void addRequestTest(StorageModuleBase *storageModule) {
+void validateRQInsertAtEndWithInvalidRequest(StorageModuleBase *storageModule) {
   CHECK(storageModule->RQCount() == 0);
   // Try to insert an empty request
   storageModule->RQInsertAtEnd("");
   CHECK(storageModule->RQCount() == 0);
 
+  delete storageModule;
+}
+
+/**
+ * Validate method 'RQInsertAtEnd' with valid request.
+ *
+ * @param *storageModule: a pointer to storage module.
+ */
+void validateRQInsertAtEndWithInvalidRequest(StorageModuleBase *storageModule) {
   storageModule->RQInsertAtEnd("request");
   CHECK(storageModule->RQCount() == 1);
 
@@ -39,25 +48,35 @@ void addRequestTest(StorageModuleBase *storageModule) {
 }
 
 /**
- * Validate method 'RQPeekFront'.
+ * Validate method 'RQPeekFront' with empty queue.
  *
  * @param *storageModule: a pointer to storage module.
  */
-void validateRQPeekFront(StorageModuleBase *storageModule) {
+void validateRQPeekFrontWithEmpthQueue(StorageModuleBase *storageModule) {
   // Try to get the front request while the queue is empty.
   CHECK(storageModule->RQPeekFront()->getId() == -1);
   CHECK(storageModule->RQPeekFront()->getData() == "");
   CHECK(storageModule->RQCount() == 0);
+  delete storageModule;
+}
 
+/**
+ * Validate method 'RQPeekFront' after inserting multiple requests.
+ *
+ * @param *storageModule: a pointer to storage module.
+ */
+void validateRQPeekFront(StorageModuleBase *storageModule) {
   storageModule->RQInsertAtEnd("request");
   CHECK(storageModule->RQCount() == 1);
 
   CHECK(storageModule->RQPeekFront()->getData() == "request");
+  CHECK(storageModule->RQPeekFront()->getId() == 1);
   CHECK(storageModule->RQCount() == 1);
 
   storageModule->RQInsertAtEnd("request 2");
 
   CHECK(storageModule->RQPeekFront()->getData() == "request");
+  CHECK(storageModule->RQPeekFront()->getId() == 1);
   CHECK(storageModule->RQCount() == 2);
   delete storageModule;
 }
@@ -152,13 +171,45 @@ void RQPeakAll(StorageModuleBase *storageModule) {
   CHECK(requests.at(3)->getData() == "request 3");
 
   validateRequestsIds(requests, 1);
+}
 
-  // validates 'RQPeekAll' mehtod after calling 'RQClearAll'
+/**
+ * Validate methods size of vector return by 'RQPeekAll' before and after calling 'RQClearAll'.
+ *
+ * @param *storageModule: a pointer to storage module.
+ */
+void validateRQPeekAllOnClearingQueue(StorageModuleBase *storageModule) {
+  std::vector<std::shared_ptr<DataEntry>> requests = storageModule->RQPeekAll();
+  storageModule->RQInsertAtEnd("request 1");
+  storageModule->RQInsertAtEnd("request 2");
+  storageModule->RQInsertAtEnd("request 3");
+  storageModule->RQInsertAtEnd("request 4");
+
   CHECK(requests.size() == 4);
-  storageModule->RQClearAll(); 
+  CHECK(storageModule->RQCount() == 4);
+
+  storageModule->RQClearAll();
+  CHECK(requests.size() == 4);
   CHECK(storageModule->RQCount() == 0);
+
   requests = storageModule->RQPeekAll();
   CHECK(requests.size() == 0);
+  CHECK(storageModule->RQCount() == 0);
+}
+
+/**
+ * Validate methods 'RQClearAll' and 'RQClearAll' when queue is empty.
+ *
+ * @param *storageModule: a pointer to storage module.
+ */
+void TestPeekAllAndClearAllonEmptyQueue(StorageModuleBase *storageModule) {
+  // Validating 'RQClearAll' and 'RQPeekAll' when queue is empty.
+  CHECK(storageModule->RQPeekAll().size() == 0);
+  CHECK(storageModule->RQCount() == 0);
+  storageModule->RQClearAll();
+  CHECK(storageModule->RQCount() == 0);
+  CHECK(storageModule->RQPeekAll().size() == 0);
+  delete storageModule;
 }
 
 /**
@@ -167,12 +218,6 @@ void RQPeakAll(StorageModuleBase *storageModule) {
  * @param *storageModule: a pointer to storage module.
  */
 void RQClearAll(StorageModuleBase *storageModule) {
-  // Validating 'RQClearAll' and 'RQPeekAll' when queue is empty.
-  CHECK(storageModule->RQPeekAll().size() == 0);
-  CHECK(storageModule->RQCount() == 0);
-  storageModule->RQClearAll();
-  CHECK(storageModule->RQCount() == 0);
-  CHECK(storageModule->RQPeekAll().size() == 0);
 
   storageModule->RQInsertAtEnd("request");
 
