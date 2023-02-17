@@ -73,8 +73,8 @@ void RQInsertAtEndWithRequest(StorageModuleBase *storageModule) {
  */
 void RQPeekFrontWithEmpthQueue(StorageModuleBase *storageModule) {
   // Try to get the front request while the queue is empty.
-  CHECK(storageModule->RQPeekFront()->getId() == -1);
-  CHECK(storageModule->RQPeekFront()->getData() == "");
+  validateDataEntry(storageModule->RQPeekFront(), -1, "");
+
   validateSizes(storageModule, 0);
 
   delete storageModule;
@@ -441,6 +441,7 @@ void RQPeakAll_WithMultipleRequests(StorageModuleBase *storageModule) {
   requests = storageModule->RQPeekAll();
   validateSizes(storageModule, 1);
   CHECK(requests.size() == 1);
+ 
   validateDataEntry(requests.at(0), 1, "request");
 
   storageModule->RQInsertAtEnd("request 1");
@@ -546,7 +547,7 @@ TEST_CASE("Test Memory Storage Module") {
 }
 
 #else
-TEST_CASE("Test Storage Module") {
+TEST_CASE("Test Sqlite Storage Module") {
   test_utils::clearSDK();
   shared_ptr<cly::LoggerModule> logger;
   logger.reset(new cly::LoggerModule());
