@@ -163,27 +163,27 @@ void RQRemoveFront_WithRequestNotOnFront(StorageModuleBase *storageModule) {
   validateSizes(storageModule, 3);
 
   // different id with different data
-  std::shared_ptr<DataEntry> request = make_shared<DataEntry>(0, "request 2");
+  std::shared_ptr<DataEntry> request = make_shared<DataEntry>(1, "");
   storageModule->RQRemoveFront(request);
 
-  validateSizes(storageModule, 3);
+  validateSizes(storageModule, 2);
 
-  validateDataEntry(storageModule->RQPeekFront(), 1, "request 1");
+  validateDataEntry(storageModule->RQPeekFront(), 2, "request 2");
 
   // different id with same data
   request = make_shared<DataEntry>(0, "request 1");
   storageModule->RQRemoveFront(request);
 
-  validateSizes(storageModule, 3);
+  validateSizes(storageModule, 2);
 
-  validateDataEntry(storageModule->RQPeekFront(), 1, "request 1");
+  validateDataEntry(storageModule->RQPeekFront(), 2, "request 2");
 
   delete storageModule;
 }
 
 /**
  * Validate method 'RQRemoveFront' by providing a request with the same id as the front request id.
- * Result: The request will not remove from the queue, the front request and the size of the queue will remain the same.
+ * Result: The request will remove from the queue, the front request and the size of the queue will remain the same.
  * @param *storageModule: a pointer to the storage module.
  */
 void RQRemoveFrontWithSameId_WithRequestNotOnFront(StorageModuleBase *storageModule) {
@@ -196,17 +196,17 @@ void RQRemoveFrontWithSameId_WithRequestNotOnFront(StorageModuleBase *storageMod
   std::shared_ptr<DataEntry> request = make_shared<DataEntry>(1, "");
   storageModule->RQRemoveFront(request);
 
-  validateSizes(storageModule, 3);
+  validateSizes(storageModule, 2);
   CHECK(storageModule->RQPeekFront().get() != request.get());
-  validateDataEntry(storageModule->RQPeekFront(), 1, "request 1");
+  validateDataEntry(storageModule->RQPeekFront(), 2, "request 2");
 
   // same id with same data
   request = make_shared<DataEntry>(1, "request 1");
   storageModule->RQRemoveFront(request);
 
-  validateSizes(storageModule, 3);
+  validateSizes(storageModule, 2);
   CHECK(storageModule->RQPeekFront().get() != request.get());
-  validateDataEntry(storageModule->RQPeekFront(), 1, "request 1");
+  validateDataEntry(storageModule->RQPeekFront(), 2, "request 2");
 
   delete storageModule;
 }
