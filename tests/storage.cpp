@@ -441,7 +441,7 @@ void RQPeakAll_WithMultipleRequests(StorageModuleBase *storageModule) {
   requests = storageModule->RQPeekAll();
   validateSizes(storageModule, 1);
   CHECK(requests.size() == 1);
-  CHECK(requests.at(0)->getData() == "request");
+  validateDataEntry(requests.at(0), 1, "request");
 
   storageModule->RQInsertAtEnd("request 1");
   storageModule->RQInsertAtEnd("request 2");
