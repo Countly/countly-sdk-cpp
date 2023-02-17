@@ -13,23 +13,23 @@ using namespace std;
 /**
  * Validates request.
  */
-void validateRequest(std::shared_ptr<DataEntry> front, long long id, std::string data) {
-  CHECK(front->getId() == id);
-  CHECK(front->getData() == data);
+void validateSizes(StorageModuleBase *storageModule, long long size) {
+  CHECK(storageModule->RQCount() == size);
+  CHECK(storageModule->RQPeekAll().size() == size);
 }
 
 /**
- * Validates queue front request.
+ * Validates request.
  */
-void validateFrontRequest(StorageModuleBase *storageModule, std::shared_ptr<DataEntry> front) {
-  CHECK(storageModule->RQPeekFront().get() == front.get());
-  CHECK(storageModule->RQPeekFront()->getId() == front->getId());
-  CHECK(storageModule->RQPeekFront()->getData() == front->getData());
+void validateDataEntry(std::shared_ptr<DataEntry> testedEntry, long long id, std::string data) {
+  CHECK(testedEntry->getId() == id);
+  CHECK(testedEntry->getData() == data);
 }
+
 /**
  * Validates ids of all requests in vector.
  */
-void validateRequestsIds(std::vector<std::shared_ptr<DataEntry>> &requests, long long id) {
+void validateRequestIds(std::vector<std::shared_ptr<DataEntry>> &requests, long long id) {
   for (int i = 0; i < requests.size(); ++i) {
     CHECK((requests[i]->getId()) == i + id);
   }
@@ -44,7 +44,7 @@ void RQInsertAtEndWithInvalidRequest(StorageModuleBase *storageModule) {
   CHECK(storageModule->RQCount() == 0);
   // Try to insert an empty request
   storageModule->RQInsertAtEnd("");
-  CHECK(storageModule->RQCount() == 0);
+  validateSizes(storageModule, 0);
 
   delete storageModule;
 }
@@ -61,7 +61,7 @@ void RQInsertAtEndWithRequest(StorageModuleBase *storageModule) {
   storageModule->RQInsertAtEnd("request 1");
   storageModule->RQInsertAtEnd("request 2");
   storageModule->RQInsertAtEnd("request 3");
-  CHECK(storageModule->RQCount() == 4);
+  validateSizes(storageModule, 4);
 
   delete storageModule;
 }
@@ -75,7 +75,8 @@ void RQPeekFrontWithEmpthQueue(StorageModuleBase *storageModule) {
   // Try to get the front request while the queue is empty.
   CHECK(storageModule->RQPeekFront()->getId() == -1);
   CHECK(storageModule->RQPeekFront()->getData() == "");
-  CHECK(storageModule->RQCount() == 0);
+  validateSizes(storageModule, 0);
+
   delete storageModule;
 }
 
@@ -88,16 +89,16 @@ void RQPeekFront(StorageModuleBase *storageModule) {
   storageModule->RQInsertAtEnd("request");
   CHECK(storageModule->RQCount() == 1);
 
-  validateRequest(storageModule->RQPeekFront(), 1, "request");
+  validateDataEntry(storageModule->RQPeekFront(), 1, "request");
 
   CHECK(storageModule->RQCount() == 1);
 
   storageModule->RQInsertAtEnd("request 2");
 
-  CHECK(storageModule->RQPeekFront()->getData() == "request");
-  CHECK(storageModule->RQPeekFront()->getId() == 1);
+  validateDataEntry(storageModule->RQPeekFront(), 1, "request");
 
-  CHECK(storageModule->RQCount() == 2);
+  validateSizes(storageModule, 2);
+
   delete storageModule;
 }
 
@@ -107,7 +108,8 @@ void RQPeekFront(StorageModuleBase *storageModule) {
  * @param *storageModule: a pointer to the storage module.
  */
 void RQRemoveFront_WithEmptyQueue(StorageModuleBase *storageModule) {
-  CHECK(storageModule->RQCount() == 0);
+  validateSizes(storageModule, 0);
+
   storageModule->RQRemoveFront();
   delete storageModule;
 }
@@ -124,9 +126,9 @@ void RQRemoveFront_WithInvalidRequest(StorageModuleBase *storageModule) {
   // Try to remove front request by providing a wrong request
   std::shared_ptr<DataEntry> request = nullptr;
   storageModule->RQRemoveFront(request);
-  CHECK(storageModule->RQPeekFront()->getData() == "request");
-  CHECK(storageModule->RQPeekFront()->getId() == 1);
-  CHECK(storageModule->RQCount() == 1);
+
+  validateDataEntry(storageModule->RQPeekFront(), 1, "request");
+  validateSizes(storageModule, 1);
 
   storageModule->RQRemoveFront();
   CHECK(storageModule->RQCount() == 0);
@@ -140,11 +142,11 @@ void RQRemoveFront_WithInvalidRequest(StorageModuleBase *storageModule) {
  * @param *storageModule: a pointer to the storage module.
  */
 void RQRemoveFront2_WithEmptyQueue(StorageModuleBase *storageModule) {
-  CHECK(storageModule->RQCount() == 0);
+  validateSizes(storageModule, 0);
 
   storageModule->RQRemoveFront();
   storageModule->RQRemoveFront(nullptr);
-  CHECK(storageModule->RQCount() == 0);
+  validateSizes(storageModule, 0);
 
   delete storageModule;
 }
@@ -158,25 +160,23 @@ void RQRemoveFront_WithRequestNotOnFront(StorageModuleBase *storageModule) {
   storageModule->RQInsertAtEnd("request 1");
   storageModule->RQInsertAtEnd("request 2");
   storageModule->RQInsertAtEnd("request 3");
-  CHECK(storageModule->RQCount() == 3);
+  validateSizes(storageModule, 3);
 
   // different id with different data
   std::shared_ptr<DataEntry> request = make_shared<DataEntry>(0, "request 2");
   storageModule->RQRemoveFront(request);
 
-  CHECK(storageModule->RQCount() == 3);
+  validateSizes(storageModule, 3);
 
-  CHECK(storageModule->RQPeekFront()->getId() == 1);
-  CHECK(storageModule->RQPeekFront()->getData() == "request 1");
+  validateDataEntry(storageModule->RQPeekFront(), 1, "request 1");
 
   // different id with same data
   request = make_shared<DataEntry>(0, "request 1");
   storageModule->RQRemoveFront(request);
 
-  CHECK(storageModule->RQCount() == 3);
+  validateSizes(storageModule, 3);
 
-  CHECK(storageModule->RQPeekFront()->getId() == 1);
-  CHECK(storageModule->RQPeekFront()->getData() == "request 1");
+  validateDataEntry(storageModule->RQPeekFront(), 1, "request 1");
 
   delete storageModule;
 }
@@ -190,27 +190,23 @@ void RQRemoveFrontWithSameId_WithRequestNotOnFront(StorageModuleBase *storageMod
   storageModule->RQInsertAtEnd("request 1");
   storageModule->RQInsertAtEnd("request 2");
   storageModule->RQInsertAtEnd("request 3");
-  CHECK(storageModule->RQCount() == 3);
+  validateSizes(storageModule, 3);
 
   // same id with different data
   std::shared_ptr<DataEntry> request = make_shared<DataEntry>(1, "");
   storageModule->RQRemoveFront(request);
 
-  CHECK(storageModule->RQCount() == 3);
-
+  validateSizes(storageModule, 3);
   CHECK(storageModule->RQPeekFront().get() != request.get());
-  CHECK(storageModule->RQPeekFront()->getId() == 1);
-  CHECK(storageModule->RQPeekFront()->getData() == "request 1");
+  validateDataEntry(storageModule->RQPeekFront(), 1, "request 1");
 
   // same id with same data
   request = make_shared<DataEntry>(1, "request 1");
   storageModule->RQRemoveFront(request);
 
-  CHECK(storageModule->RQCount() == 3);
-
+  validateSizes(storageModule, 3);
   CHECK(storageModule->RQPeekFront().get() != request.get());
-  CHECK(storageModule->RQPeekFront()->getId() == 1);
-  CHECK(storageModule->RQPeekFront()->getData() == "request 1");
+  validateDataEntry(storageModule->RQPeekFront(), 1, "request 1");
 
   delete storageModule;
 }
@@ -223,19 +219,17 @@ void RQRemoveFrontWithSameId_WithRequestNotOnFront(StorageModuleBase *storageMod
 void RQRemoveFront_WithRequestOnFront(StorageModuleBase *storageModule) {
   storageModule->RQInsertAtEnd("request 1");
   storageModule->RQInsertAtEnd("request 2");
-  CHECK(storageModule->RQCount() == 2);
+  validateSizes(storageModule, 2);
 
   std::shared_ptr<DataEntry> request = storageModule->RQPeekFront();
   CHECK(storageModule->RQPeekFront().get() == request.get());
-  CHECK(storageModule->RQPeekFront()->getId() == 1);
-  CHECK(storageModule->RQPeekFront()->getData() == "request 1");
+  validateDataEntry(storageModule->RQPeekFront(), 1, "request 1");
 
   storageModule->RQRemoveFront(request);
-  CHECK(storageModule->RQCount() == 1);
+  validateSizes(storageModule, 1);
 
   CHECK(storageModule->RQPeekFront().get() != request.get());
-  CHECK(storageModule->RQPeekFront()->getId() == 2);
-  CHECK(storageModule->RQPeekFront()->getData() == "request 2");
+  validateDataEntry(storageModule->RQPeekFront(), 2, "request 2");
 
   delete storageModule;
 }
@@ -249,30 +243,28 @@ void RQRemoveFrontOnEmptyQueue_WithInvalidRequest(StorageModuleBase *storageModu
   // Try to remove front request by providing a wrong request
   std::shared_ptr<DataEntry> request = make_shared<DataEntry>(-1, "");
   storageModule->RQRemoveFront(request);
-  CHECK(storageModule->RQCount() == 0);
+  validateSizes(storageModule, 0);
 
   storageModule->RQInsertAtEnd("request");
   CHECK(storageModule->RQPeekFront().get() != request.get());
-  CHECK(storageModule->RQPeekFront()->getId() == 1);
-  CHECK(storageModule->RQPeekFront()->getData() == "request");
+  validateDataEntry(storageModule->RQPeekFront(), 1, "request");
 
-  CHECK(storageModule->RQCount() == 1);
+  validateSizes(storageModule, 1);
   storageModule->RQRemoveFront(request);
-  CHECK(storageModule->RQCount() == 1);
+  validateSizes(storageModule, 1);
 
   request = storageModule->RQPeekFront();
-  CHECK(storageModule->RQCount() == 1);
+  validateSizes(storageModule, 1);
 
   storageModule->RQRemoveFront();
-  CHECK(storageModule->RQCount() == 0);
+  validateSizes(storageModule, 0);
 
   storageModule->RQInsertAtEnd("request");
   CHECK(storageModule->RQPeekFront().get() != request.get());
-  CHECK(storageModule->RQPeekFront()->getId() == 2);
-  CHECK(storageModule->RQPeekFront()->getData() == "request");
+  validateDataEntry(storageModule->RQPeekFront(), 2, "request");
 
   storageModule->RQRemoveFront(request);
-  CHECK(storageModule->RQCount() == 1);
+  validateSizes(storageModule, 1);
 
   delete storageModule;
 }
@@ -285,21 +277,18 @@ void RQRemoveFrontOnEmptyQueue_WithInvalidRequest(StorageModuleBase *storageModu
 void RQRemove_WithSameRequestTwice(StorageModuleBase *storageModule) {
   storageModule->RQInsertAtEnd("request");
   storageModule->RQInsertAtEnd("request");
-  CHECK(storageModule->RQCount() == 2);
-  CHECK(storageModule->RQPeekAll().size() == 2);
+  validateSizes(storageModule, 2);
 
   std::shared_ptr<DataEntry> front = storageModule->RQPeekFront();
-  validateFrontRequest(storageModule, front);
+  validateDataEntry(storageModule->RQPeekFront(), 1, "request");
 
   storageModule->RQRemoveFront(front);
 
-  CHECK(storageModule->RQCount() == 1);
-  CHECK(storageModule->RQPeekAll().size() == 1);
+  validateSizes(storageModule, 1);
 
   storageModule->RQRemoveFront(front);
 
-  CHECK(storageModule->RQCount() == 1);
-  CHECK(storageModule->RQPeekAll().size() == 1);
+  validateSizes(storageModule, 1);
 
   delete storageModule;
 }
@@ -309,20 +298,20 @@ void RQRemove_WithSameRequestTwice(StorageModuleBase *storageModule) {
  * Result: Request will remove from the front of the queue.
  * @param *storageModule: a pointer to the storage module.
  */
-void RQRemoveFront2(StorageModuleBase *storageModule) {
+void RQRemoveFrontWithoutRequestParam(StorageModuleBase *storageModule) {
   storageModule->RQInsertAtEnd("request 1");
   storageModule->RQInsertAtEnd("request 2");
   storageModule->RQInsertAtEnd("request 3");
-  CHECK(storageModule->RQCount() == 3);
+  validateSizes(storageModule, 3);
 
   std::shared_ptr<DataEntry> request = storageModule->RQPeekFront();
-  validateFrontRequest(storageModule, request);
+  validateDataEntry(storageModule->RQPeekFront(), 1, "request 1");
 
   storageModule->RQRemoveFront();
-  CHECK(storageModule->RQCount() == 2);
+  validateSizes(storageModule, 2);
 
   CHECK(storageModule->RQPeekFront().get() != request.get());
-  validateRequest(storageModule->RQPeekFront(), 2, "request 2");
+  validateDataEntry(storageModule->RQPeekFront(), 2, "request 2");
 
   delete storageModule;
 }
@@ -333,10 +322,10 @@ void RQRemoveFront2(StorageModuleBase *storageModule) {
  * @param *storageModule: a pointer to the storage module.
  */
 void RQPeakAll_WithEmptyQueue(StorageModuleBase *storageModule) {
-  CHECK(storageModule->RQCount() == 0);
+  validateSizes(storageModule, 0);
 
   std::vector<std::shared_ptr<DataEntry>> requests = storageModule->RQPeekAll();
-  CHECK(storageModule->RQCount() == 0);
+  validateSizes(storageModule, 0);
   CHECK(requests.size() == 0);
 
   delete storageModule;
@@ -351,20 +340,20 @@ void RQPeakAll_WithRemovingFrontRequest(StorageModuleBase *storageModule) {
   std::vector<std::shared_ptr<DataEntry>> requests;
 
   storageModule->RQInsertAtEnd("request");
-  CHECK(storageModule->RQCount() == 1);
+  validateSizes(storageModule, 1);
 
   requests = storageModule->RQPeekAll();
-  CHECK(storageModule->RQCount() == 1);
+  validateSizes(storageModule, 1);
   CHECK(requests.size() == 1);
 
   CHECK(requests.at(0).get() == storageModule->RQPeekFront().get());
-  validateFrontRequest(storageModule, requests.at(0));
+  validateDataEntry(storageModule->RQPeekFront(), 1, "request");
 
   storageModule->RQRemoveFront();
   CHECK(requests.size() == 1);
 
   requests = storageModule->RQPeekAll();
-  CHECK(storageModule->RQCount() == 0);
+  validateSizes(storageModule, 0);
   CHECK(requests.size() == 0);
 
   delete storageModule;
@@ -381,7 +370,7 @@ void RQPeakAll_WithFrontRequest(StorageModuleBase *storageModule) {
   requests = storageModule->RQPeekAll();
   CHECK(requests.size() == 1);
 
-  validateFrontRequest(storageModule, requests.at(0));
+  validateDataEntry(storageModule->RQPeekFront(), 1, "request 1");
 
   delete storageModule;
 }
@@ -398,23 +387,23 @@ void RQPeakAll_OnNonEmptyQueueAfterClearAll(StorageModuleBase *storageModule) {
   storageModule->RQInsertAtEnd("request 2");
   storageModule->RQInsertAtEnd("request 3");
 
-  CHECK(storageModule->RQCount() == 4);
+  validateSizes(storageModule, 4);
 
   requests = storageModule->RQPeekAll();
-  CHECK(storageModule->RQCount() == 4);
+  validateSizes(storageModule, 4);
   CHECK(requests.size() == 4);
 
-  validateRequest(requests.at(0), 1, "request");
-  validateRequest(requests.at(1), 2, "request 1");
-  validateRequest(requests.at(2), 3, "request 2");
-  validateRequest(requests.at(3), 4, "request 3");
+  validateDataEntry(requests.at(0), 1, "request");
+  validateDataEntry(requests.at(1), 2, "request 1");
+  validateDataEntry(requests.at(2), 3, "request 2");
+  validateDataEntry(requests.at(3), 4, "request 3");
 
-  validateRequestsIds(requests, 1);
+  validateRequestIds(requests, 1);
 
   storageModule->RQClearAll();
   requests = storageModule->RQPeekAll();
   CHECK(requests.size() == 0);
-  CHECK(storageModule->RQCount() == 0);
+  validateSizes(storageModule, 0);
 
   delete storageModule;
 }
@@ -426,14 +415,14 @@ void RQPeakAll_OnNonEmptyQueueAfterClearAll(StorageModuleBase *storageModule) {
  */
 void RQPeakAll_WithEmptyQueueAndClearAll(StorageModuleBase *storageModule) {
   std::vector<std::shared_ptr<DataEntry>> requests;
-  CHECK(storageModule->RQCount() == 0);
+  validateSizes(storageModule, 0);
   requests = storageModule->RQPeekAll();
   CHECK(requests.size() == 0);
 
   storageModule->RQClearAll();
   requests = storageModule->RQPeekAll();
   CHECK(requests.size() == 0);
-  CHECK(storageModule->RQCount() == 0);
+  validateSizes(storageModule, 0);
 
   delete storageModule;
 }
@@ -447,39 +436,38 @@ void RQPeakAll_WithMultipleRequests(StorageModuleBase *storageModule) {
   std::vector<std::shared_ptr<DataEntry>> requests;
 
   storageModule->RQInsertAtEnd("request");
-  CHECK(storageModule->RQCount() == 1);
+  validateSizes(storageModule, 1);
 
   requests = storageModule->RQPeekAll();
-  CHECK(storageModule->RQCount() == 1);
+  validateSizes(storageModule, 1);
   CHECK(requests.size() == 1);
   CHECK(requests.at(0)->getData() == "request");
 
   storageModule->RQInsertAtEnd("request 1");
   storageModule->RQInsertAtEnd("request 2");
   storageModule->RQInsertAtEnd("request 3");
-  CHECK(storageModule->RQCount() == 4);
+  validateSizes(storageModule, 4);
 
   requests = storageModule->RQPeekAll();
-  CHECK(storageModule->RQCount() == 4);
-  CHECK(requests.size() == 4);
+  validateSizes(storageModule, 4);
 
-  validateRequest(requests.at(0), 1, "request");
-  validateRequest(requests.at(1), 2, "request 1");
-  validateRequest(requests.at(2), 3, "request 2");
-  validateRequest(requests.at(3), 4, "request 3");
+  validateDataEntry(requests.at(0), 1, "request");
+  validateDataEntry(requests.at(1), 2, "request 1");
+  validateDataEntry(requests.at(2), 3, "request 2");
+  validateDataEntry(requests.at(3), 4, "request 3");
 
-  validateRequestsIds(requests, 1);
+  validateRequestIds(requests, 1);
 
   // validating 'RQPeekAll' method after inserting
   requests = storageModule->RQPeekAll(); // peaeking all requests
   CHECK(requests.size() == 4);
-  CHECK(storageModule->RQCount() == 4);
-  validateRequest(requests.at(0), 1, "request");
-  validateRequest(requests.at(1), 2, "request 1");
-  validateRequest(requests.at(2), 3, "request 2");
-  validateRequest(requests.at(3), 4, "request 3");
+  validateSizes(storageModule, 4);
+  validateDataEntry(requests.at(0), 1, "request");
+  validateDataEntry(requests.at(1), 2, "request 1");
+  validateDataEntry(requests.at(2), 3, "request 2");
+  validateDataEntry(requests.at(3), 4, "request 3");
 
-  validateRequestsIds(requests, 1);
+  validateRequestIds(requests, 1);
 }
 
 /**
@@ -488,9 +476,9 @@ void RQPeakAll_WithMultipleRequests(StorageModuleBase *storageModule) {
  * @param *storageModule: a pointer to the storage module.
  */
 void RQClearAll_WithEmptyQueue(StorageModuleBase *storageModule) {
-  CHECK(storageModule->RQCount() == 0);
+  validateSizes(storageModule, 0);
   storageModule->RQClearAll();
-  CHECK(storageModule->RQCount() == 0);
+  validateSizes(storageModule, 0);
 
   delete storageModule;
 }
@@ -504,26 +492,24 @@ void RQClearAll_WithNonEmptyQueue(StorageModuleBase *storageModule) {
 
   storageModule->RQInsertAtEnd("request");
   CHECK(storageModule->RQCount() == 1);
-  CHECK(storageModule->RQPeekAll().size() == 1);
 
   storageModule->RQClearAll();
-  CHECK(storageModule->RQCount() == 0);
+  validateSizes(storageModule, 0);
   CHECK(storageModule->RQPeekAll().size() == 0);
 
   storageModule->RQInsertAtEnd("request 1");
   storageModule->RQInsertAtEnd("request 2");
   storageModule->RQInsertAtEnd("request 3");
   CHECK(storageModule->RQCount() == 3);
-  CHECK(storageModule->RQPeekAll().size() == 3);
 
   storageModule->RQClearAll();
-  CHECK(storageModule->RQCount() == 0);
+  validateSizes(storageModule, 0);
   CHECK(storageModule->RQPeekAll().size() == 0);
 
   delete storageModule;
 }
 #ifndef COUNTLY_USE_SQLITE
-TEST_CASE("Test Memory Storage Module: Validate 'RQInsertAtEnd' method") {
+TEST_CASE("Test Memory Storage Module") {
   test_utils::clearSDK();
   shared_ptr<cly::LoggerModule> logger;
   logger.reset(new cly::LoggerModule());
@@ -546,7 +532,7 @@ TEST_CASE("Test Memory Storage Module: Validate 'RQInsertAtEnd' method") {
   SUBCASE("Validate method 'RQRemoveFront' by providing a valid request.") { RQRemoveFront_WithRequestOnFront(storageModule); }
   SUBCASE("Validate method 'RQRemoveFront' with an invalid request when the request queue is empty.") { RQRemoveFrontOnEmptyQueue_WithInvalidRequest(storageModule); }
   SUBCASE("Validate method 'RQRemoveFront' by removing the same request twice.") { RQRemove_WithSameRequestTwice(storageModule); }
-  SUBCASE("Validate method 'RQRemoveFront().") { RQRemoveFront2(storageModule); }
+  SUBCASE("Validate method 'RQRemoveFront().") { RQRemoveFrontWithoutRequestParam(storageModule); }
 
   SUBCASE("Validate method 'RQPeekAll' with an empty queue.") { RQPeakAll_WithEmptyQueue(storageModule); }
   SUBCASE("Validate method 'RQPeekAll' after removing the front request.") { RQPeakAll_WithRemovingFrontRequest(storageModule); }
@@ -560,7 +546,7 @@ TEST_CASE("Test Memory Storage Module: Validate 'RQInsertAtEnd' method") {
 }
 
 #else
-TEST_CASE("Test Storage Module: Validate 'RQInsertAtEnd' method") {
+TEST_CASE("Test Storage Module") {
   test_utils::clearSDK();
   shared_ptr<cly::LoggerModule> logger;
   logger.reset(new cly::LoggerModule());
@@ -583,7 +569,7 @@ TEST_CASE("Test Storage Module: Validate 'RQInsertAtEnd' method") {
   SUBCASE("Validate method 'RQRemoveFront' by providing a valid request.") { RQRemoveFront_WithRequestOnFront(storageModule); }
   SUBCASE("Validate method 'RQRemoveFront' with an invalid request when the request queue is empty.") { RQRemoveFrontOnEmptyQueue_WithInvalidRequest(storageModule); }
   SUBCASE("Validate method 'RQRemoveFront' by removing the same request twice.") { RQRemove_WithSameRequestTwice(storageModule); }
-  SUBCASE("Validate method 'RQRemoveFront().") { RQRemoveFront2(storageModule); }
+  SUBCASE("Validate method 'RQRemoveFront().") { RQRemoveFrontWithoutRequestParam(storageModule); }
 
   SUBCASE("Validate method 'RQPeekAll' with an empty queue.") { RQPeakAll_WithEmptyQueue(storageModule); }
   SUBCASE("Validate method 'RQPeekAll' after removing the front request.") { RQPeakAll_WithRemovingFrontRequest(storageModule); }

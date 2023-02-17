@@ -327,7 +327,6 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   session_params["app_key"] = app_key;
 
 #ifdef COUNTLY_USE_SQLITE
-  // TODO storageModule.reset(new StorageModuleDB(configuration, logger));
   storageModule.reset(new StorageModuleMemory(configuration, logger));
 #else
   storageModule.reset(new StorageModuleMemory(configuration, logger));

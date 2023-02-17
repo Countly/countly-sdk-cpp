@@ -23,6 +23,7 @@ void StorageModuleMemory::RQRemoveFront() {
 
 void StorageModuleMemory::RQRemoveFront(std::shared_ptr<DataEntry> request) {
   if (request == nullptr) {
+    _logger->log(LogLevel::WARNING, "[Countly][StorageModuleMemory] RQRemoveFront request = null");
     return;
   }
 
@@ -45,10 +46,13 @@ void StorageModuleMemory::RQInsertAtEnd(const std::string &request) {
     std::shared_ptr<DataEntry> entry = std::make_shared<DataEntry>(_lastUsedId, request);
     entry.reset(new DataEntry(_lastUsedId, request));
     request_queue.push_back(entry);
+  } else {
+    _logger->log(LogLevel::WARNING, "[Countly][StorageModuleMemory] RQInsertAtEnd request is empty");
   }
 }
 
 std::vector<std::shared_ptr<DataEntry>> StorageModuleMemory::RQPeekAll() {
+  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQPeekAll");
   int qSize = request_queue.size();
   std::vector<std::shared_ptr<DataEntry>> v(qSize);
   for (int i = 0; i < request_queue.size(); ++i) {
