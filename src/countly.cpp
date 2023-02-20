@@ -1,3 +1,5 @@
+#include "countly/storage_module_db.hpp"
+#include "countly/storage_module_memory.hpp"
 #include <chrono>
 #include <iomanip>
 #include <iostream>
@@ -289,6 +291,12 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
 
 void Countly::start(const std::string &app_key, const std::string &host, int port, bool start_thread) {
   mutex->lock();
+  if (is_sdk_initialized) {
+    log(LogLevel::ERROR, "[Countly][start] SDK has already been initialized, 'start' should not be called a second time!");
+    mutex->unlock();
+    return;
+  }
+
   log(LogLevel::INFO, "[Countly][start]");
 
 #ifdef COUNTLY_USE_SQLITE
@@ -324,8 +332,13 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 
   session_params["app_key"] = app_key;
 
-  storageModule.reset(new StorageModule(configuration, logger));
-  storageModule.init();
+#ifdef COUNTLY_USE_SQLITE
+  storageModule.reset(new StorageModuleMemory(configuration, logger));
+#else
+  storageModule.reset(new StorageModuleMemory(configuration, logger));
+#endif
+  storageModule->init();
+
   requestBuilder.reset(new RequestBuilder(configuration, logger));
   requestModule.reset(new RequestModule(configuration, logger, requestBuilder, storageModule));
   crash_module.reset(new cly::CrashModule(configuration, logger, requestModule, mutex));
@@ -398,12 +411,15 @@ void Countly::addEvent(const cly::Event &event) {
   }
   event_queue.push_back(event.serialize());
 #else
- addEventToSqlite(event);
+  addEventToSqlite(event);
 #endif
   mutex->unlock();
 }
+
 #ifdef COUNTLY_USE_SQLITE
 void Countly::addEventToSqlite(const cly::Event &event) {
+  log(LogLevel::DEBUG, "[Countly][addEventToSqlite]");
+
   if (database_path.empty()) {
     mutex->unlock();
     log(LogLevel::FATAL, "Cannot add event, sqlite database path is not set");
@@ -552,7 +568,6 @@ bool Countly::beginSession() {
   if (configuration->metrics.size() > 0) {
     data["metrics"] = configuration->metrics.dump();
   }
-  
 
   requestModule->addRequestToQueue(data);
   session_params.erase("user_details");
@@ -595,6 +610,7 @@ bool Countly::updateSession() {
     return false;
   }
 
+  log(LogLevel::DEBUG, "[Countly][updateSession] fetching events from storage.");
   sqlite3 *database;
   int return_value, row_count, column_count;
   char **table;
@@ -618,6 +634,8 @@ bool Countly::updateSession() {
         events.push_back(nlohmann::json::parse(table[(event_index * column_count) + 1]));
       }
 
+      log(LogLevel::DEBUG, "[Countly][updateSession] events count = " + events.size());
+
       event_id_stream.seekp(-1, event_id_stream.cur);
       event_id_stream << ')';
       event_ids = event_id_stream.str();
@@ -629,7 +647,6 @@ bool Countly::updateSession() {
   }
   sqlite3_close(database);
 #endif
-
   mutex->unlock();
   auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
   mutex->lock();
@@ -653,6 +670,7 @@ bool Countly::updateSession() {
   event_queue.clear();
 #else
   if (!event_ids.empty()) {
+    log(LogLevel::DEBUG, "[Countly][updateSession] Removing events from storage: " + event_ids);
     // we attempt to clear the events in the database only if there were any events collected previously
     return_value = sqlite3_open(database_path.c_str(), &database);
     if (return_value == SQLITE_OK) {
@@ -701,6 +719,8 @@ std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chro
 
 #ifdef COUNTLY_USE_SQLITE
 void Countly::setDatabasePath(const std::string &path) {
+  log(LogLevel::INFO, "[Countly][setDatabasePath] path = " + path);
+
   sqlite3 *database;
   int return_value, row_count, column_count;
   char **table;

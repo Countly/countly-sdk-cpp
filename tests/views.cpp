@@ -42,6 +42,9 @@ void validateViewSegmentation(nlohmann::json e, std::string name, std::string &v
 
 TEST_CASE("recording views") {
   Countly &ct = Countly::getInstance();
+  ct.SetPath("databaseFileName.db");
+  ct.setDeviceID("test-device-id");
+  ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, false);
 
   /*
    * It validates the views recorded without segmentation.

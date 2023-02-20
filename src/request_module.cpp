@@ -1,6 +1,5 @@
 #include "countly/request_module.hpp"
 #include "countly/request_builder.hpp"
-#include "countly/storage_module.hpp"
 
 #include <chrono>
 #include <deque>
@@ -30,8 +29,9 @@ public:
   std::shared_ptr<CountlyConfiguration> _configuration;
   std::shared_ptr<LoggerModule> _logger;
   std::shared_ptr<RequestBuilder> _requestBuilder;
-  std::shared_ptr<StorageModule> _storageModule;
-  RequestModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModule> storageModule ) : _configuration(config), _logger(logger), _requestBuilder(requestBuilder), _storageModule(storageModule) {
+  std::shared_ptr<StorageModuleBase> _storageModule;
+  RequestModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule)
+      : _configuration(config), _logger(logger), _requestBuilder(requestBuilder), _storageModule(storageModule) {
     if (_configuration->serverUrl.find("http://") == 0) {
       use_https = false;
     } else if (_configuration->serverUrl.find("https://") == 0) {
@@ -75,8 +75,8 @@ public:
   }
 };
 
-RequestModule::RequestModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder) {
-  impl.reset(new RequestModuleImpl(config, logger, requestBuilder));
+RequestModule::RequestModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule) {
+  impl.reset(new RequestModuleImpl(config, logger, requestBuilder, storageModule));
 
   impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] Initialized"));
 
@@ -87,9 +87,9 @@ RequestModule::RequestModule(std::shared_ptr<CountlyConfiguration> config, std::
 
 RequestModule::~RequestModule() {
   impl.reset();
-#if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP) 
+#if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
   curl_global_cleanup();
-#endif 
+#endif
 }
 
 static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n_bytes, std::string *body) {
@@ -104,8 +104,8 @@ void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &
     impl->_storageModule->RQRemoveFront();
   }
 
-  const std::string &request = impl->_requestBuilder->buildRequest(data);
-    impl->_storageModule->RQInsertAtEnd(request);
+  const std::string request = impl->_requestBuilder->buildRequest(data);
+  impl->_storageModule->RQInsertAtEnd(request);
 }
 
 void RequestModule::clearRequestQueue() { impl->_storageModule->RQClearAll(); }
@@ -124,16 +124,16 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
 
   while (true) {
     mutex->lock();
-    if (impl->_storageModule->RQCount() == 0 ) {
+    if (impl->_storageModule->RQCount() == 0) {
       // stop sending requests once the queue is empty
       mutex->unlock();
       break;
     }
 
-    std::string data = impl->_storageModule->RQPeekFront();
-    mutex->unlock();
 
-    HTTPResponse response = sendHTTP("/i", data);
+    std::shared_ptr<DataEntry> data = impl->_storageModule->RQPeekFront();
+    mutex->unlock();
+    HTTPResponse response = sendHTTP("/i", data->getData());
 
     mutex->lock();
     if (!response.success) {
@@ -142,11 +142,9 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
       break;
     }
 
-    if (impl->_storageModule->RQPeekFront() == data) {
-      // we pop the front only if it is still the same request
-      // the queue might have changed while we were sending the request
-      impl->_storageModule->RQRemoveFront();
-    }
+    // we pop the front only if it is still the same request
+    // the queue might have changed while we were sending the request
+    impl->_storageModule->RQRemoveFront(data);
 
     mutex->unlock();
   }
