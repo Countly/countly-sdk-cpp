@@ -290,6 +290,10 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
 #pragma endregion Device Id
 
 void Countly::start(const std::string &app_key, const std::string &host, int port, bool start_thread) {
+  if (is_sdk_initialized) {
+    return;
+  }
+
   mutex->lock();
   log(LogLevel::INFO, "[Countly][start]");
 
