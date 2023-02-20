@@ -290,11 +290,13 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
 #pragma endregion Device Id
 
 void Countly::start(const std::string &app_key, const std::string &host, int port, bool start_thread) {
+  mutex->lock();
   if (is_sdk_initialized) {
+    log(LogLevel::ERROR, "[Countly][start] SDK has already been initialized, 'start' should not be called a second time!");
+    mutex->unlock();
     return;
   }
 
-  mutex->lock();
   log(LogLevel::INFO, "[Countly][start]");
 
 #ifdef COUNTLY_USE_SQLITE
