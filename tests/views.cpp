@@ -42,6 +42,8 @@ void validateViewSegmentation(nlohmann::json e, std::string name, std::string &v
 
 TEST_CASE("recording views") {
   Countly &ct = Countly::getInstance();
+  std::shared_ptr<cly::LoggerModule> logger = std::make_shared<LoggerModule>();
+  std::unique_ptr<ViewsModule> viewsModule = std::make_unique<ViewsModule>(&ct, logger);
 
   /*
    * It validates the views recorded without segmentation.
@@ -54,7 +56,7 @@ TEST_CASE("recording views") {
       unsigned int eventSize = 0;
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
-      std::string eid = ct.views().openView("view1");
+      std::string eid = viewsModule->openView("view1");
       eventSize++;
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
@@ -65,7 +67,7 @@ TEST_CASE("recording views") {
       validateViewSegmentation(e, "view1", eid, 0, true, true);
 
       std::this_thread::sleep_for(3s);
-      ct.views().closeViewWithName("view1");
+      viewsModule->closeViewWithName("view1");
       eventSize++;
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
@@ -83,7 +85,7 @@ TEST_CASE("recording views") {
     SUBCASE("with id") {
       unsigned int eventSize = ct.debugReturnStateOfEQ().size();
 
-      std::string eid = ct.views().openView("view1");
+      std::string eid = viewsModule->openView("view1");
       eventSize++;
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
@@ -91,11 +93,11 @@ TEST_CASE("recording views") {
       std::string event = events.at(eventSize - 1);
       nlohmann::json e = nlohmann::json::parse(event);
 
-      validateViewSegmentation(e, "view1", eid, 0, true);
+      validateViewSegmentation(e, "view1", eid, 0, true, true);
 
       std::this_thread::sleep_for(2s);
 
-      ct.views().closeViewWithID(eid);
+      viewsModule->closeViewWithID(eid);
       eventSize++;
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
@@ -122,7 +124,7 @@ TEST_CASE("recording views") {
           {"time", "60"},
           {"name", "view2"},
       };
-      std::string eid = ct.views().openView("view1", segmentation);
+      std::string eid = viewsModule->openView("view1", segmentation);
       eventSize++;
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
@@ -132,14 +134,14 @@ TEST_CASE("recording views") {
       nlohmann::json e = nlohmann::json::parse(event);
       nlohmann::json s = e["segmentation"].get<nlohmann::json>();
 
-      validateViewSegmentation(e, "view2", eid, 0, true);
+      validateViewSegmentation(e, "view2", eid, 0, true, true);
 
       CHECK(s["platform"].get<std::string>() == "ubuntu");
       CHECK(s["time"].get<std::string>() == "60");
 
       std::this_thread::sleep_for(3s);
 
-      ct.views().closeViewWithName("view2");
+      viewsModule->closeViewWithName("view2");
       eventSize++;
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
@@ -158,7 +160,7 @@ TEST_CASE("recording views") {
           {"platform", "ubuntu"},
           {"time", "60"},
       };
-      std::string eid = ct.views().openView("view1", segmentation);
+      std::string eid = viewsModule->openView("view1", segmentation);
       eventSize++;
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
@@ -168,13 +170,13 @@ TEST_CASE("recording views") {
       nlohmann::json e = nlohmann::json::parse(event);
       nlohmann::json s = e["segmentation"].get<nlohmann::json>();
 
-      validateViewSegmentation(e, "view1", eid, 0, true);
+      validateViewSegmentation(e, "view1", eid, 0, true, true);
       CHECK(s["platform"].get<std::string>() == "ubuntu");
       CHECK(s["time"].get<std::string>() == "60");
 
       std::this_thread::sleep_for(1s);
 
-      ct.views().closeViewWithID(eid);
+      viewsModule->closeViewWithID(eid);
       eventSize++;
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
@@ -194,7 +196,7 @@ TEST_CASE("recording views") {
      */
     SUBCASE("with name") {
       unsigned int eventSize = ct.debugReturnStateOfEQ().size();
-      ct.views().closeViewWithName("view1");
+      viewsModule->closeViewWithName("view1");
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
     }
 
@@ -203,7 +205,7 @@ TEST_CASE("recording views") {
      */
     SUBCASE("with id") {
       unsigned int eventSize = ct.debugReturnStateOfEQ().size();
-      ct.views().closeViewWithName("event_id");
+      viewsModule->closeViewWithName("event_id");
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
     }
   }
