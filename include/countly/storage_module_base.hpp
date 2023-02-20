@@ -80,7 +80,7 @@ public:
   virtual std::vector<std::shared_ptr<DataEntry>> RQPeekAll() = 0;
 
   /**
-   * Remove front request from the request queue.
+   * Remove the front request from the request queue if provided request's id and front request's id do match.
    * @param request: a shared pointer to front request
    */
   virtual void RQRemoveFront(std::shared_ptr<DataEntry> request) = 0;
