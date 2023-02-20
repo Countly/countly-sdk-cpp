@@ -131,7 +131,7 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
     }
 
 
-    const DataEntry *data = impl->_storageModule->RQPeekFront();
+    std::shared_ptr<DataEntry> data = impl->_storageModule->RQPeekFront();
     mutex->unlock();
     HTTPResponse response = sendHTTP("/i", data->getData());
 
