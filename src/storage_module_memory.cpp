@@ -43,9 +43,12 @@ void StorageModuleMemory::RQInsertAtEnd(const std::string &request) {
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQInsertAtEnd request = " + request);
   if (request != "") {
     if (request_queue.empty()) {
-      _lastUsedId = 0;
+      // Reset '_lastUsedId' to 1 if request queue is empty.
+      _lastUsedId = 1;
+    } else {
+      _lastUsedId += 1;
     }
-    _lastUsedId += 1;
+
     std::shared_ptr<DataEntry> entry = std::make_shared<DataEntry>(_lastUsedId, request);
     entry.reset(new DataEntry(_lastUsedId, request));
     request_queue.push_back(entry);

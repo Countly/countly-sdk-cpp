@@ -74,7 +74,6 @@ void StorageModuleDB::RQRemoveFront(std::shared_ptr<DataEntry> request) {
   }
 
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront RequestID = " + request->getId());
-  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront RequestData = " + request->getData());
 
 #ifdef COUNTLY_USE_SQLITE
   sqlite3 *database;

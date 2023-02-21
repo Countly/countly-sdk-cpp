@@ -45,12 +45,6 @@ Countly &Countly::getInstance() {
 
 #ifdef COUNTLY_BUILD_TESTS
 void Countly::halt() {
-  if (_sharedInstance.get() != nullptr) {
-    if (_sharedInstance->is_sdk_initialized) {
-      _sharedInstance->requestModule->clearRequestQueue();
-    }
-  }
-
   _sharedInstance.reset(new Countly());
 }
 #endif
