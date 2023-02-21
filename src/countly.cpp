@@ -719,6 +719,7 @@ std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chro
 
 #ifdef COUNTLY_USE_SQLITE
 void Countly::setDatabasePath(const std::string &path) {
+  configuration->databasePath = path; 
   log(LogLevel::INFO, "[Countly][setDatabasePath] path = " + path);
 
   sqlite3 *database;

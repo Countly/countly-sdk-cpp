@@ -3,13 +3,14 @@
 #include "countly/countly_configuration.hpp"
 #include "countly/logger_module.hpp"
 #include "countly/storage_module_base.hpp"
-#include <deque>
 #include <memory>
 #include <string>
 
 namespace cly {
 class StorageModuleDB : public StorageModuleBase {
 private:
+  void createSchema();
+
 public:
   StorageModuleDB(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger);
   ~StorageModuleDB();
