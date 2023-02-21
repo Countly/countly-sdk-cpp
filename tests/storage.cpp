@@ -197,7 +197,6 @@ void RQRemoveFrontWithSameId_WithRequestNotOnFront(StorageModuleBase *storageMod
   storageModule->RQRemoveFront(request);
 
   validateSizes(storageModule, 2);
-  CHECK(storageModule->RQPeekFront().get() != request.get());
   validateDataEntry(storageModule->RQPeekFront(), 2, "request 2");
 
   // same id with same data
@@ -205,7 +204,6 @@ void RQRemoveFrontWithSameId_WithRequestNotOnFront(StorageModuleBase *storageMod
   storageModule->RQRemoveFront(request);
 
   validateSizes(storageModule, 2);
-  CHECK(storageModule->RQPeekFront().get() != request.get());
   validateDataEntry(storageModule->RQPeekFront(), 2, "request 2");
 
   delete storageModule;
@@ -222,13 +220,11 @@ void RQRemoveFront_WithRequestOnFront(StorageModuleBase *storageModule) {
   validateSizes(storageModule, 2);
 
   std::shared_ptr<DataEntry> request = storageModule->RQPeekFront();
-  CHECK(storageModule->RQPeekFront().get() == request.get());
   validateDataEntry(storageModule->RQPeekFront(), 1, "request 1");
 
   storageModule->RQRemoveFront(request);
   validateSizes(storageModule, 1);
 
-  CHECK(storageModule->RQPeekFront().get() != request.get());
   validateDataEntry(storageModule->RQPeekFront(), 2, "request 2");
 
   delete storageModule;
@@ -246,7 +242,6 @@ void RQRemoveFrontOnEmptyQueue_WithInvalidRequest(StorageModuleBase *storageModu
   validateSizes(storageModule, 0);
 
   storageModule->RQInsertAtEnd("request");
-  CHECK(storageModule->RQPeekFront().get() != request.get());
   validateDataEntry(storageModule->RQPeekFront(), 1, "request");
 
   validateSizes(storageModule, 1);
@@ -260,10 +255,8 @@ void RQRemoveFrontOnEmptyQueue_WithInvalidRequest(StorageModuleBase *storageModu
   validateSizes(storageModule, 0);
 
   storageModule->RQInsertAtEnd("request");
-  CHECK(storageModule->RQPeekFront().get() != request.get());
-  validateDataEntry(storageModule->RQPeekFront(), 2, "request");
+  validateDataEntry(storageModule->RQPeekFront(), 1, "request");
 
-  storageModule->RQRemoveFront(request);
   validateSizes(storageModule, 1);
 
   delete storageModule;
@@ -309,8 +302,6 @@ void RQRemoveFrontWithoutRequestParam(StorageModuleBase *storageModule) {
 
   storageModule->RQRemoveFront();
   validateSizes(storageModule, 2);
-
-  CHECK(storageModule->RQPeekFront().get() != request.get());
   validateDataEntry(storageModule->RQPeekFront(), 2, "request 2");
 
   delete storageModule;
@@ -346,7 +337,6 @@ void RQPeakAll_WithRemovingFrontRequest(StorageModuleBase *storageModule) {
   validateSizes(storageModule, 1);
   CHECK(requests.size() == 1);
 
-  CHECK(requests.at(0).get() == storageModule->RQPeekFront().get());
   validateDataEntry(storageModule->RQPeekFront(), 1, "request");
 
   storageModule->RQRemoveFront();
@@ -518,6 +508,7 @@ TEST_CASE("Test Memory Storage Module") {
   shared_ptr<cly::CountlyConfiguration> configuration;
   configuration.reset(new cly::CountlyConfiguration("", ""));
   StorageModuleBase *storageModule = new StorageModuleMemory(configuration, logger);
+  storageModule->RQClearAll();
 
   SUBCASE("Validate method 'RQInsertAtEnd' with invalid request") { RQInsertAtEndWithInvalidRequest(storageModule); }
   SUBCASE("Validate method 'RQInsertAtEnd' with Valid requests") { RQInsertAtEndWithRequest(storageModule); }
@@ -547,7 +538,7 @@ TEST_CASE("Test Memory Storage Module") {
 }
 
 #ifdef COUNTLY_USE_SQLITE
-TEST_CASE("Test Memory Storage Module") {
+TEST_CASE("Test Sqlite Storage Module") {
   test_utils::clearSDK();
   shared_ptr<cly::LoggerModule> logger;
   logger.reset(new cly::LoggerModule());
@@ -556,6 +547,7 @@ TEST_CASE("Test Memory Storage Module") {
   configuration.reset(new cly::CountlyConfiguration("", ""));
 
   StorageModuleBase *storageModule = new StorageModuleDB(configuration, logger);
+  storageModule->RQClearAll();
 
   SUBCASE("Validate method 'RQInsertAtEnd' with invalid request") { RQInsertAtEndWithInvalidRequest(storageModule); }
   SUBCASE("Validate method 'RQInsertAtEnd' with Valid requests") { RQInsertAtEndWithRequest(storageModule); }

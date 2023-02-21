@@ -42,6 +42,9 @@ long long StorageModuleMemory::RQCount() {
 void StorageModuleMemory::RQInsertAtEnd(const std::string &request) {
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQInsertAtEnd request = " + request);
   if (request != "") {
+    if (request_queue.empty()) {
+      _lastUsedId = 0;
+    }
     _lastUsedId += 1;
     std::shared_ptr<DataEntry> entry = std::make_shared<DataEntry>(_lastUsedId, request);
     entry.reset(new DataEntry(_lastUsedId, request));

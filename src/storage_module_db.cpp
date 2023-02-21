@@ -52,6 +52,8 @@ void StorageModuleDB::RQRemoveFront() {
   if (return_value == SQLITE_OK) {
     std::ostringstream sql_statement_stream;
     sql_statement_stream << "DELETE FROM Requests WHERE RequestID = ( SELECT MIN(RequestID) FROM Requests );";
+    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront SQL = " + sql_statement_stream.str());
+
     std::string sql_statement = sql_statement_stream.str();
 
     return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
@@ -72,6 +74,7 @@ void StorageModuleDB::RQRemoveFront(std::shared_ptr<DataEntry> request) {
   }
 
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront RequestID = " + request->getId());
+  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront RequestData = " + request->getData());
 
 #ifdef COUNTLY_USE_SQLITE
   sqlite3 *database;
@@ -81,6 +84,8 @@ void StorageModuleDB::RQRemoveFront(std::shared_ptr<DataEntry> request) {
   if (return_value == SQLITE_OK) {
     std::ostringstream sql_statement_stream;
     sql_statement_stream << "DELETE FROM Requests WHERE RequestID = " << request->getId() << ';';
+    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront SQL = " + sql_statement_stream.str());
+
     std::string sql_statement = sql_statement_stream.str();
 
     return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
@@ -104,9 +109,7 @@ long long StorageModuleDB::RQCount() {
   char **table;
   char *error_message;
 
-  update_failed = true;
-  return_value = sqlite3_open(database_path.c_str(), &database);
-  mutex->unlock();
+  return_value = sqlite3_open(_configuration->databasePath.c_str(), &database);
   if (return_value == SQLITE_OK) {
     return_value = sqlite3_get_table(database, "SELECT COUNT(*) FROM Requests;", &table, &row_count, &column_count, &error_message);
     if (return_value == SQLITE_OK) {
@@ -121,7 +124,7 @@ long long StorageModuleDB::RQCount() {
   sqlite3_close(database);
 #endif
 
-  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQCount requests count = " + requestCount);
+  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQCount requests count = " + std::to_string(requestCount));
   return requestCount;
 }
 
@@ -136,7 +139,6 @@ std::vector<std::shared_ptr<DataEntry>> StorageModuleDB::RQPeekAll() {
   int return_value, row_count, column_count;
   char **table;
   char *error_message;
-  std::string event_ids;
 
   return_value = sqlite3_open(_configuration->databasePath.c_str(), &database);
   if (return_value == SQLITE_OK) {
@@ -169,12 +171,17 @@ std::vector<std::shared_ptr<DataEntry>> StorageModuleDB::RQPeekAll() {
 void StorageModuleDB::RQInsertAtEnd(const std::string &request) {
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQInsertAtEnd request = " + request);
 
+  if (request == "") {
+    _logger->log(LogLevel::WARNING, "[Countly][StorageModuleMemory] RQInsertAtEnd request is empty");
+    return;
+  }
+
 #ifdef COUNTLY_USE_SQLITE
   sqlite3 *database;
   int return_value;
   char *error_message;
 
-  return_value = sqlite3_open(database_path.c_str(), &database);
+  return_value = sqlite3_open(_configuration->databasePath.c_str(), &database);
   if (return_value == SQLITE_OK) {
     std::ostringstream sql_statement_stream;
     sql_statement_stream << "INSERT INTO Requests (RequestData) VALUES('" << request << "');";
@@ -224,22 +231,24 @@ const std::shared_ptr<DataEntry> StorageModuleDB::RQPeekFront() {
   int return_value, row_count, column_count;
   char **table;
   char *error_message;
-  std::string event_ids;
 
   return_value = sqlite3_open(_configuration->databasePath.c_str(), &database);
   if (return_value == SQLITE_OK) {
     std::ostringstream sql_statement_stream;
-    sql_statement_stream << "SELECT * FROM Requests ORDER BY RequestID ASC LIMIT 1;";
+    sql_statement_stream << "SELECT RequestID, RequestData RequestData FROM Requests ORDER BY RequestID ASC LIMIT 1;";
     std::string sql_statement = sql_statement_stream.str();
 
     return_value = sqlite3_get_table(database, sql_statement.c_str(), &table, &row_count, &column_count, &error_message);
     bool no_request = (row_count == 0);
     if (return_value == SQLITE_OK && !no_request) {
 
-      std::string rqstId = table[1 * column_count];
-      std::string rqst = table[(1 * column_count) + 1];
-      DataEntry *frontEntry = new DataEntry(std::stoll(rqstId), rqst);
-      front.reset(frontEntry);
+      for (int event_index = 1; event_index < row_count + 1; event_index++) {
+        std::string rqstId = table[event_index * column_count];
+        std::string rqst = table[(event_index * column_count) + 1];
+        DataEntry *frontEntry = new DataEntry(std::stoll(rqstId), rqst);
+        _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQPeekFronts id =" + rqstId);
+        front.reset(frontEntry);
+      }
     } else if (return_value != SQLITE_OK) {
       std::string error(error_message);
       _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQPeekFronts error =" + error);
