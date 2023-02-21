@@ -82,7 +82,7 @@ void RQPeekFrontWithEmpthQueue(StorageModuleBase *storageModule) {
 
 /**
  * Validate method 'RQPeekFront' after inserting multiple requests.
- * Result: All requests will add to the request queue and the first request will always be in front of the queue. 
+ * Result: All requests will add to the request queue and the first request will always be in front of the queue.
  * @param *storageModule: a pointer to the storage module.
  */
 void RQPeekFront(StorageModuleBase *storageModule) {
@@ -429,7 +429,7 @@ void RQPeakAll_WithEmptyQueueAndClearAll(StorageModuleBase *storageModule) {
 
 /**
  * Validate method 'RQPeekAll' while inserting multiple valid requests.
- * Result: Reqeust will add to the queue and the size of the list returned will increase on every insert. 
+ * Result: Reqeust will add to the queue and the size of the list returned will increase on every insert.
  * @param *storageModule: a pointer to the storage module.
  */
 void RQPeakAll_WithMultipleRequests(StorageModuleBase *storageModule) {
@@ -517,11 +517,7 @@ TEST_CASE("Test Memory Storage Module") {
 
   shared_ptr<cly::CountlyConfiguration> configuration;
   configuration.reset(new cly::CountlyConfiguration("", ""));
-#ifdef COUNTLY_USE_SQLITE
-  StorageModuleBase *storageModule = new StorageModuleDB(configuration, logger);
-#else
   StorageModuleBase *storageModule = new StorageModuleMemory(configuration, logger);
-#endif
 
   SUBCASE("Validate method 'RQInsertAtEnd' with invalid request") { RQInsertAtEndWithInvalidRequest(storageModule); }
   SUBCASE("Validate method 'RQInsertAtEnd' with Valid requests") { RQInsertAtEndWithRequest(storageModule); }
@@ -549,3 +545,42 @@ TEST_CASE("Test Memory Storage Module") {
   SUBCASE("Validate method 'RQClearAll' when the request queue is empty.") { RQClearAll_WithEmptyQueue(storageModule); }
   SUBCASE("Validate method 'RQClearAll' when the request queue is not empty.") { RQClearAll_WithNonEmptyQueue(storageModule); }
 }
+
+#ifdef COUNTLY_USE_SQLITE
+TEST_CASE("Test Memory Storage Module") {
+  test_utils::clearSDK();
+  shared_ptr<cly::LoggerModule> logger;
+  logger.reset(new cly::LoggerModule());
+
+  shared_ptr<cly::CountlyConfiguration> configuration;
+  configuration.reset(new cly::CountlyConfiguration("", ""));
+
+  StorageModuleBase *storageModule = new StorageModuleDB(configuration, logger);
+
+  SUBCASE("Validate method 'RQInsertAtEnd' with invalid request") { RQInsertAtEndWithInvalidRequest(storageModule); }
+  SUBCASE("Validate method 'RQInsertAtEnd' with Valid requests") { RQInsertAtEndWithRequest(storageModule); }
+
+  SUBCASE("Validate method 'RQPeekFront' with empty queue") { RQPeekFrontWithEmpthQueue(storageModule); }
+  SUBCASE("Validate method 'RQPeekFront' after inserting multiple requests.") { RQPeekFront(storageModule); }
+
+  SUBCASE("Validate method 'RQRemoveFront' when the request queue is empty.") { RQRemoveFront_WithEmptyQueue(storageModule); }
+  SUBCASE("Validate method 'RQRemoveFront' by providing a wrong request") { RQRemoveFront_WithInvalidRequest(storageModule); }
+  SUBCASE("Validate method 'RQRemoveFront' by providing a request with a different id than the front request") { RQRemoveFront_WithRequestNotOnFront(storageModule); }
+  SUBCASE("Validate method 'RQRemoveFront' by providing a request with a different id than the front request") { RQRemoveFrontWithSameId_WithRequestNotOnFront(storageModule); }
+  SUBCASE("Validate method 'RQRemoveFront(request)' when the request queue is empty.") { RQRemoveFront2_WithEmptyQueue(storageModule); }
+  SUBCASE("Validate method 'RQRemoveFront' by providing a valid request.") { RQRemoveFront_WithRequestOnFront(storageModule); }
+  SUBCASE("Validate method 'RQRemoveFront' with an invalid request when the request queue is empty.") { RQRemoveFrontOnEmptyQueue_WithInvalidRequest(storageModule); }
+  SUBCASE("Validate method 'RQRemoveFront' by removing the same request twice.") { RQRemove_WithSameRequestTwice(storageModule); }
+  SUBCASE("Validate method 'RQRemoveFront().") { RQRemoveFrontWithoutRequestParam(storageModule); }
+
+  SUBCASE("Validate method 'RQPeekAll' with an empty queue.") { RQPeakAll_WithEmptyQueue(storageModule); }
+  SUBCASE("Validate method 'RQPeekAll' after removing the front request.") { RQPeakAll_WithRemovingFrontRequest(storageModule); }
+  SUBCASE("Validate method 'RQPeekAll' with queue front request") { RQPeakAll_WithFrontRequest(storageModule); }
+  SUBCASE("Validate method 'RQPeekAll' after calling 'RQClearAll'.") { RQPeakAll_OnNonEmptyQueueAfterClearAll(storageModule); }
+  SUBCASE("Validate method 'RQPeekAll' after clearing calling 'RQClearAll' on an empty queue.") { RQPeakAll_WithEmptyQueueAndClearAll(storageModule); }
+  SUBCASE("Validate method 'RQPeekAll' while inserting multiple requests.") { RQPeakAll_WithMultipleRequests(storageModule); }
+
+  SUBCASE("Validate method 'RQClearAll' when the request queue is empty.") { RQClearAll_WithEmptyQueue(storageModule); }
+  SUBCASE("Validate method 'RQClearAll' when the request queue is not empty.") { RQClearAll_WithNonEmptyQueue(storageModule); }
+}
+#endif
