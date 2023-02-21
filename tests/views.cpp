@@ -1,11 +1,13 @@
 #include "countly.hpp"
 #include "doctest.h"
+#include "test_utils.hpp"
 
 #include <chrono>
 #include <thread>
 
 using namespace cly;
 using namespace std::literals::chrono_literals;
+
 
 /**
  * Validate view data.
@@ -41,8 +43,9 @@ void validateViewSegmentation(nlohmann::json e, std::string name, std::string &v
 }
 
 TEST_CASE("recording views") {
+  test_utils::clearSDK();
   Countly &ct = Countly::getInstance();
-  ct.SetPath("databaseFileName.db");
+  ct.SetPath("countly.db");
   ct.setDeviceID("test-device-id");
   ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, false);
 
@@ -77,7 +80,7 @@ TEST_CASE("recording views") {
       e = nlohmann::json::parse(event);
       s = e["segmentation"].get<nlohmann::json>();
 
-      validateViewSegmentation(e, "view1", eid, 3, false);
+      validateViewSegmentation(e, "view1", eid, 3, false, false);
     }
 
     /*
@@ -94,7 +97,7 @@ TEST_CASE("recording views") {
       std::string event = events.at(eventSize - 1);
       nlohmann::json e = nlohmann::json::parse(event);
 
-      validateViewSegmentation(e, "view1", eid, 0, true);
+      validateViewSegmentation(e, "view1", eid, 0, true, true);
 
       std::this_thread::sleep_for(2s);
 
@@ -125,7 +128,7 @@ TEST_CASE("recording views") {
           {"time", "60"},
           {"name", "view2"},
       };
-      std::string eid = ct.views().openView("view1", segmentation);
+      std::string eid = ct.views().openView("view2", segmentation);
       eventSize++;
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
@@ -135,7 +138,7 @@ TEST_CASE("recording views") {
       nlohmann::json e = nlohmann::json::parse(event);
       nlohmann::json s = e["segmentation"].get<nlohmann::json>();
 
-      validateViewSegmentation(e, "view2", eid, 0, true);
+      validateViewSegmentation(e, "view2", eid, 0, true, true);
 
       CHECK(s["platform"].get<std::string>() == "ubuntu");
       CHECK(s["time"].get<std::string>() == "60");
@@ -171,7 +174,7 @@ TEST_CASE("recording views") {
       nlohmann::json e = nlohmann::json::parse(event);
       nlohmann::json s = e["segmentation"].get<nlohmann::json>();
 
-      validateViewSegmentation(e, "view1", eid, 0, true);
+      validateViewSegmentation(e, "view1", eid, 0, true, true);
       CHECK(s["platform"].get<std::string>() == "ubuntu");
       CHECK(s["time"].get<std::string>() == "60");
 

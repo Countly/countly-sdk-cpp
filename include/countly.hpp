@@ -193,15 +193,7 @@ public:
    * You should not be using this method.
    * @return a vector object containing events.
    */
-  const std::vector<std::string> debugReturnStateOfEQ() {
-
-#ifdef COUNTLY_USE_SQLITE
-    return {};
-#else
-    std::vector<std::string> v(event_queue.begin(), event_queue.end());
-    return v;
-#endif
-  }
+  std::vector<std::string> debugReturnStateOfEQ();
 
   /**
    * This function should not be used as it will be removed in a future release.

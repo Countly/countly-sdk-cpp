@@ -3,6 +3,11 @@
 
 #include "countly.hpp"
 #include "nlohmann/json.hpp"
+#include <cstdio>
+
+#ifdef COUNTLY_USE_SQLITE
+#include "sqlite3.h"
+#endif
 
 using namespace cly;
 
@@ -20,7 +25,10 @@ struct HTTPCall {
 
 static std::deque<HTTPCall> http_call_queue;
 
-static void clearSDK() { cly::Countly::halt(); }
+static void clearSDK() {
+  cly::Countly::halt();
+  remove("countly.db");
+}
 
 static void decodeURL(std::string &encoded) {
   for (auto percent_index = encoded.find('%'); percent_index != std::string::npos; percent_index = encoded.find('%', percent_index + 1)) {

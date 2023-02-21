@@ -508,7 +508,7 @@ TEST_CASE("Test Memory Storage Module") {
   shared_ptr<cly::CountlyConfiguration> configuration;
   configuration.reset(new cly::CountlyConfiguration("", ""));
   StorageModuleBase *storageModule = new StorageModuleMemory(configuration, logger);
-  storageModule->RQClearAll();
+  storageModule->init();
 
   SUBCASE("Validate method 'RQInsertAtEnd' with invalid request") { RQInsertAtEndWithInvalidRequest(storageModule); }
   SUBCASE("Validate method 'RQInsertAtEnd' with Valid requests") { RQInsertAtEndWithRequest(storageModule); }
@@ -545,9 +545,8 @@ TEST_CASE("Test Sqlite Storage Module") {
 
   shared_ptr<cly::CountlyConfiguration> configuration;
   configuration.reset(new cly::CountlyConfiguration("", ""));
-
   StorageModuleBase *storageModule = new StorageModuleDB(configuration, logger);
-  storageModule->RQClearAll();
+  storageModule->init();
 
   SUBCASE("Validate method 'RQInsertAtEnd' with invalid request") { RQInsertAtEndWithInvalidRequest(storageModule); }
   SUBCASE("Validate method 'RQInsertAtEnd' with Valid requests") { RQInsertAtEndWithRequest(storageModule); }

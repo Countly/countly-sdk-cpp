@@ -39,11 +39,20 @@ Countly &Countly::getInstance() {
   if (_sharedInstance.get() == nullptr) {
     _sharedInstance.reset(new Countly());
   }
+
   return *_sharedInstance.get();
 }
 
 #ifdef COUNTLY_BUILD_TESTS
-void Countly::halt() { _sharedInstance.reset(new Countly()); }
+void Countly::halt() {
+  if (_sharedInstance.get() != nullptr) {
+    if (_sharedInstance->is_sdk_initialized) {
+      _sharedInstance->requestModule->clearRequestQueue();
+    }
+  }
+
+  _sharedInstance.reset(new Countly());
+}
 #endif
 
 void Countly::alwaysUsePost(bool value) {
@@ -333,7 +342,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   session_params["app_key"] = app_key;
 
 #ifdef COUNTLY_USE_SQLITE
-  storageModule.reset(new StorageModuleMemory(configuration, logger));
+  storageModule.reset(new StorageModuleDB(configuration, logger));
 #else
   storageModule.reset(new StorageModuleMemory(configuration, logger));
 #endif
@@ -529,6 +538,44 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
   sqlite3_close(database);
 #endif
 }
+#ifdef COUNTLY_BUILD_TESTS
+std::vector<std::string> Countly::debugReturnStateOfEQ() {
+#ifdef COUNTLY_USE_SQLITE
+  std::vector<std::string> v;
+  sqlite3 *database;
+  int return_value, row_count, column_count;
+  char **table;
+  char *error_message;
+
+  return_value = sqlite3_open(configuration->databasePath.c_str(), &database);
+  if (return_value == SQLITE_OK) {
+    std::ostringstream sql_statement_stream;
+    sql_statement_stream << "SELECT * FROM events ORDER BY evtid ASC;";
+    std::string sql_statement = sql_statement_stream.str();
+
+    return_value = sqlite3_get_table(database, sql_statement.c_str(), &table, &row_count, &column_count, &error_message);
+    bool no_request = (row_count == 0);
+    if (return_value == SQLITE_OK && !no_request) {
+
+      for (int event_index = 1; event_index < row_count + 1; event_index++) {
+        std::string rqstId = table[event_index * column_count];
+        std::string rqst = table[(event_index * column_count) + 1];
+        v.push_back(rqst);
+      }
+
+    } else if (return_value != SQLITE_OK) {
+      std::string error(error_message);
+      sqlite3_free(error_message);
+    }
+    sqlite3_free_table(table);
+  }
+  sqlite3_close(database);
+#else
+  std::vector<std::string> v(event_queue.begin(), event_queue.end());
+#endif
+  return v;
+}
+#endif
 
 bool Countly::beginSession() {
   mutex->lock();
@@ -719,7 +766,7 @@ std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chro
 
 #ifdef COUNTLY_USE_SQLITE
 void Countly::setDatabasePath(const std::string &path) {
-  configuration->databasePath = path; 
+  configuration->databasePath = path;
   log(LogLevel::INFO, "[Countly][setDatabasePath] path = " + path);
 
   sqlite3 *database;
