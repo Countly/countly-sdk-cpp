@@ -2,7 +2,9 @@
 #include "countly/storage_module_db.hpp"
 #include "countly/countly_configuration.hpp"
 #include "countly/logger_module.hpp"
+#ifdef COUNTLY_USE_SQLITE
 #include "sqlite3.h"
+#endif
 #include <sstream>
 
 namespace cly {
@@ -18,6 +20,7 @@ void StorageModuleDB::init() {
 void StorageModuleDB::createSchema() {
   _logger->log(LogLevel::INFO, "[StorageModuleDB][createSchema]");
 
+#ifdef COUNTLY_USE_SQLITE
   sqlite3 *database;
   int return_value;
   char *error_message;
@@ -35,11 +38,13 @@ void StorageModuleDB::createSchema() {
     sqlite3_free(error_message);
   }
   sqlite3_close(database);
+#endif
 }
 
 void StorageModuleDB::RQRemoveFront() {
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront");
 
+#ifdef COUNTLY_USE_SQLITE
   sqlite3 *database;
   int return_value;
   char *error_message;
@@ -57,6 +62,7 @@ void StorageModuleDB::RQRemoveFront() {
     }
   }
   sqlite3_close(database);
+#endif
 }
 
 void StorageModuleDB::RQRemoveFront(std::shared_ptr<DataEntry> request) {
@@ -67,6 +73,7 @@ void StorageModuleDB::RQRemoveFront(std::shared_ptr<DataEntry> request) {
 
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront RequestID = " + request->getId());
 
+#ifdef COUNTLY_USE_SQLITE
   sqlite3 *database;
   int return_value;
   char *error_message;
@@ -84,13 +91,38 @@ void StorageModuleDB::RQRemoveFront(std::shared_ptr<DataEntry> request) {
     }
   }
   sqlite3_close(database);
+#endif
 }
 
-int StorageModuleDB::RQCount() {
-  int size = 0;
-  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQCount size = " + size);
+long long StorageModuleDB::RQCount() {
+  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQCount");
+  long long requestCount = 0;
 
-  return 0;
+#ifdef COUNTLY_USE_SQLITE
+  sqlite3 *database;
+  int return_value, row_count, column_count;
+  char **table;
+  char *error_message;
+
+  update_failed = true;
+  return_value = sqlite3_open(database_path.c_str(), &database);
+  mutex->unlock();
+  if (return_value == SQLITE_OK) {
+    return_value = sqlite3_get_table(database, "SELECT COUNT(*) FROM Requests;", &table, &row_count, &column_count, &error_message);
+    if (return_value == SQLITE_OK) {
+      requestCount = atoi(table[1]);
+    } else {
+      std::string error(error_message);
+      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQCount error = " + error);
+      sqlite3_free(error_message);
+    }
+    sqlite3_free_table(table);
+  }
+  sqlite3_close(database);
+#endif
+
+  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQCount requests count = " + requestCount);
+  return requestCount;
 }
 
 std::vector<std::shared_ptr<DataEntry>> StorageModuleDB::RQPeekAll() {
@@ -98,6 +130,8 @@ std::vector<std::shared_ptr<DataEntry>> StorageModuleDB::RQPeekAll() {
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQPeekAll");
 
   std::vector<std::shared_ptr<DataEntry>> v;
+
+#ifdef COUNTLY_USE_SQLITE
   sqlite3 *database;
   int return_value, row_count, column_count;
   char **table;
@@ -128,13 +162,14 @@ std::vector<std::shared_ptr<DataEntry>> StorageModuleDB::RQPeekAll() {
     sqlite3_free_table(table);
   }
   sqlite3_close(database);
-
+#endif
   return v;
 }
 
 void StorageModuleDB::RQInsertAtEnd(const std::string &request) {
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQInsertAtEnd request = " + request);
 
+#ifdef COUNTLY_USE_SQLITE
   sqlite3 *database;
   int return_value;
   char *error_message;
@@ -153,11 +188,13 @@ void StorageModuleDB::RQInsertAtEnd(const std::string &request) {
     }
   }
   sqlite3_close(database);
+#endif
 }
 
 void StorageModuleDB::RQClearAll() {
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQClearAll");
 
+#ifdef COUNTLY_USE_SQLITE
   sqlite3 *database;
   int return_value;
   char *error_message;
@@ -175,12 +212,14 @@ void StorageModuleDB::RQClearAll() {
     }
   }
   sqlite3_close(database);
+#endif
 }
 
 const std::shared_ptr<DataEntry> StorageModuleDB::RQPeekFront() {
-  std::shared_ptr<DataEntry> front = nullptr;
+  std::shared_ptr<DataEntry> front = std::make_shared<DataEntry>(-1, "");
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQPeekFronts");
 
+#ifdef COUNTLY_USE_SQLITE
   sqlite3 *database;
   int return_value, row_count, column_count;
   char **table;
@@ -209,6 +248,7 @@ const std::shared_ptr<DataEntry> StorageModuleDB::RQPeekFront() {
     sqlite3_free_table(table);
   }
   sqlite3_close(database);
+#endif
 
   return front;
 }

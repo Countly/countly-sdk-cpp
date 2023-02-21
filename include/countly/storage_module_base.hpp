@@ -55,7 +55,7 @@ public:
    * Returns the count of stored requests.
    * @return count of stored requests
    */
-  virtual int RQCount() = 0;
+  virtual long long RQCount() = 0;
 
   /**
    * Delete all stored requests.

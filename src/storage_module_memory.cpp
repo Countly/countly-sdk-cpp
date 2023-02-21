@@ -33,8 +33,8 @@ void StorageModuleMemory::RQRemoveFront(std::shared_ptr<DataEntry> request) {
   }
 }
 
-int StorageModuleMemory::RQCount() {
-  int size = request_queue.size();
+long long StorageModuleMemory::RQCount() {
+  long long size = request_queue.size();
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQCount size = " + size);
   return size;
 }
