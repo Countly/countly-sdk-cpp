@@ -30,7 +30,7 @@ struct CountlyConfiguration {
   /**
    * Set to prevent parameter tampering.
    */
-  std::string databasePath = "countly.db";
+  std::string databasePath;
 
   /**
    * Sets the interval for the automatic update calls

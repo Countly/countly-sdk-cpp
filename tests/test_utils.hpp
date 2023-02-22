@@ -5,10 +5,6 @@
 #include "nlohmann/json.hpp"
 #include <cstdio>
 
-#ifdef COUNTLY_USE_SQLITE
-#include "sqlite3.h"
-#endif
-
 using namespace cly;
 
 namespace test_utils {
@@ -16,6 +12,7 @@ namespace test_utils {
 #define COUNTLY_TEST_DEVICE_ID "11732aa3-19a6-4272-9057-e3411f1938be"
 #define COUNTLY_TEST_HOST "http://test.countly.notarealdomain"
 #define COUNTLY_TEST_PORT 8080
+#define TEST_DATABASE_NAME "test-countly.db"
 
 struct HTTPCall {
   bool use_post;
@@ -27,7 +24,7 @@ static std::deque<HTTPCall> http_call_queue;
 
 static void clearSDK() {
   cly::Countly::halt();
-  remove("countly.db");
+  remove(TEST_DATABASE_NAME);
 }
 
 static void decodeURL(std::string &encoded) {

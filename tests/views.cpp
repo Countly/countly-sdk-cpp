@@ -45,7 +45,7 @@ void validateViewSegmentation(nlohmann::json e, std::string name, std::string &v
 TEST_CASE("recording views") {
   test_utils::clearSDK();
   Countly &ct = Countly::getInstance();
-  ct.SetPath("countly.db");
+  ct.SetPath(TEST_DATABASE_NAME);
   ct.setDeviceID("test-device-id");
   ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, false);
 
@@ -126,9 +126,9 @@ TEST_CASE("recording views") {
       std::map<std::string, std::string> segmentation = {
           {"platform", "ubuntu"},
           {"time", "60"},
-          {"name", "view2"},
+          {"name", "xxxxxxx"},
       };
-      std::string eid = ct.views().openView("view2", segmentation);
+      std::string eid = ct.views().openView("xxxxxxx", segmentation);
       eventSize++;
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
@@ -138,21 +138,21 @@ TEST_CASE("recording views") {
       nlohmann::json e = nlohmann::json::parse(event);
       nlohmann::json s = e["segmentation"].get<nlohmann::json>();
 
-      validateViewSegmentation(e, "view2", eid, 0, true, true);
+      validateViewSegmentation(e, "xxxxxxx", eid, 0, true, true);
 
       CHECK(s["platform"].get<std::string>() == "ubuntu");
       CHECK(s["time"].get<std::string>() == "60");
 
       std::this_thread::sleep_for(3s);
 
-      ct.views().closeViewWithName("view2");
+      ct.views().closeViewWithName("xxxxxxx");
       eventSize++;
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
       events = ct.debugReturnStateOfEQ();
       event = events.at(eventSize - 1);
       e = nlohmann::json::parse(event);
-      validateViewSegmentation(e, "view2", eid, 3, false);
+      validateViewSegmentation(e, "xxxxxxx", eid, 3, false);
     }
     /*
      * Case: Open a view without segmentation and close it with the id.

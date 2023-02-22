@@ -43,7 +43,7 @@ void StorageModuleMemory::RQInsertAtEnd(const std::string &request) {
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQInsertAtEnd request = " + request);
   if (request != "") {
     if (request_queue.empty()) {
-      // Reset '_lastUsedId' to 1 if request queue is empty.
+      //Since the DB (Sqlite) storage module reset the primary key when all rows get deleted. To sync with the DB storage module, the memory storage module also reset '_lastUsedId' when the request queue is empty. 
       _lastUsedId = 1;
     } else {
       _lastUsedId += 1;

@@ -112,7 +112,7 @@ long long StorageModuleDB::RQCount() {
   if (return_value == SQLITE_OK) {
     return_value = sqlite3_get_table(database, "SELECT COUNT(*) FROM Requests;", &table, &row_count, &column_count, &error_message);
     if (return_value == SQLITE_OK) {
-      requestCount = atoi(table[1]);
+      requestCount = atoll(table[1]);
     } else {
       std::string error(error_message);
       _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQCount error = " + error);
@@ -234,7 +234,7 @@ const std::shared_ptr<DataEntry> StorageModuleDB::RQPeekFront() {
   return_value = sqlite3_open(_configuration->databasePath.c_str(), &database);
   if (return_value == SQLITE_OK) {
     std::ostringstream sql_statement_stream;
-    sql_statement_stream << "SELECT RequestID, RequestData RequestData FROM Requests ORDER BY RequestID ASC LIMIT 1;";
+    sql_statement_stream << "SELECT RequestID, RequestData FROM Requests ORDER BY RequestID ASC LIMIT 1;";
     std::string sql_statement = sql_statement_stream.str();
 
     return_value = sqlite3_get_table(database, sql_statement.c_str(), &table, &row_count, &column_count, &error_message);
