@@ -51,6 +51,7 @@ TEST_CASE("crash unit tests") {
 
   countly.setHTTPClient(test_utils::fakeSendHTTP);
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+  countly.SetPath(TEST_DATABASE_NAME);
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
 
   SUBCASE("record crash without bread crumbs") {
