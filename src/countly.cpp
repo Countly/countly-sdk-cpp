@@ -44,9 +44,7 @@ Countly &Countly::getInstance() {
 }
 
 #ifdef COUNTLY_BUILD_TESTS
-void Countly::halt() {
-  _sharedInstance.reset(new Countly());
-}
+void Countly::halt() { _sharedInstance.reset(new Countly()); }
 #endif
 
 void Countly::alwaysUsePost(bool value) {
@@ -299,6 +297,13 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
     mutex->unlock();
     return;
   }
+
+#ifdef COUNTLY_USE_SQLITE
+  if (configuration->databasePath == "" || configuration->databasePath == " ") {
+    log(LogLevel::ERROR, "[Countly][start] Database path can not be empty or blank.");
+    return;
+  }
+#endif
 
   log(LogLevel::INFO, "[Countly][start]");
 
@@ -760,6 +765,16 @@ std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chro
 
 #ifdef COUNTLY_USE_SQLITE
 void Countly::setDatabasePath(const std::string &path) {
+  if (is_sdk_initialized) {
+    log(LogLevel::ERROR, "[Countly][setDatabasePath] You can not set the database path after SDK initialization.");
+    return;
+  }
+
+  if (path == "" || path == " ") {
+    log(LogLevel::ERROR, "[Countly][setDatabasePath] Database path can not be empty or blank.");
+    return;
+  }
+
   configuration->databasePath = path;
   log(LogLevel::INFO, "[Countly][setDatabasePath] path = " + path);
 

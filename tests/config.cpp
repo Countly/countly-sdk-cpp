@@ -50,6 +50,7 @@ TEST_CASE("validate configuration all setters") {
     ct.SetMaxEventsPerMessage(10);
     ct.setAutomaticSessionUpdateInterval(5);
     ct.setSalt("salt");
+    ct.SetPath(TEST_DATABASE_NAME);
 
     // Server and port
     ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, false);
