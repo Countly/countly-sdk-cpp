@@ -47,37 +47,82 @@ Countly &Countly::getInstance() {
 void Countly::halt() { _sharedInstance.reset(new Countly()); }
 #endif
 
+/**
+ * Set limit for the number of requests that can be stored locally.
+ * @param requestQueueSize: max size of request queue
+ */
+void Countly::setMaxRequestQueueSize(unsigned int requestQueueSize) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][setMaxRequestQueueSize] You can not set the request queue size after SDK initialization.");
+    return;
+  }
+
+  mutex->lock();
+  configuration->requestQueueThreshold = requestQueueSize;
+  mutex->unlock();
+}
+
 void Countly::alwaysUsePost(bool value) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][alwaysUsePost] You can not set the http method after SDK initialization.");
+    return;
+  }
+
   mutex->lock();
   configuration->forcePost = value;
   mutex->unlock();
 }
 
 void Countly::setSalt(const std::string &value) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][setSalt] You can not set the salt after SDK initialization.");
+    return;
+  }
+
   mutex->lock();
   configuration->salt = value;
   mutex->unlock();
 }
 
 void Countly::setLogger(void (*fun)(LogLevel level, const std::string &message)) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][setLogger] You can not set the logger after SDK initialization.");
+    return;
+  }
+
   mutex->lock();
   logger->setLogger(fun);
   mutex->unlock();
 }
 
 void Countly::setHTTPClient(HTTPClientFunction fun) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][setHTTPClient] You can not set the http client after SDK initialization.");
+    return;
+  }
+
   mutex->lock();
   configuration->http_client_function = fun;
   mutex->unlock();
 }
 
 void Countly::setSha256(SHA256Function fun) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][setHTTPClient] You can not set the 'SHA256' function after SDK initialization.");
+    return;
+  }
+
   mutex->lock();
   configuration->sha256_function = fun;
   mutex->unlock();
 }
 
 void Countly::setMetrics(const std::string &os, const std::string &os_version, const std::string &device, const std::string &resolution, const std::string &carrier, const std::string &app_version) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][setMetrics] You can not set metrics after SDK initialization.");
+    return;
+  }
+
   if (!os.empty()) {
     configuration->metrics["_os"] = os;
   }
@@ -456,6 +501,11 @@ void Countly::addEventToSqlite(const cly::Event &event) {
 #endif
 
 void Countly::setMaxEvents(size_t value) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][setMaxEvents] You can not set the event queue size after SDK initialization.");
+    return;
+  }
+
   mutex->lock();
   configuration->eventQueueThreshold = value;
 #ifndef COUNTLY_USE_SQLITE

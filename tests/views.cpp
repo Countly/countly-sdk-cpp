@@ -128,7 +128,7 @@ TEST_CASE("recording views") {
           {"time", "60"},
           {"name", "xxxxxxx"},
       };
-      std::string eid = ct.views().openView("xxxxxxx", segmentation);
+      std::string eid = ct.views().openView("view2", segmentation);
       eventSize++;
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
@@ -138,21 +138,21 @@ TEST_CASE("recording views") {
       nlohmann::json e = nlohmann::json::parse(event);
       nlohmann::json s = e["segmentation"].get<nlohmann::json>();
 
-      validateViewSegmentation(e, "xxxxxxx", eid, 0, true, true);
+      validateViewSegmentation(e, "view2", eid, 0, true, true);
 
       CHECK(s["platform"].get<std::string>() == "ubuntu");
       CHECK(s["time"].get<std::string>() == "60");
 
       std::this_thread::sleep_for(3s);
 
-      ct.views().closeViewWithName("xxxxxxx");
+      ct.views().closeViewWithName("view2");
       eventSize++;
       CHECK(ct.debugReturnStateOfEQ().size() == eventSize);
 
       events = ct.debugReturnStateOfEQ();
       event = events.at(eventSize - 1);
       e = nlohmann::json::parse(event);
-      validateViewSegmentation(e, "xxxxxxx", eid, 3, false);
+      validateViewSegmentation(e, "view2", eid, 3, false);
     }
     /*
      * Case: Open a view without segmentation and close it with the id.

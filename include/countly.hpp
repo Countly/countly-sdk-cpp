@@ -46,6 +46,8 @@ public:
 
   void alwaysUsePost(bool value);
 
+  void setMaxRequestQueueSize(unsigned int requestQueueSize);
+
   void setSalt(const std::string &value);
 
   void setLogger(void (*fun)(LogLevel level, const std::string &message));
@@ -184,7 +186,14 @@ public:
   }
 
   /* Provide 'updateInterval' in seconds. */
-  inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) { configuration->sessionDuration = updateInterval; }
+  inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) {
+    if (is_sdk_initialized) {
+      log(LogLevel::WARNING, "[Countly][setAutomaticSessionUpdateInterval] You can not set the session duration after SDK initialization.");
+      return;
+    }
+    
+    configuration->sessionDuration = updateInterval;
+  }
 
 #ifdef COUNTLY_BUILD_TESTS
   /**
