@@ -129,7 +129,7 @@ void StorageModuleDB::RQRemoveFront(std::shared_ptr<DataEntry> request) {
 long long StorageModuleDB::RQCount() {
   if (!_is_initialized) {
     _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQCount: Module is not initialized");
-    return 0;
+    return -1;
   }
 
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQCount");

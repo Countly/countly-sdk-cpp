@@ -462,22 +462,22 @@ void RQClearAll_WithNonEmptyQueue(std::shared_ptr<StorageModuleBase> storageModu
 }
 
 void testStorageModuleWithoutInit(std::shared_ptr<StorageModuleBase> storageModule) {
-  CHECK(storageModule->RQCount() == 0);
+  CHECK(storageModule->RQCount() == -1);
   CHECK(storageModule->RQPeekAll().size() == 0);
-  
+
   storageModule->RQInsertAtEnd("request");
-  CHECK(storageModule->RQCount() == 0);
+  CHECK(storageModule->RQCount() == -1);
   CHECK(storageModule->RQPeekAll().size() == 0);
 
   storageModule->RQClearAll();
-  CHECK(storageModule->RQCount() == 0);
+  CHECK(storageModule->RQCount() == -1);
   CHECK(storageModule->RQPeekAll().size() == 0);
 
   std::shared_ptr<DataEntry> entry = storageModule->RQPeekFront();
   CHECK(entry->getId() == -1);
   CHECK(entry->getData() == "");
 
-  CHECK(storageModule->RQCount() == 0);
+  CHECK(storageModule->RQCount() == -1);
   CHECK(storageModule->RQPeekAll().size() == 0);
 }
 
