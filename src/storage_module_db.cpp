@@ -23,13 +23,13 @@ void StorageModuleDB::init() {
     return;
   }
 
-  createSchema(REQUESTS_TABLE_NAME, REQUESTS_TABLE_REQUEST_ID, REQUESTS_TABLE_REQUEST_DATA);
-  _is_initialized = true;
+  _is_initialized = createSchema(REQUESTS_TABLE_NAME, REQUESTS_TABLE_REQUEST_ID, REQUESTS_TABLE_REQUEST_DATA);
 }
 
-void StorageModuleDB::createSchema(const char tableName[], const char keyColumnName[], const char dataColumnName[]) {
+bool StorageModuleDB::createSchema(const char tableName[], const char keyColumnName[], const char dataColumnName[]) {
   _logger->log(LogLevel::INFO, "[StorageModuleDB][createSchema]");
 
+  bool result = false;
 #ifdef COUNTLY_USE_SQLITE
   sqlite3 *database;
   int return_value;
@@ -45,6 +45,8 @@ void StorageModuleDB::createSchema(const char tableName[], const char keyColumnN
     if (return_value != SQLITE_OK) {
       _logger->log(LogLevel::ERROR, error_message);
       sqlite3_free(error_message);
+    } else {
+      result = true;
     }
   } else {
     std::string error(error_message);
@@ -53,6 +55,8 @@ void StorageModuleDB::createSchema(const char tableName[], const char keyColumnN
   }
   sqlite3_close(database);
 #endif
+
+  return result;
 }
 
 void StorageModuleDB::RQRemoveFront() {
@@ -125,7 +129,7 @@ void StorageModuleDB::RQRemoveFront(std::shared_ptr<DataEntry> request) {
 long long StorageModuleDB::RQCount() {
   if (!_is_initialized) {
     _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQCount: Module is not initialized");
-    return -1;
+    return 0;
   }
 
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQCount");

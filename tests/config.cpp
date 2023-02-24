@@ -73,7 +73,9 @@ TEST_CASE("validate configuration all setters") {
     CHECK(config.appKey == "YOUR_APP_KEY");
     CHECK(config.deviceId == "test-device-id");
     CHECK(config.salt == "salt");
+#ifdef COUNTLY_USE_SQLITE
     CHECK(config.databasePath == TEST_DATABASE_NAME);
+#endif
     CHECK(config.sessionDuration == 5);
     CHECK(config.eventQueueThreshold == 10);
     CHECK(config.requestQueueThreshold == 10);
@@ -121,7 +123,9 @@ TEST_CASE("validate configuration all setters") {
     CHECK(config.appKey == "YOUR_APP_KEY");
     CHECK(config.deviceId == "test-device-id");
     CHECK(config.salt == "salt");
+#ifdef COUNTLY_USE_SQLITE
     CHECK(config.databasePath == TEST_DATABASE_NAME);
+#endif
     CHECK(config.sessionDuration == 5);
     CHECK(config.eventQueueThreshold == 10);
     CHECK(config.requestQueueThreshold == 10);
@@ -159,7 +163,9 @@ TEST_CASE("validate configuration all setters") {
     CHECK(config.appKey == "YOUR_APP_KEY");
     CHECK(config.deviceId == "test-device-id");
     CHECK(config.salt == "salt");
+#ifdef COUNTLY_USE_SQLITE
     CHECK(config.databasePath == TEST_DATABASE_NAME);
+#endif
     CHECK(config.sessionDuration == 5);
     CHECK(config.eventQueueThreshold == 10);
     CHECK(config.requestQueueThreshold == 10);

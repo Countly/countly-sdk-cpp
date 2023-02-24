@@ -235,6 +235,9 @@ private:
   void _deleteThread();
   void _sendIndependantLocationRequest();
   void log(LogLevel level, const std::string &message);
+#ifdef COUNTLY_USE_SQLITE
+  bool createEventTableSchema();
+#endif
 
   /**
    * Helper methods to fetch remote config from the server.

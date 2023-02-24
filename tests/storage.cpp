@@ -461,6 +461,26 @@ void RQClearAll_WithNonEmptyQueue(std::shared_ptr<StorageModuleBase> storageModu
   CHECK(storageModule->RQPeekAll().size() == 0);
 }
 
+void testStorageModuleWithoutInit(std::shared_ptr<StorageModuleBase> storageModule) {
+  CHECK(storageModule->RQCount() == 0);
+  CHECK(storageModule->RQPeekAll().size() == 0);
+  
+  storageModule->RQInsertAtEnd("request");
+  CHECK(storageModule->RQCount() == 0);
+  CHECK(storageModule->RQPeekAll().size() == 0);
+
+  storageModule->RQClearAll();
+  CHECK(storageModule->RQCount() == 0);
+  CHECK(storageModule->RQPeekAll().size() == 0);
+
+  std::shared_ptr<DataEntry> entry = storageModule->RQPeekFront();
+  CHECK(entry->getId() == -1);
+  CHECK(entry->getData() == "");
+
+  CHECK(storageModule->RQCount() == 0);
+  CHECK(storageModule->RQPeekAll().size() == 0);
+}
+
 TEST_CASE("Test Memory Storage Module") {
   test_utils::clearSDK();
   shared_ptr<cly::LoggerModule> logger;
@@ -496,6 +516,16 @@ TEST_CASE("Test Memory Storage Module") {
 
   SUBCASE("Validate method 'RQClearAll' when the request queue is empty.") { RQClearAll_WithEmptyQueue(storageModule); }
   SUBCASE("Validate method 'RQClearAll' when the request queue is not empty.") { RQClearAll_WithNonEmptyQueue(storageModule); }
+}
+TEST_CASE("Test Memory Storage Module without calling 'init'") {
+  test_utils::clearSDK();
+  shared_ptr<cly::LoggerModule> logger;
+  logger.reset(new cly::LoggerModule());
+
+  shared_ptr<cly::CountlyConfiguration> configuration = std::make_shared<CountlyConfiguration>("", "");
+
+  std::shared_ptr<StorageModuleMemory> storageModule = std::make_shared<StorageModuleMemory>(configuration, logger);
+  testStorageModuleWithoutInit(storageModule);
 }
 
 #ifdef COUNTLY_USE_SQLITE
@@ -536,4 +566,29 @@ TEST_CASE("Test Sqlite Storage Module") {
   SUBCASE("Validate method 'RQClearAll' when the request queue is empty.") { RQClearAll_WithEmptyQueue(storageModule); }
   SUBCASE("Validate method 'RQClearAll' when the request queue is not empty.") { RQClearAll_WithNonEmptyQueue(storageModule); }
 }
+
+TEST_CASE("Test SQlite Storage Module without calling 'init'") {
+  test_utils::clearSDK();
+  shared_ptr<cly::LoggerModule> logger;
+  logger.reset(new cly::LoggerModule());
+
+  shared_ptr<cly::CountlyConfiguration> configuration = std::make_shared<CountlyConfiguration>("", "");
+  configuration->databasePath = TEST_DATABASE_NAME;
+
+  std::shared_ptr<StorageModuleDB> storageModule = std::make_shared<StorageModuleDB>(configuration, logger);
+  testStorageModuleWithoutInit(storageModule);
+}
+
+TEST_CASE("Test SQlite Storage Module against invalid database path") {
+  test_utils::clearSDK();
+  shared_ptr<cly::LoggerModule> logger;
+  logger.reset(new cly::LoggerModule());
+
+  shared_ptr<cly::CountlyConfiguration> configuration = std::make_shared<CountlyConfiguration>("", "");
+  configuration->databasePath = "";
+
+  std::shared_ptr<StorageModuleDB> storageModule = std::make_shared<StorageModuleDB>(configuration, logger);
+  testStorageModuleWithoutInit(storageModule);
+}
 #endif
+

@@ -49,7 +49,7 @@ void StorageModuleMemory::RQRemoveFront(std::shared_ptr<DataEntry> request) {
 long long StorageModuleMemory::RQCount() {
   if (!_is_initialized) {
     _logger->log(LogLevel::ERROR, "[Countly][StorageModuleMemory] RQRemoveFront(request): Module is not initialized");
-    return -1;
+    return 0;
   }
 
   long long size = request_queue.size();

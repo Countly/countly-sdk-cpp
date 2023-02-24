@@ -397,7 +397,12 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   crash_module.reset(new cly::CrashModule(configuration, logger, requestModule, mutex));
   views_module.reset(new cly::ViewsModule(this, logger));
 
-  is_sdk_initialized = true; // after this point SDK is initialized.
+  bool result = true;
+#ifdef COUNTLY_USE_SQLITE
+  result = createEventTableSchema();
+#endif
+
+  is_sdk_initialized = result; // after this point SDK is initialized.
 
   if (!running) {
 
@@ -827,14 +832,16 @@ void Countly::setDatabasePath(const std::string &path) {
 
   configuration->databasePath = path;
   log(LogLevel::INFO, "[Countly][setDatabasePath] path = " + path);
+}
 
+bool Countly::createEventTableSchema() {
+  bool result = false;
   sqlite3 *database;
   int return_value, row_count, column_count;
   char **table;
   char *error_message;
 
-  mutex->lock();
-  database_path = path;
+  database_path = configuration->databasePath;
 
   return_value = sqlite3_open(database_path.c_str(), &database);
   if (return_value == SQLITE_OK) {
@@ -842,6 +849,8 @@ void Countly::setDatabasePath(const std::string &path) {
     if (return_value != SQLITE_OK) {
       log(LogLevel::ERROR, error_message);
       sqlite3_free(error_message);
+    } else {
+      result = true;
     }
   } else {
     log(LogLevel::ERROR, "Failed to open sqlite database");
@@ -849,10 +858,10 @@ void Countly::setDatabasePath(const std::string &path) {
     database_path.clear();
   }
   sqlite3_close(database);
-  mutex->unlock();
+
+  return result;
 }
 #endif
-
 void Countly::log(LogLevel level, const std::string &message) { logger->log(cly::LogLevel(level), message); }
 
 static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n_bytes, std::string *body) {

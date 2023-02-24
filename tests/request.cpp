@@ -43,7 +43,6 @@ void ValidateRequestSizeOnReachingThresholdLimit(std::shared_ptr<StorageModuleBa
   std::shared_ptr<DataEntry> frontRequest = storageModule->RQPeekFront();
   CHECK(frontRequest->getId() == 2);
   CHECK(frontRequest->getData().substr(0, 33) == "app_key=&device_id=&param2=value2");
-
 }
 
 TEST_CASE("Test Request Module with Memory Storage") {
@@ -64,6 +63,7 @@ TEST_CASE("Test Request Module with Memory Storage") {
   SUBCASE("Validate request queue threshold") { ValidateRequestSizeOnReachingThresholdLimit(storageModule, requestModule); }
 }
 
+#ifdef COUNTLY_USE_SQLITE
 TEST_CASE("Test Request Module with SQLite Storage") {
   test_utils::clearSDK();
   shared_ptr<cly::LoggerModule> logger;
@@ -81,3 +81,4 @@ TEST_CASE("Test Request Module with SQLite Storage") {
 
   SUBCASE("Validate request queue threshold") { ValidateRequestSizeOnReachingThresholdLimit(storageModule, requestModule); }
 }
+#endif
