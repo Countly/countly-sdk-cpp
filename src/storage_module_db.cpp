@@ -18,7 +18,13 @@ StorageModuleDB::~StorageModuleDB() {}
 
 void StorageModuleDB::init() {
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] initialized.");
+  if (_configuration->databasePath == "" || _configuration->databasePath == " ") {
+    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] init: Database path can not be empty or blank!");
+    return;
+  }
+
   createSchema(REQUESTS_TABLE_NAME, REQUESTS_TABLE_REQUEST_ID, REQUESTS_TABLE_REQUEST_DATA);
+  _is_initialized = true;
 }
 
 void StorageModuleDB::createSchema(const char tableName[], const char keyColumnName[], const char dataColumnName[]) {
@@ -50,6 +56,11 @@ void StorageModuleDB::createSchema(const char tableName[], const char keyColumnN
 }
 
 void StorageModuleDB::RQRemoveFront() {
+  if (!_is_initialized) {
+    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQRemoveFront: Module is not initialized");
+    return;
+  }
+
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront");
 
 #ifdef COUNTLY_USE_SQLITE
@@ -76,6 +87,11 @@ void StorageModuleDB::RQRemoveFront() {
 }
 
 void StorageModuleDB::RQRemoveFront(std::shared_ptr<DataEntry> request) {
+  if (!_is_initialized) {
+    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQRemoveFront(request): Module is not initialized");
+    return;
+  }
+
   if (request == nullptr) {
     _logger->log(LogLevel::WARNING, "[Countly][StorageModuleDB] RQRemoveFront request = null");
     return;
@@ -107,6 +123,11 @@ void StorageModuleDB::RQRemoveFront(std::shared_ptr<DataEntry> request) {
 }
 
 long long StorageModuleDB::RQCount() {
+  if (!_is_initialized) {
+    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQCount: Module is not initialized");
+    return -1;
+  }
+
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQCount");
   long long requestCount = 0;
 
@@ -138,6 +159,10 @@ long long StorageModuleDB::RQCount() {
 }
 
 std::vector<std::shared_ptr<DataEntry>> StorageModuleDB::RQPeekAll() {
+  if (!_is_initialized) {
+    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQPeekAll: Module is not initialized");
+    return {};
+  }
 
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQPeekAll");
 
@@ -178,6 +203,11 @@ std::vector<std::shared_ptr<DataEntry>> StorageModuleDB::RQPeekAll() {
 }
 
 void StorageModuleDB::RQInsertAtEnd(const std::string &request) {
+  if (!_is_initialized) {
+    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQInsertAtEnd: Module is not initialized");
+    return;
+  }
+
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQInsertAtEnd request = " + request);
 
   if (request == "") {
@@ -208,6 +238,10 @@ void StorageModuleDB::RQInsertAtEnd(const std::string &request) {
 }
 
 void StorageModuleDB::RQClearAll() {
+  if (!_is_initialized) {
+    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQClearAll: Module is not initialized");
+    return;
+  }
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQClearAll");
 
 #ifdef COUNTLY_USE_SQLITE
@@ -233,6 +267,11 @@ void StorageModuleDB::RQClearAll() {
 
 const std::shared_ptr<DataEntry> StorageModuleDB::RQPeekFront() {
   std::shared_ptr<DataEntry> front = std::make_shared<DataEntry>(-1, "");
+  if (!_is_initialized) {
+    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQPeekFront: Module is not initialized");
+    return front;
+  }
+
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQPeekFronts");
 
 #ifdef COUNTLY_USE_SQLITE

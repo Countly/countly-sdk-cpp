@@ -33,6 +33,7 @@ public:
 
 class StorageModuleBase {
 protected:
+  bool _is_initialized = false;
   std::shared_ptr<CountlyConfiguration> _configuration;
   std::shared_ptr<LoggerModule> _logger;
 
@@ -41,6 +42,9 @@ public:
     this->_configuration = config;
     this->_logger = logger;
   }
+
+  bool isInitialized() { return _is_initialized; }
+
   virtual ~StorageModuleBase() {
     _logger.reset();
     _configuration.reset();
