@@ -23,40 +23,6 @@ HTTPResponse new_CustomClient(bool f, const std::string &a, const std::string &b
   return response;
 }
 
-/**
- * Validate configuration values.
- * @param config: SDK configuration
- * @param expectedConfig: expected configuration
- */
-void validateConfigurationObject(const CountlyConfiguration config, const CountlyConfiguration expectedConfig) {
-  CHECK(config.serverUrl == expectedConfig.serverUrl);
-  CHECK(config.appKey == expectedConfig.appKey);
-  CHECK(config.deviceId == expectedConfig.deviceId);
-  CHECK(config.salt == expectedConfig.salt);
-  CHECK(config.databasePath == expectedConfig.databasePath);
-  CHECK(config.sessionDuration == expectedConfig.sessionDuration);
-  CHECK(config.eventQueueThreshold == expectedConfig.eventQueueThreshold);
-  CHECK(config.requestQueueThreshold == expectedConfig.requestQueueThreshold);
-  CHECK(config.breadcrumbsThreshold == expectedConfig.breadcrumbsThreshold);
-  CHECK(config.forcePost == expectedConfig.forcePost);
-  CHECK(config.port == expectedConfig.port);
-  CHECK(config.sha256_function("custom SHA256") == expectedConfig.sha256_function(""));
-
-  HTTPResponse response = config.http_client_function(true, "", "");
-
-  CHECK(response.success);
-  CHECK(response.data == "data");
-
-  if (!config.metrics.empty() && !expectedConfig.metrics.empty()) {
-    CHECK(config.metrics["_os"] == expectedConfig.metrics["_os"]);
-    CHECK(config.metrics["_os_version"] == expectedConfig.metrics["_os_version"]);
-    CHECK(config.metrics["_app_version"] == expectedConfig.metrics["_app_version"]);
-    CHECK(config.metrics["_carrier"] == expectedConfig.metrics["_carrier"]);
-    CHECK(config.metrics["_resolution"] == expectedConfig.metrics["_resolution"]);
-    CHECK(config.metrics["_device"] == expectedConfig.metrics["_device"]);
-  }
-}
-
 TEST_CASE("validate configuration all setters") {
   SUBCASE("default values") {
     clearSDK();
