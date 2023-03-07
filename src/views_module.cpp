@@ -32,9 +32,6 @@ private:
     double duration = 0;
     std::map<std::string, std::string> viewSegments;
 
-    viewSegments["_idv"] = v->viewId;
-    viewSegments["name"] = v->name;
-
     if (isOpenView) {
       viewSegments["visit"] = "1";
 
@@ -51,7 +48,6 @@ private:
         }
       }
 
-      v->name = viewSegments["name"];
     } else {
 
       const std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
@@ -59,6 +55,9 @@ private:
       std::chrono::seconds dur = timestamp - v->startTime;
       duration = dur.count();
     }
+
+    viewSegments["_idv"] = v->viewId;
+    viewSegments["name"] = v->name;
 
     _cly->RecordEvent(CLY_VIEW_KEY, viewSegments, 1, 0, duration);
     if (isOpenView) {
@@ -92,8 +91,8 @@ public:
     std::shared_ptr<ViewModuleImpl::ViewInfo> v = findViewByName(name);
     if (v == nullptr) {
       _logger->log(cly::LogLevel::WARNING, cly::utils::format_string("[ViewModuleImpl] _closeViewWithName:  Couldn't found "
-                                                        "view with name = %s",
-                                                        name.c_str()));
+                                                                     "view with name = %s",
+                                                                     name.c_str()));
       return;
     }
     _recordView(v, {}, false);
@@ -103,8 +102,8 @@ public:
 
     if (_viewsStartTime.find(viewId) == _viewsStartTime.end()) {
       _logger->log(cly::LogLevel::WARNING, cly::utils::format_string("[ViewModuleImpl] _closeViewWithID:  Couldn't found "
-                                                        "view with viewId = %s",
-                                                        viewId.c_str()));
+                                                                     "view with viewId = %s",
+                                                                     viewId.c_str()));
       return;
     }
 
