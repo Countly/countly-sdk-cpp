@@ -132,7 +132,7 @@ public:
 #ifdef COUNTLY_USE_SQLITE
     setDatabasePath(path);
 #elif defined _WIN32
-    UNREFERENCED_PARAMETER(path);
+//     UNREFERENCED_PARAMETER(path);
 #endif
   }
 
@@ -191,7 +191,7 @@ public:
       log(LogLevel::WARNING, "[Countly][setAutomaticSessionUpdateInterval] You can not set the session duration after SDK initialization.");
       return;
     }
-    
+
     configuration->sessionDuration = updateInterval;
   }
 
