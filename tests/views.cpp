@@ -8,7 +8,6 @@
 using namespace cly;
 using namespace std::literals::chrono_literals;
 
-
 /**
  * Validate view data.
  *
