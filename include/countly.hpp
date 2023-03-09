@@ -191,7 +191,7 @@ public:
       log(LogLevel::WARNING, "[Countly][setAutomaticSessionUpdateInterval] You can not set the session duration after SDK initialization.");
       return;
     }
-    
+
     configuration->sessionDuration = updateInterval;
   }
 

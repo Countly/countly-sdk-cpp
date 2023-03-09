@@ -28,7 +28,7 @@ struct CountlyConfiguration {
   std::string salt;
 
   /**
-   * Set to prevent parameter tampering.
+   * Path to the database.
    */
   std::string databasePath;
 

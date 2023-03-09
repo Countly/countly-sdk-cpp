@@ -110,7 +110,7 @@ const std::shared_ptr<DataEntry> StorageModuleMemory::RQPeekFront() {
   std::shared_ptr<DataEntry> front = nullptr;
   if (!_is_initialized) {
     _logger->log(LogLevel::ERROR, "[Countly][StorageModuleMemory] RQPeekFront: Module is not initialized");
-     front.reset(new DataEntry(-1, ""));
+    front.reset(new DataEntry(-1, ""));
     return front;
   }
 

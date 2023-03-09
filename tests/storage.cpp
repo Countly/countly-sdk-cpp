@@ -591,4 +591,3 @@ TEST_CASE("Test SQlite Storage Module against invalid database path") {
   testStorageModuleWithoutInit(storageModule);
 }
 #endif
-

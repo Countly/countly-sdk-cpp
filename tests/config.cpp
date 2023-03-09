@@ -67,8 +67,8 @@ TEST_CASE("validate configuration all setters") {
     // Server and port
     ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, false);
 
-    CountlyConfiguration config = ct.getConfiguration();
-
+    const CountlyConfiguration config = ct.getConfiguration();
+    
     CHECK(config.serverUrl == "https://try.count.ly");
     CHECK(config.appKey == "YOUR_APP_KEY");
     CHECK(config.deviceId == "test-device-id");
