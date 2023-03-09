@@ -28,6 +28,7 @@ TEST_CASE("sessions unit tests") {
   countly.setHTTPClient(test_utils::fakeSendHTTP);
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   countly.setAutomaticSessionUpdateInterval(2);
+  countly.SetPath(TEST_DATABASE_NAME);
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
 
   SUBCASE("init sdk - session begin ") {
@@ -83,6 +84,8 @@ TEST_CASE("event request unit tests") {
 
   countly.setHTTPClient(test_utils::fakeSendHTTP);
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+  countly.SetPath(TEST_DATABASE_NAME);
+
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
 
   countly.processRQDebug();

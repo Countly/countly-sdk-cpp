@@ -21,8 +21,8 @@ void StorageModuleDB::RQRemoveFront() { _logger->log(LogLevel::DEBUG, "[Countly]
 
 void StorageModuleDB::RQRemoveFront(std::shared_ptr<DataEntry> request) { _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront request = " + request->getData()); }
 
-int StorageModuleDB::RQCount() {
-  int size = 0;
+long long StorageModuleDB::RQCount() {
+  long long size = 0;
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQCount size = " + size);
 
   return 0;
@@ -34,13 +34,11 @@ std::vector<std::shared_ptr<DataEntry>> StorageModuleDB::RQPeekAll() {
   return v;
 }
 
-void StorageModuleDB::RQInsertAtEnd(const std::string &request) {
-  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQInsertAtEnd request = " + request);
-}
+void StorageModuleDB::RQInsertAtEnd(const std::string &request) { _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQInsertAtEnd request = " + request); }
 
 void StorageModuleDB::RQClearAll() { _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQClearAll"); }
 
-const std::shared_ptr<DataEntry>  StorageModuleDB::RQPeekFront() {
+const std::shared_ptr<DataEntry> StorageModuleDB::RQPeekFront() {
   std::shared_ptr<DataEntry> front = nullptr;
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQPeekFrontssssssssss");
   return front;

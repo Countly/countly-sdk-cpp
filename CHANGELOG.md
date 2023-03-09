@@ -1,3 +1,6 @@
+22.09.0
+* Fixed a bug where view's name was being overriden by segmentation provided.
+
 22.06.4
 * Fixed a bug where the SDK 'mutex' was being locked twice when built with the 'COUNTLY_USE_SQLITE' flag.
 

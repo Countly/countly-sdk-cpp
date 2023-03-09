@@ -15,7 +15,7 @@ public:
   ~StorageModuleDB();
 
   void init() override;
-  int RQCount() override;
+  long long RQCount() override;
   void RQClearAll() override;
   virtual void RQRemoveFront() override;
   const std::shared_ptr<DataEntry> RQPeekFront() override;

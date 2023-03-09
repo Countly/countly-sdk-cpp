@@ -50,15 +50,19 @@ TEST_CASE("validate configuration all setters") {
     ct.SetMaxEventsPerMessage(10);
     ct.setAutomaticSessionUpdateInterval(5);
     ct.setSalt("salt");
+    ct.SetPath(TEST_DATABASE_NAME);
 
     // Server and port
     ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, false);
-    
+
     const CountlyConfiguration config = ct.getConfiguration();
     CHECK(config.serverUrl == "https://try.count.ly");
     CHECK(config.appKey == "YOUR_APP_KEY");
     CHECK(config.deviceId == "test-device-id");
     CHECK(config.salt == "salt");
+#ifdef COUNTLY_USE_SQLITE
+    CHECK(config.databasePath == TEST_DATABASE_NAME);
+#endif
     CHECK(config.sessionDuration == 5);
     CHECK(config.eventQueueThreshold == 10);
     CHECK(config.requestQueueThreshold == 1000);

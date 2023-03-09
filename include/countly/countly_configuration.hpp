@@ -28,6 +28,11 @@ struct CountlyConfiguration {
   std::string salt;
 
   /**
+   * Path to the database.
+   */
+  std::string databasePath;
+
+  /**
    * Sets the interval for the automatic update calls
    * min value 1 (1 second), max value 600 (10 minutes)
    */
