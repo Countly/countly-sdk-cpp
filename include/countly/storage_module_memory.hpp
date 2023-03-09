@@ -22,9 +22,9 @@ public:
   int RQCount() override;
   void RQClearAll() override;
   virtual void RQRemoveFront() override;
-  const std::shared_ptr<DataEntry>RQPeekFront() override;
+  const std::shared_ptr<DataEntry> RQPeekFront() override;
   std::vector<std::shared_ptr<DataEntry>> RQPeekAll() override;
-  void RQRemoveFront(std::shared_ptr<DataEntry>request) override;
+  void RQRemoveFront(std::shared_ptr<DataEntry> request) override;
   void RQInsertAtEnd(const std::string &request) override;
 };
 } // namespace cly
