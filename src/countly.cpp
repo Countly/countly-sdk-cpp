@@ -39,6 +39,7 @@ Countly &Countly::getInstance() {
   if (_sharedInstance.get() == nullptr) {
     _sharedInstance.reset(new Countly());
   }
+
   return *_sharedInstance.get();
 }
 
@@ -46,37 +47,82 @@ Countly &Countly::getInstance() {
 void Countly::halt() { _sharedInstance.reset(new Countly()); }
 #endif
 
+/**
+ * Set limit for the number of requests that can be stored locally.
+ * @param requestQueueSize: max size of request queue
+ */
+void Countly::setMaxRequestQueueSize(unsigned int requestQueueSize) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][setMaxRequestQueueSize] You can not set the request queue size after SDK initialization.");
+    return;
+  }
+
+  mutex->lock();
+  configuration->requestQueueThreshold = requestQueueSize;
+  mutex->unlock();
+}
+
 void Countly::alwaysUsePost(bool value) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][alwaysUsePost] You can not set the http method after SDK initialization.");
+    return;
+  }
+
   mutex->lock();
   configuration->forcePost = value;
   mutex->unlock();
 }
 
 void Countly::setSalt(const std::string &value) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][setSalt] You can not set the salt after SDK initialization.");
+    return;
+  }
+
   mutex->lock();
   configuration->salt = value;
   mutex->unlock();
 }
 
 void Countly::setLogger(void (*fun)(LogLevel level, const std::string &message)) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][setLogger] You can not set the logger after SDK initialization.");
+    return;
+  }
+
   mutex->lock();
   logger->setLogger(fun);
   mutex->unlock();
 }
 
 void Countly::setHTTPClient(HTTPClientFunction fun) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][setHTTPClient] You can not set the http client after SDK initialization.");
+    return;
+  }
+
   mutex->lock();
   configuration->http_client_function = fun;
   mutex->unlock();
 }
 
 void Countly::setSha256(SHA256Function fun) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][setHTTPClient] You can not set the 'SHA256' function after SDK initialization.");
+    return;
+  }
+
   mutex->lock();
   configuration->sha256_function = fun;
   mutex->unlock();
 }
 
 void Countly::setMetrics(const std::string &os, const std::string &os_version, const std::string &device, const std::string &resolution, const std::string &carrier, const std::string &app_version) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][setMetrics] You can not set metrics after SDK initialization.");
+    return;
+  }
+
   if (!os.empty()) {
     configuration->metrics["_os"] = os;
   }
@@ -297,6 +343,13 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
     return;
   }
 
+#ifdef COUNTLY_USE_SQLITE
+  if (configuration->databasePath == "" || configuration->databasePath == " ") {
+    log(LogLevel::ERROR, "[Countly][start] Database path can not be empty or blank.");
+    return;
+  }
+#endif
+
   log(LogLevel::INFO, "[Countly][start]");
 
 #ifdef COUNTLY_USE_SQLITE
@@ -333,7 +386,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   session_params["app_key"] = app_key;
 
 #ifdef COUNTLY_USE_SQLITE
-  storageModule.reset(new StorageModuleMemory(configuration, logger));
+  storageModule.reset(new StorageModuleDB(configuration, logger));
 #else
   storageModule.reset(new StorageModuleMemory(configuration, logger));
 #endif
@@ -344,7 +397,12 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   crash_module.reset(new cly::CrashModule(configuration, logger, requestModule, mutex));
   views_module.reset(new cly::ViewsModule(this, logger));
 
-  is_sdk_initialized = true; // after this point SDK is initialized.
+  bool result = true;
+#ifdef COUNTLY_USE_SQLITE
+  result = createEventTableSchema();
+#endif
+
+  is_sdk_initialized = result; // after this point SDK is initialized.
 
   if (!running) {
 
@@ -448,6 +506,11 @@ void Countly::addEventToSqlite(const cly::Event &event) {
 #endif
 
 void Countly::setMaxEvents(size_t value) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][setMaxEvents] You can not set the event queue size after SDK initialization.");
+    return;
+  }
+
   mutex->lock();
   configuration->eventQueueThreshold = value;
 #ifndef COUNTLY_USE_SQLITE
@@ -529,6 +592,44 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
   sqlite3_close(database);
 #endif
 }
+#ifdef COUNTLY_BUILD_TESTS
+std::vector<std::string> Countly::debugReturnStateOfEQ() {
+#ifdef COUNTLY_USE_SQLITE
+  std::vector<std::string> v;
+  sqlite3 *database;
+  int return_value, row_count, column_count;
+  char **table;
+  char *error_message;
+
+  return_value = sqlite3_open(configuration->databasePath.c_str(), &database);
+  if (return_value == SQLITE_OK) {
+    std::ostringstream sql_statement_stream;
+    sql_statement_stream << "SELECT * FROM events ORDER BY evtid ASC;";
+    std::string sql_statement = sql_statement_stream.str();
+
+    return_value = sqlite3_get_table(database, sql_statement.c_str(), &table, &row_count, &column_count, &error_message);
+    bool no_request = (row_count == 0);
+    if (return_value == SQLITE_OK && !no_request) {
+
+      for (int event_index = 1; event_index < row_count + 1; event_index++) {
+        std::string rqstId = table[event_index * column_count];
+        std::string rqst = table[(event_index * column_count) + 1];
+        v.push_back(rqst);
+      }
+
+    } else if (return_value != SQLITE_OK) {
+      std::string error(error_message);
+      sqlite3_free(error_message);
+    }
+    sqlite3_free_table(table);
+  }
+  sqlite3_close(database);
+#else
+  std::vector<std::string> v(event_queue.begin(), event_queue.end());
+#endif
+  return v;
+}
+#endif
 
 bool Countly::beginSession() {
   mutex->lock();
@@ -719,15 +820,28 @@ std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chro
 
 #ifdef COUNTLY_USE_SQLITE
 void Countly::setDatabasePath(const std::string &path) {
-  log(LogLevel::INFO, "[Countly][setDatabasePath] path = " + path);
+  if (is_sdk_initialized) {
+    log(LogLevel::ERROR, "[Countly][setDatabasePath] You can not set the database path after SDK initialization.");
+    return;
+  }
 
+  if (path == "" || path == " ") {
+    log(LogLevel::ERROR, "[Countly][setDatabasePath] Database path can not be empty or blank.");
+    return;
+  }
+
+  configuration->databasePath = path;
+  log(LogLevel::INFO, "[Countly][setDatabasePath] path = " + path);
+}
+
+bool Countly::createEventTableSchema() {
+  bool result = false;
   sqlite3 *database;
   int return_value, row_count, column_count;
   char **table;
   char *error_message;
 
-  mutex->lock();
-  database_path = path;
+  database_path = configuration->databasePath;
 
   return_value = sqlite3_open(database_path.c_str(), &database);
   if (return_value == SQLITE_OK) {
@@ -735,6 +849,8 @@ void Countly::setDatabasePath(const std::string &path) {
     if (return_value != SQLITE_OK) {
       log(LogLevel::ERROR, error_message);
       sqlite3_free(error_message);
+    } else {
+      result = true;
     }
   } else {
     log(LogLevel::ERROR, "Failed to open sqlite database");
@@ -742,10 +858,10 @@ void Countly::setDatabasePath(const std::string &path) {
     database_path.clear();
   }
   sqlite3_close(database);
-  mutex->unlock();
+
+  return result;
 }
 #endif
-
 void Countly::log(LogLevel level, const std::string &message) { logger->log(cly::LogLevel(level), message); }
 
 static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n_bytes, std::string *body) {
