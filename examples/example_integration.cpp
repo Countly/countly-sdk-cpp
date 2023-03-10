@@ -34,10 +34,10 @@ int main() {
   cout << "Sample App" << endl;
   Countly &ct = Countly::getInstance();
   ct.alwaysUsePost(true);
+  ct.setLogger(printLog);
+  ct.SetPath("databaseFileName.db"); // this will be only built into account if the correct configurations are set
   ct.setDeviceID("test-device-id");
   // ct.setSalt("test-salt");
-
-  ct.setLogger(printLog);
   // OS, OS_version, device, resolution, carrier, app_version);
   ct.SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Carrier", "1.0");
   // Server and port

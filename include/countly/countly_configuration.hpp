@@ -28,6 +28,13 @@ struct CountlyConfiguration {
   std::string salt;
 
   /**
+   * Path to the database.
+   */
+#ifdef COUNTLY_USE_SQLITE
+  std::string databasePath;
+#endif
+
+  /**
    * Sets the interval for the automatic update calls
    * min value 1 (1 second), max value 600 (10 minutes)
    */

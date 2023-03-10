@@ -1,19 +1,19 @@
 #ifndef COUNTLY_CONSTANTS_HPP_
 #define COUNTLY_CONSTANTS_HPP_
 
+#include "nlohmann/json.hpp"
 #include <cassert>
 #include <chrono>
+#include <climits>
 #include <functional>
 #include <map>
 #include <memory>
 #include <random>
 #include <sstream>
 #include <string>
-#include <climits>
-#include "nlohmann/json.hpp"
 
 #define COUNTLY_SDK_NAME "cpp-native-unknown"
-#define COUNTLY_SDK_VERSION "22.06.4"
+#define COUNTLY_SDK_VERSION "22.09.0"
 #define COUNTLY_POST_THRESHOLD 2000
 #define COUNTLY_KEEPALIVE_INTERVAL 3000
 #define COUNTLY_MAX_EVENTS_DEFAULT 200
@@ -31,7 +31,7 @@ const std::default_random_engine generator(std::chrono::system_clock::now().time
 const std::uniform_int_distribution<int> distribution(1, INT_MAX);
 
 /**
- * Convert map into a string.
+ * Formats the given arguments into a string buffer.
  *
  * @param format formatting string
  * @param args arguments to be formatted
@@ -49,7 +49,7 @@ template <typename... Args> static std::string format_string(const std::string &
 }
 
 /**
- * Convert map into a string.
+ * Gives a string representation of the size of a map.
  *
  * @param m a map containing key-value pairs
  * @return a string object holding size of map.

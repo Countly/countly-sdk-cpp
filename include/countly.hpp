@@ -22,10 +22,11 @@
 #endif
 #include "countly/event.hpp"
 #include "countly/logger_module.hpp"
+#include "countly/storage_module_base.hpp"
 #include "countly/views_module.hpp"
+#include <countly/crash_module.hpp>
 #include <countly/request_builder.hpp>
 #include <countly/request_module.hpp>
-#include <countly/crash_module.hpp>
 
 namespace cly {
 class Countly : public cly::CountlyDelegates {
@@ -33,6 +34,8 @@ public:
   Countly();
 
   ~Countly();
+
+  // Returns the singleton instance of Countly
   static Countly &getInstance();
 
   // Do not implicitly generate the copy constructor, this is a singleton.
@@ -42,6 +45,8 @@ public:
   void operator=(const Countly &) = delete;
 
   void alwaysUsePost(bool value);
+
+  void setMaxRequestQueueSize(unsigned int requestQueueSize);
 
   void setSalt(const std::string &value);
 
@@ -92,6 +97,8 @@ public:
   void setUpdateInterval(size_t milliseconds);
 
   void addEvent(const cly::Event &event);
+
+  void addEventToSqlite(const cly::Event &event);
 
   void setMaxEvents(size_t value);
 
@@ -179,7 +186,14 @@ public:
   }
 
   /* Provide 'updateInterval' in seconds. */
-  inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) { configuration->sessionDuration = updateInterval; }
+  inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) {
+    if (is_sdk_initialized) {
+      log(LogLevel::WARNING, "[Countly][setAutomaticSessionUpdateInterval] You can not set the session duration after SDK initialization.");
+      return;
+    }
+
+    configuration->sessionDuration = updateInterval;
+  }
 
 #ifdef COUNTLY_BUILD_TESTS
   /**
@@ -188,15 +202,7 @@ public:
    * You should not be using this method.
    * @return a vector object containing events.
    */
-  const std::vector<std::string> debugReturnStateOfEQ() {
-
-#ifdef COUNTLY_USE_SQLITE
-    return {};
-#else
-    std::vector<std::string> v(event_queue.begin(), event_queue.end());
-    return v;
-#endif
-  }
+  std::vector<std::string> debugReturnStateOfEQ();
 
   /**
    * This function should not be used as it will be removed in a future release.
@@ -229,6 +235,9 @@ private:
   void _deleteThread();
   void _sendIndependantLocationRequest();
   void log(LogLevel level, const std::string &message);
+#ifdef COUNTLY_USE_SQLITE
+  bool createEventTableSchema();
+#endif
 
   /**
    * Helper methods to fetch remote config from the server.
@@ -257,11 +266,12 @@ private:
   std::unique_ptr<std::thread> thread;
   std::unique_ptr<cly::CrashModule> crash_module;
   std::unique_ptr<cly::ViewsModule> views_module;
+
   std::shared_ptr<cly::CountlyConfiguration> configuration;
   std::shared_ptr<cly::LoggerModule> logger;
-
   std::shared_ptr<cly::RequestBuilder> requestBuilder;
   std::shared_ptr<cly::RequestModule> requestModule;
+  std::shared_ptr<cly::StorageModuleBase> storageModule;
   std::shared_ptr<std::mutex> mutex = std::make_shared<std::mutex>();
 
   bool is_queue_being_processed = false;

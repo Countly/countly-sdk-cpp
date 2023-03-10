@@ -3,6 +3,7 @@
 
 #include "countly.hpp"
 #include "nlohmann/json.hpp"
+#include <cstdio>
 
 using namespace cly;
 
@@ -11,6 +12,7 @@ namespace test_utils {
 #define COUNTLY_TEST_DEVICE_ID "11732aa3-19a6-4272-9057-e3411f1938be"
 #define COUNTLY_TEST_HOST "http://test.countly.notarealdomain"
 #define COUNTLY_TEST_PORT 8080
+#define TEST_DATABASE_NAME "test-countly.db"
 
 struct HTTPCall {
   bool use_post;
@@ -20,7 +22,10 @@ struct HTTPCall {
 
 static std::deque<HTTPCall> http_call_queue;
 
-static void clearSDK() { cly::Countly::halt(); }
+static void clearSDK() {
+  cly::Countly::halt();
+  remove(TEST_DATABASE_NAME);
+}
 
 static void decodeURL(std::string &encoded) {
   for (auto percent_index = encoded.find('%'); percent_index != std::string::npos; percent_index = encoded.find('%', percent_index + 1)) {
