@@ -10,6 +10,7 @@ namespace cly {
 class StorageModuleDB : public StorageModuleBase {
 private:
   bool createSchema(const char tableName[], const char keyColumnName[], const char dataColumnName[]);
+  void vacuumDatabase();
 
 public:
   StorageModuleDB(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger);
