@@ -26,6 +26,31 @@ void StorageModuleDB::init() {
 
   // Create schema for the requests table
   _is_initialized = createSchema(REQUESTS_TABLE_NAME, REQUESTS_TABLE_REQUEST_ID, REQUESTS_TABLE_REQUEST_DATA);
+
+  if (_is_initialized) {
+    _logger->log(LogLevel::INFO, "[StorageModuleDB][Vacuum] Will try to vacuum the database");
+
+#ifdef COUNTLY_USE_SQLITE
+    sqlite3 *database;
+    int return_value;
+    char *error_message;
+    return_value = sqlite3_open(_configuration->databasePath.c_str(), &database);
+    if (return_value == SQLITE_OK) {
+      return_value = sqlite3_exec(database, "VACUUM", nullptr, nullptr, &error_message);
+      if (return_value != SQLITE_OK) {
+        _logger->log(LogLevel::ERROR, error_message);
+        sqlite3_free(error_message);
+      } else {
+        _logger->log(LogLevel::INFO, "[StorageModuleDB][Vacuum] Database vacuumed successfully");
+      }
+    } else {
+      std::string error(error_message);
+      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB][Vacuum] Failed to open sqlite database error = " + error);
+      sqlite3_free(error_message);
+    }
+    sqlite3_close(database);
+#endif
+  }
 }
 
 bool StorageModuleDB::createSchema(const char tableName[], const char keyColumnName[], const char dataColumnName[]) {
@@ -45,9 +70,6 @@ bool StorageModuleDB::createSchema(const char tableName[], const char keyColumnN
     sql_statement_stream << "CREATE TABLE IF NOT EXISTS " << tableName << " (" << keyColumnName << " INTEGER PRIMARY KEY, " << dataColumnName << " TEXT)";
 
     std::string statement = sql_statement_stream.str();
-
-    // Vacuum the database
-    sqlite3_exec(database, "VACUUM", nullptr, nullptr, nullptr);
 
     // Execute the SQL statement
     return_value = sqlite3_exec(database, statement.c_str(), nullptr, nullptr, &error_message);
