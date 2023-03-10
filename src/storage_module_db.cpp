@@ -46,6 +46,9 @@ bool StorageModuleDB::createSchema(const char tableName[], const char keyColumnN
 
     std::string statement = sql_statement_stream.str();
 
+    // Vacuum the database
+    sqlite3_exec(database, "VACUUM", nullptr, nullptr, nullptr);
+
     // Execute the SQL statement
     return_value = sqlite3_exec(database, statement.c_str(), nullptr, nullptr, &error_message);
     if (return_value != SQLITE_OK) {
@@ -59,6 +62,7 @@ bool StorageModuleDB::createSchema(const char tableName[], const char keyColumnN
     _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB][createSchema] Failed to open sqlite database error = " + error);
     sqlite3_free(error_message);
   }
+
   // Close the SQLite database
   sqlite3_close(database);
 #endif

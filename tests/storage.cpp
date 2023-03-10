@@ -55,11 +55,24 @@ void RQInsertAtEndWithInvalidRequest(std::shared_ptr<StorageModuleBase> storageM
 void RQInsertAtEndWithRequest(std::shared_ptr<StorageModuleBase> storageModule) {
   storageModule->RQInsertAtEnd("request");
   CHECK(storageModule->RQCount() == 1);
+  validateDataEntry(storageModule->RQPeekFront(), 1, "request");
 
   storageModule->RQInsertAtEnd("request 1");
   storageModule->RQInsertAtEnd("request 2");
   storageModule->RQInsertAtEnd("request 3");
+  validateDataEntry(storageModule->RQPeekFront(), 1, "request");
   validateSizes(storageModule, 4);
+  storageModule->RQRemoveFront();
+  validateDataEntry(storageModule->RQPeekFront(), 2, "request 1");
+  storageModule->RQRemoveFront();
+  validateDataEntry(storageModule->RQPeekFront(), 3, "request 2");
+  storageModule->RQRemoveFront();
+  validateDataEntry(storageModule->RQPeekFront(), 4, "request 3");
+  validateSizes(storageModule, 1);
+  storageModule->RQRemoveFront();
+  validateSizes(storageModule, 0);
+  storageModule->RQRemoveFront();
+  validateSizes(storageModule, 0);
 }
 
 /**
@@ -517,6 +530,7 @@ TEST_CASE("Test Memory Storage Module") {
   SUBCASE("Validate method 'RQClearAll' when the request queue is empty.") { RQClearAll_WithEmptyQueue(storageModule); }
   SUBCASE("Validate method 'RQClearAll' when the request queue is not empty.") { RQClearAll_WithNonEmptyQueue(storageModule); }
 }
+
 TEST_CASE("Test Memory Storage Module without calling 'init'") {
   test_utils::clearSDK();
   shared_ptr<cly::LoggerModule> logger;

@@ -5,7 +5,8 @@ using namespace cly;
 using namespace test_utils;
 
 // Define custom SHA256 functions
-std::string customSha256_1(const std::string &data) { return "SHA256_1"; }
+std::string customSha_1_returnValue = "SHA256_1";
+std::string customSha256_1(const std::string &data) { return customSha_1_returnValue; }
 std::string customSha256_2(const std::string &data) { return "SHA256_2"; }
 
 // Define custom HTTPClient function
@@ -27,9 +28,10 @@ HTTPResponse new_CustomClient(bool f, const std::string &a, const std::string &b
 }
 
 // Test case to validate Countly configuration using all setters
-TEST_CASE("validate configuration all setters") {
+TEST_CASE("Validate setting configuration values") {
   // Test case for default values
-  SUBCASE("default values") {
+  // Making sure that the default configuration values are as expected
+  SUBCASE("Validating default values") {
     clearSDK();
     Countly &ct = Countly::getInstance();
     const CountlyConfiguration config = ct.getConfiguration();
@@ -52,7 +54,8 @@ TEST_CASE("validate configuration all setters") {
   }
 
   // Test case to validate values set using Countly setters
-  SUBCASE("validate values") {
+  // Making sure all the values can be set
+  SUBCASE("Validating configuration setters") {
     clearSDK();
     Countly &ct = Countly::getInstance();
     SHA256Function funPtr = customSha256_1;
@@ -86,7 +89,7 @@ TEST_CASE("validate configuration all setters") {
     CHECK(config.breadcrumbsThreshold == 100);
     CHECK(config.forcePost == true);
     CHECK(config.port == 443);
-    CHECK(config.sha256_function("custom SHA256") == "SHA256_1");
+    CHECK(config.sha256_function("custom SHA256") == customSha_1_returnValue);
 
     HTTPResponse response = config.http_client_function(true, "", "");
 
@@ -101,8 +104,13 @@ TEST_CASE("validate configuration all setters") {
     CHECK(config.metrics["_device"] == "pc");
   }
 
-  SUBCASE("validate set configuration after SDK init") {
+  // Making sure that after init, none of the configuration values can be changes
+  // SDK will be initialised and the state will be validated
+  // Afterwards the test will attempt to change the same setters to different values
+  // The test would confirm that they can not be set anymore
+  SUBCASE("Validating that config values can't be changed after init") {
     clearSDK();
+    // setting the initial state
     Countly &ct = Countly::getInstance();
     SHA256Function funPtr = customSha256_1;
     HTTPClientFunction clientPtr = customClient;
@@ -138,7 +146,7 @@ TEST_CASE("validate configuration all setters") {
     CHECK(config.breadcrumbsThreshold == 100);
     CHECK(config.forcePost == true);
     CHECK(config.port == 443);
-    CHECK(config.sha256_function("custom SHA256") == "SHA256_1");
+    CHECK(config.sha256_function("custom SHA256") == customSha_1_returnValue);
 
     HTTPResponse response = config.http_client_function(true, "", "");
 
@@ -152,6 +160,7 @@ TEST_CASE("validate configuration all setters") {
     CHECK(config.metrics["_resolution"] == "800x600");
     CHECK(config.metrics["_device"] == "pc");
 
+    // trying to change the values after init
     ct.alwaysUsePost(false);
     ct.setSha256(customSha256_2);
     ct.setHTTPClient(new_CustomClient);
@@ -163,7 +172,7 @@ TEST_CASE("validate configuration all setters") {
     ct.setMaxRequestQueueSize(100);
     ct.SetPath("new_database.db");
 
-    // get SDK configuration again.
+    // get SDK configuration again and make sure that they haven't changed
     config = ct.getConfiguration();
     CHECK(config.serverUrl == "https://try.count.ly");
     CHECK(config.appKey == "YOUR_APP_KEY");
@@ -178,7 +187,7 @@ TEST_CASE("validate configuration all setters") {
     CHECK(config.breadcrumbsThreshold == 100);
     CHECK(config.forcePost == true);
     CHECK(config.port == 443);
-    CHECK(config.sha256_function("custom SHA256") == "SHA256_1");
+    CHECK(config.sha256_function("custom SHA256") == customSha_1_returnValue);
 
     response = config.http_client_function(true, "", "");
 
