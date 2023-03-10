@@ -1,4 +1,5 @@
 22.09.0
+* Added a persistent requests queue when building the SDK with the 'COUNTLY_USE_SQLITE' flag
 * Fixed a bug where view's name was being overriden by segmentation provided.
 
 22.06.4
