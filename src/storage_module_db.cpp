@@ -18,11 +18,14 @@ StorageModuleDB::~StorageModuleDB() {}
 
 void StorageModuleDB::init() {
   _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] initialized.");
+
+#ifdef COUNTLY_USE_SQLITE
   // Check if the database path is empty or blank
   if (_configuration->databasePath == "" || _configuration->databasePath == " ") {
     _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] init: Database path can not be empty or blank!");
     return;
   }
+#endif
 
   // Create schema for the requests table
   _is_initialized = createSchema(REQUESTS_TABLE_NAME, REQUESTS_TABLE_REQUEST_ID, REQUESTS_TABLE_REQUEST_DATA);

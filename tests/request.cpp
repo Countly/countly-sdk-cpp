@@ -51,7 +51,9 @@ TEST_CASE("Test Request Module with Memory Storage") {
   logger.reset(new cly::LoggerModule());
 
   shared_ptr<cly::CountlyConfiguration> configuration = std::make_shared<CountlyConfiguration>("", "");
+#ifdef COUNTLY_USE_SQLITE
   configuration->databasePath = TEST_DATABASE_NAME;
+#endif
   configuration->requestQueueThreshold = 3;
 
   std::shared_ptr<StorageModuleMemory> storageModule = std::make_shared<StorageModuleMemory>(configuration, logger);

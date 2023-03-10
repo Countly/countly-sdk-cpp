@@ -41,7 +41,9 @@ TEST_CASE("Validate setting configuration values") {
     CHECK(config.appKey == "");
     CHECK(config.deviceId == "");
     CHECK(config.salt == "");
+#ifdef COUNTLY_USE_SQLITE
     CHECK(config.databasePath == "");
+#endif
     CHECK(config.sessionDuration == 60);
     CHECK(config.eventQueueThreshold == 100);
     CHECK(config.requestQueueThreshold == 1000);
