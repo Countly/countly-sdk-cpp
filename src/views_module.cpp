@@ -47,7 +47,6 @@ private:
           viewSegments[key_value.first] = key_value.second;
         }
       }
-
     } else {
 
       const std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
