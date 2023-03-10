@@ -1,4 +1,5 @@
 22.09.0
+* ! Minor breaking change ! SDK configuration now can't be changed after initialization/start
 * Added a persistent requests queue when building the SDK with the 'COUNTLY_USE_SQLITE' flag
 * Fixed a bug where view's name was being overriden by segmentation provided.
 
