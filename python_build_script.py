@@ -4,7 +4,9 @@ import logging
 import itertools
 
 # Set up logging
-logging.basicConfig(filename='test_results.log', level=logging.INFO, format='%(asctime)s:%(levelname)s:%(message)s')
+log_filename = 'test_results_{}.log'.format(datetime.datetime.now().strftime('%Y%m%d_%H%M%S'))
+logging.basicConfig(filename=log_filename, level=logging.INFO, format='%(asctime)s:%(levelname)s:%(message)s')
+
 # List all combinations of COUNTLY_USE_CUSTOM_SHA256 and COUNTLY_USE_SQLITE
 options = [(0, 0), (0, 1), (1, 0), (1, 1)]
 
