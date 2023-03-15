@@ -881,8 +881,8 @@ bool Countly::createEventTableSchema() {
         result = true;
       }
     } else {
-      log(LogLevel::ERROR, "Failed to open sqlite database");
-      //       sqlite3_free(error_message);
+      const char *error = sqlite3_errmsg(database);
+      log(LogLevel::ERROR, "[Countly][createEventTableSchema] " + std::string(error));
       database_path.clear();
     }
     sqlite3_close(database);

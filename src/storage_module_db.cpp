@@ -59,9 +59,8 @@ void StorageModuleDB::vacuumDatabase() {
         _logger->log(LogLevel::INFO, "[StorageModuleDB][Vacuum] Database vacuumed successfully");
       }
     } else {
-      std::string error(error_message);
-      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB][Vacuum] Failed to open sqlite database error = " + error);
-      sqlite3_free(error_message);
+      const char *error = sqlite3_errmsg(database);
+      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB][Vacuum] " + std::string(error));
     }
     sqlite3_close(database);
 #endif
@@ -100,9 +99,8 @@ bool StorageModuleDB::createSchema(const char tableName[], const char keyColumnN
         result = true;
       }
     } else {
-      //       std::string error(error_message);
-      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB][createSchema] Failed to open sqlite database error = ");
-      //       sqlite3_free(error_message);
+      const char *error = sqlite3_errmsg(database);
+      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB][createSchema] " + std::string(error));
     }
 
     // Close the SQLite database
