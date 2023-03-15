@@ -9,72 +9,42 @@
 using namespace cly;
 using namespace std;
 
-void storageModuleWithoutInit(std::shared_ptr<StorageModuleBase> storageModule) {
-  CHECK(storageModule->RQCount() == -1);
-  CHECK(storageModule->RQPeekAll().size() == 0);
-
-  storageModule->RQInsertAtEnd("request");
-  CHECK(storageModule->RQCount() == -1);
-  CHECK(storageModule->RQPeekAll().size() == 0);
-
-  storageModule->RQClearAll();
-  CHECK(storageModule->RQCount() == -1);
-  CHECK(storageModule->RQPeekAll().size() == 0);
-
-  std::shared_ptr<DataEntry> entry = storageModule->RQPeekFront();
-  CHECK(entry->getId() == -1);
-  CHECK(entry->getData() == "");
-
-  CHECK(storageModule->RQCount() == -1);
-  CHECK(storageModule->RQPeekAll().size() == 0);
-}
-
 #ifdef COUNTLY_USE_SQLITE
 TEST_CASE("Test Sqlite Storage Module Specific tests") {
   test_utils::clearSDK();
-  shared_ptr<cly::LoggerModule> logger;
-  logger.reset(new cly::LoggerModule());
-
+  shared_ptr<cly::LoggerModule> logger(new cly::LoggerModule());
   shared_ptr<cly::CountlyConfiguration> configuration = std::make_shared<CountlyConfiguration>("", "");
-  configuration->databasePath = TEST_DATABASE_NAME;
 
-  std::shared_ptr<StorageModuleDB> storageModule = std::make_shared<StorageModuleDB>(configuration, logger);
-  storageModule->init();
-}
+  SUBCASE("Test SQlite Storage Module against invalid database path") {
+    configuration->databasePath = "";
 
-TEST_CASE("Test SQlite Storage Module against invalid database path") {
-  test_utils::clearSDK();
-  shared_ptr<cly::LoggerModule> logger;
-  logger.reset(new cly::LoggerModule());
+    std::shared_ptr<StorageModuleDB> storageModule = std::make_shared<StorageModuleDB>(configuration, logger);
+    storageModule->init();
+    test_utils::storageModuleNotInitialized(storageModule);
+  }
 
-  shared_ptr<cly::CountlyConfiguration> configuration = std::make_shared<CountlyConfiguration>("", "");
-  configuration->databasePath = "";
+  SUBCASE("Test SQlite Storage Module against invalid database path, empty space") {
+    configuration->databasePath = " ";
 
-  std::shared_ptr<StorageModuleDB> storageModule = std::make_shared<StorageModuleDB>(configuration, logger);
-  storageModuleWithoutInit(storageModule);
-}
+    std::shared_ptr<StorageModuleDB> storageModule = std::make_shared<StorageModuleDB>(configuration, logger);
+    storageModule->init();
+    test_utils::storageModuleNotInitialized(storageModule);
+  }
 
-TEST_CASE("Test SQlite Storage Module against invalid database path") {
-  test_utils::clearSDK();
-  shared_ptr<cly::LoggerModule> logger;
-  logger.reset(new cly::LoggerModule());
+  SUBCASE("Test SQlite Storage Module against invalid database path") {
+    configuration->databasePath = "/";
 
-  shared_ptr<cly::CountlyConfiguration> configuration = std::make_shared<CountlyConfiguration>("", "");
-  configuration->databasePath = "/";
+    std::shared_ptr<StorageModuleDB> storageModule = std::make_shared<StorageModuleDB>(configuration, logger);
+    storageModule->init();
+    test_utils::storageModuleNotInitialized(storageModule);
+  }
 
-  std::shared_ptr<StorageModuleDB> storageModule = std::make_shared<StorageModuleDB>(configuration, logger);
-  storageModuleWithoutInit(storageModule);
-}
+  SUBCASE("Test SQlite Storage Module against invalid database path") {
+    configuration->databasePath = "Q:/blah";
 
-TEST_CASE("Test SQlite Storage Module against invalid database path") {
-  test_utils::clearSDK();
-  shared_ptr<cly::LoggerModule> logger;
-  logger.reset(new cly::LoggerModule());
-
-  shared_ptr<cly::CountlyConfiguration> configuration = std::make_shared<CountlyConfiguration>("", "");
-  configuration->databasePath = "Q:/blah";
-
-  std::shared_ptr<StorageModuleDB> storageModule = std::make_shared<StorageModuleDB>(configuration, logger);
-  storageModuleWithoutInit(storageModule);
+    std::shared_ptr<StorageModuleDB> storageModule = std::make_shared<StorageModuleDB>(configuration, logger);
+    storageModule->init();
+    test_utils::storageModuleNotInitialized(storageModule);
+  }
 }
 #endif
