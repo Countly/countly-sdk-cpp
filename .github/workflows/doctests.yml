@@ -8,11 +8,13 @@ on:
 
 jobs:
   doctests:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
     strategy:
+      fail-fast: false
       matrix:
-        compiler: [gcc, clang]
-        cpp-version: ["17"]
+        os:
+          - ubuntu-20.04
 
     steps:
       - name: Checkout code
