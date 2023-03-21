@@ -12,6 +12,7 @@ jobs:
     strategy:
       matrix:
         compiler: [gcc, clang]
+        cpp-version: ["17"]
 
     steps:
       - name: Checkout code
