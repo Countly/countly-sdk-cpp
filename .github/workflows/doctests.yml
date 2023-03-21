@@ -26,6 +26,9 @@ jobs:
           mkdir -p include
           mv doctest.h include/
 
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake libcurl4-openssl-dev
+
       - name: Build and run tests
         run: |
           cmake -DCOUNTLY_BUILD_TESTS=1 -B build .
