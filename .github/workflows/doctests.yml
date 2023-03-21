@@ -9,6 +9,9 @@ on:
 jobs:
   doctests:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
 
     steps:
       - name: Checkout code
