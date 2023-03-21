@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+        with:
+          submodules: "recursive"
 
       - name: Install CMake
         run: sudo apt-get update && sudo apt-get install -y cmake
