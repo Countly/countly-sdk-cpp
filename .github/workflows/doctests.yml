@@ -2,9 +2,9 @@ name: Run Doctests
 
 on:
   push:
-    branches: [master, staging, workflow]
+    branches: [master, staging]
   pull_request:
-    branches: [master, staging, workflow]
+    branches: [master, staging]
 
 jobs:
   doctests:
@@ -22,13 +22,19 @@ jobs:
           - os: windows-2019
             cmake-generator: -G "Visual Studio 16 2019" -A x64
             cmake-install: "choco install -y cmake"
-            dependencies: "choco install -y openssl"
+            dependencies: |
+              choco install -y openssl
+              choco install -y visualstudio2017-workload-vctools
+              choco upgrade -y visualstudio2017-workload-vctools
+            make: msbuild  countly-tests.vcxproj -t:rebuild -verbosity:diag -property:Configuration=Release && .\Release\countly-tests.exe
           - os: macos-11.0
             cmake-install: "brew install cmake"
             dependencies: "brew install openssl"
+            make: make ./countly-tests && ./countly-tests
           - os: ubuntu-20.04
             cmake-install: "sudo apt-get update && sudo apt-get install -y cmake"
             dependencies: "sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev"
+            make: make ./countly-tests && ./countly-tests
 
     steps:
       - name: Checkout code
@@ -45,10 +51,12 @@ jobs:
       - name: Install dependencies
         run: ${{ matrix.dependencies }}
 
+      - name: Set up MSVC
+        if: matrix.os == 'windows-2019'
+        uses: microsoft/setup-msbuild@v1
+
       - name: Build and run tests
         run: |
           cmake -DCOUNTLY_BUILD_TESTS=1 -B build . ${{ matrix.cmake-generator }}
           cd build
-          make ./countly-tests
-          ./countly-tests
-        continue-on-error: true
+          ${{ matrix.make }}
