@@ -2,9 +2,9 @@ name: Run Doctests
 
 on:
   push:
-    branches: [master, staging]
+    branches: [master, staging, workflow]
   pull_request:
-    branches: [master, staging]
+    branches: [master, staging, workflow]
 
 jobs:
   doctests:
@@ -15,6 +15,20 @@ jobs:
       matrix:
         os:
           - ubuntu-20.04
+          - macos-11.0
+          - windows-2019
+
+        include:
+          - os: windows-2019
+            cmake-generator: -G "Visual Studio 16 2019" -A x64
+            cmake-install: "choco install -y cmake"
+            dependencies: "choco install -y openssl"
+          - os: macos-11.0
+            cmake-install: "brew install cmake"
+            dependencies: "brew install openssl"
+          - os: ubuntu-20.04
+            cmake-install: "sudo apt-get update && sudo apt-get install -y cmake"
+            dependencies: "sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev"
 
     steps:
       - name: Checkout code
@@ -26,20 +40,14 @@ jobs:
         run: git submodule update --init --recursive
 
       - name: Install CMake
-        run: sudo apt-get update && sudo apt-get install -y cmake
-
-      - name: Install doctest
-        run: |
-          wget -O doctest.h https://github.com/onqtam/doctest/raw/master/doctest/doctest.h
-          mkdir -p include
-          mv doctest.h include/
+        run: ${{ matrix.cmake-install }}
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake libcurl4-openssl-dev
+        run: ${{ matrix.dependencies }}
 
       - name: Build and run tests
         run: |
-          cmake -DCOUNTLY_BUILD_TESTS=1 -B build .
+          cmake -DCOUNTLY_BUILD_TESTS=1 -B build . ${{ matrix.cmake-generator }}
           cd build
           make ./countly-tests
           ./countly-tests
