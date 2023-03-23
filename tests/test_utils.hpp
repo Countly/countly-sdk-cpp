@@ -2,6 +2,7 @@
 #define COUNTLY_TEST_UTILS_HPP_
 
 #include "countly.hpp"
+#include "doctest.h"
 #include "nlohmann/json.hpp"
 #include <cstdio>
 
@@ -25,6 +26,26 @@ static std::deque<HTTPCall> http_call_queue;
 static void clearSDK() {
   cly::Countly::halt();
   remove(TEST_DATABASE_NAME);
+}
+
+static void storageModuleNotInitialized(std::shared_ptr<StorageModuleBase> storageModule) {
+  CHECK(storageModule->RQCount() == -1);
+  CHECK(storageModule->RQPeekAll().size() == 0);
+
+  storageModule->RQInsertAtEnd("request");
+  CHECK(storageModule->RQCount() == -1);
+  CHECK(storageModule->RQPeekAll().size() == 0);
+
+  storageModule->RQClearAll();
+  CHECK(storageModule->RQCount() == -1);
+  CHECK(storageModule->RQPeekAll().size() == 0);
+
+  std::shared_ptr<DataEntry> entry = storageModule->RQPeekFront();
+  CHECK(entry->getId() == -1);
+  CHECK(entry->getData() == "");
+
+  CHECK(storageModule->RQCount() == -1);
+  CHECK(storageModule->RQPeekAll().size() == 0);
 }
 
 static void decodeURL(std::string &encoded) {

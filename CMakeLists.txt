@@ -108,11 +108,13 @@ if(COUNTLY_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/views.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/session.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/storage.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/storage_db.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/event.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/crash.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/request.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/config.cpp)
-
+    
+    target_compile_options(countly-tests PRIVATE -g)
     target_compile_definitions(countly-tests PRIVATE COUNTLY_BUILD_TESTS)
   if(COUNTLY_USE_SQLITE)
     message("Compiling definitions for sqlite")

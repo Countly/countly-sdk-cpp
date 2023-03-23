@@ -477,31 +477,36 @@ void Countly::addEvent(const cly::Event &event) {
 #ifdef COUNTLY_USE_SQLITE
 void Countly::addEventToSqlite(const cly::Event &event) {
   log(LogLevel::DEBUG, "[Countly][addEventToSqlite]");
-
-  if (database_path.empty()) {
-    mutex->unlock();
-    log(LogLevel::FATAL, "Cannot add event, sqlite database path is not set");
-    return;
-  }
-
-  sqlite3 *database;
-  int return_value;
-  char *error_message;
-
-  return_value = sqlite3_open(database_path.c_str(), &database);
-  if (return_value == SQLITE_OK) {
-    std::ostringstream sql_statement_stream;
-    // TODO Investigate if we need to escape single quotes in serialized event
-    sql_statement_stream << "INSERT INTO events (event) VALUES('" << event.serialize() << "');";
-    std::string sql_statement = sql_statement_stream.str();
-
-    return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
-    if (return_value != SQLITE_OK) {
-      log(LogLevel::ERROR, error_message);
-      sqlite3_free(error_message);
+  try {
+    if (database_path.empty()) {
+      mutex->unlock();
+      log(LogLevel::FATAL, "Cannot add event, sqlite database path is not set");
+      return;
     }
+
+    sqlite3 *database;
+    int return_value;
+    char *error_message;
+
+    return_value = sqlite3_open(database_path.c_str(), &database);
+    if (return_value == SQLITE_OK) {
+      std::ostringstream sql_statement_stream;
+      // TODO Investigate if we need to escape single quotes in serialized event
+      sql_statement_stream << "INSERT INTO events (event) VALUES('" << event.serialize() << "');";
+      std::string sql_statement = sql_statement_stream.str();
+
+      return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
+      if (return_value != SQLITE_OK) {
+        log(LogLevel::ERROR, error_message);
+        sqlite3_free(error_message);
+      }
+    }
+    sqlite3_close(database);
+  } catch (const std::system_error &e) {
+    std::ostringstream log_message;
+    log_message << "addEventToSqlite, error: " << e.what();
+    log(LogLevel::FATAL, log_message.str());
   }
-  sqlite3_close(database);
 }
 #endif
 
@@ -523,111 +528,124 @@ void Countly::setMaxEvents(size_t value) {
 }
 
 void Countly::flushEvents(std::chrono::seconds timeout) {
-  auto wait_duration = std::chrono::seconds(1);
-  bool update_failed;
-  while (timeout.count() != 0) {
+  try {
+    auto wait_duration = std::chrono::seconds(1);
+    bool update_failed;
+    while (timeout.count() != 0) {
 #ifndef COUNTLY_USE_SQLITE
-    mutex->lock();
-    if (event_queue.empty()) {
+      mutex->lock();
+      if (event_queue.empty()) {
+        mutex->unlock();
+        break;
+      }
       mutex->unlock();
-      break;
-    }
-    mutex->unlock();
 
-    update_failed = !updateSession();
+      update_failed = !updateSession();
 #else
-    mutex->lock();
-    if (database_path.empty()) {
+      mutex->lock();
+      if (database_path.empty()) {
+        mutex->unlock();
+        log(LogLevel::FATAL, "Cannot flush events, sqlite database path is not set");
+        return;
+      }
+
+      sqlite3 *database;
+      int return_value, row_count, column_count;
+      char **table;
+      char *error_message;
+
+      update_failed = true;
+      return_value = sqlite3_open(database_path.c_str(), &database);
       mutex->unlock();
-      log(LogLevel::FATAL, "Cannot flush events, sqlite database path is not set");
-      return;
+      if (return_value == SQLITE_OK) {
+        return_value = sqlite3_get_table(database, "SELECT COUNT(*) FROM events;", &table, &row_count, &column_count, &error_message);
+        if (return_value == SQLITE_OK) {
+          int event_count = atoi(table[1]);
+          if (event_count > 0) {
+            update_failed = !updateSession();
+          }
+        } else {
+          log(LogLevel::ERROR, error_message);
+          sqlite3_free(error_message);
+        }
+        sqlite3_free_table(table);
+      }
+      sqlite3_close(database);
+#endif
+      if (update_failed) {
+        std::this_thread::sleep_for(wait_duration);
+        wait_duration *= 2;
+        timeout = (wait_duration > timeout) ? std::chrono::seconds(0) : (timeout - wait_duration);
+      }
     }
 
+#ifndef COUNTLY_USE_SQLITE
+    event_queue.clear();
+#else
+    sqlite3 *database;
+    int return_value;
+    char *error_message;
+
+    update_failed = true;
+    return_value = sqlite3_open(database_path.c_str(), &database);
+    if (return_value == SQLITE_OK) {
+      return_value = sqlite3_exec(database, "DELETE FROM events;", nullptr, nullptr, &error_message);
+      if (return_value != SQLITE_OK) {
+        log(LogLevel::FATAL, error_message);
+        sqlite3_free(error_message);
+      }
+    }
+    sqlite3_close(database);
+#endif
+  } catch (const std::system_error &e) {
+    std::ostringstream log_message;
+    log_message << "flushEvents, error: " << e.what();
+    log(LogLevel::FATAL, log_message.str());
+  }
+}
+#ifdef COUNTLY_BUILD_TESTS
+std::vector<std::string> Countly::debugReturnStateOfEQ() {
+  try {
+
+#ifdef COUNTLY_USE_SQLITE
+    std::vector<std::string> v;
     sqlite3 *database;
     int return_value, row_count, column_count;
     char **table;
     char *error_message;
 
-    update_failed = true;
-    return_value = sqlite3_open(database_path.c_str(), &database);
-    mutex->unlock();
+    return_value = sqlite3_open(configuration->databasePath.c_str(), &database);
     if (return_value == SQLITE_OK) {
-      return_value = sqlite3_get_table(database, "SELECT COUNT(*) FROM events;", &table, &row_count, &column_count, &error_message);
-      if (return_value == SQLITE_OK) {
-        int event_count = atoi(table[1]);
-        if (event_count > 0) {
-          update_failed = !updateSession();
+      std::ostringstream sql_statement_stream;
+      sql_statement_stream << "SELECT * FROM events ORDER BY evtid ASC;";
+      std::string sql_statement = sql_statement_stream.str();
+
+      return_value = sqlite3_get_table(database, sql_statement.c_str(), &table, &row_count, &column_count, &error_message);
+      bool no_request = (row_count == 0);
+      if (return_value == SQLITE_OK && !no_request) {
+
+        for (int event_index = 1; event_index < row_count + 1; event_index++) {
+          std::string rqstId = table[event_index * column_count];
+          std::string rqst = table[(event_index * column_count) + 1];
+          v.push_back(rqst);
         }
-      } else {
-        log(LogLevel::ERROR, error_message);
+
+      } else if (return_value != SQLITE_OK) {
+        std::string error(error_message);
         sqlite3_free(error_message);
       }
       sqlite3_free_table(table);
     }
     sqlite3_close(database);
-#endif
-    if (update_failed) {
-      std::this_thread::sleep_for(wait_duration);
-      wait_duration *= 2;
-      timeout = (wait_duration > timeout) ? std::chrono::seconds(0) : (timeout - wait_duration);
-    }
-  }
-
-#ifndef COUNTLY_USE_SQLITE
-  event_queue.clear();
 #else
-  sqlite3 *database;
-  int return_value;
-  char *error_message;
-
-  update_failed = true;
-  return_value = sqlite3_open(database_path.c_str(), &database);
-  if (return_value == SQLITE_OK) {
-    return_value = sqlite3_exec(database, "DELETE FROM events;", nullptr, nullptr, &error_message);
-    if (return_value != SQLITE_OK) {
-      log(LogLevel::FATAL, error_message);
-      sqlite3_free(error_message);
-    }
-  }
-  sqlite3_close(database);
+    std::vector<std::string> v(event_queue.begin(), event_queue.end());
 #endif
-}
-#ifdef COUNTLY_BUILD_TESTS
-std::vector<std::string> Countly::debugReturnStateOfEQ() {
-#ifdef COUNTLY_USE_SQLITE
-  std::vector<std::string> v;
-  sqlite3 *database;
-  int return_value, row_count, column_count;
-  char **table;
-  char *error_message;
-
-  return_value = sqlite3_open(configuration->databasePath.c_str(), &database);
-  if (return_value == SQLITE_OK) {
-    std::ostringstream sql_statement_stream;
-    sql_statement_stream << "SELECT * FROM events ORDER BY evtid ASC;";
-    std::string sql_statement = sql_statement_stream.str();
-
-    return_value = sqlite3_get_table(database, sql_statement.c_str(), &table, &row_count, &column_count, &error_message);
-    bool no_request = (row_count == 0);
-    if (return_value == SQLITE_OK && !no_request) {
-
-      for (int event_index = 1; event_index < row_count + 1; event_index++) {
-        std::string rqstId = table[event_index * column_count];
-        std::string rqst = table[(event_index * column_count) + 1];
-        v.push_back(rqst);
-      }
-
-    } else if (return_value != SQLITE_OK) {
-      std::string error(error_message);
-      sqlite3_free(error_message);
-    }
-    sqlite3_free_table(table);
+    return v;
+  } catch (const std::system_error &e) {
+    std::ostringstream log_message;
+    log_message << "debugReturnStateOfEQ, error: " << e.what();
+    log(LogLevel::FATAL, log_message.str());
   }
-  sqlite3_close(database);
-#else
-  std::vector<std::string> v(event_queue.begin(), event_queue.end());
-#endif
-  return v;
 }
 #endif
 
@@ -682,113 +700,122 @@ bool Countly::beginSession() {
   return began_session;
 }
 
+/**
+ * @brief Update session
+ */
 bool Countly::updateSession() {
-  mutex->lock();
-  if (!began_session) {
-    mutex->unlock();
-    if (!beginSession()) {
+  try {
+    mutex->lock();
+    if (!began_session) {
+      mutex->unlock();
+      if (!beginSession()) {
+        return false;
+      }
+
+      mutex->lock();
+      began_session = true;
+    }
+
+    nlohmann::json events = nlohmann::json::array();
+    bool no_events;
+
+#ifndef COUNTLY_USE_SQLITE
+    no_events = event_queue.empty();
+    if (!no_events) {
+      for (const auto &event_json : event_queue) {
+        events.push_back(nlohmann::json::parse(event_json));
+      }
+    }
+#else
+    if (database_path.empty()) {
+      mutex->unlock();
+      log(LogLevel::FATAL, "Cannot fetch events, sqlite database path is not set");
       return false;
     }
 
-    mutex->lock();
-    began_session = true;
-  }
+    log(LogLevel::DEBUG, "[Countly][updateSession] fetching events from storage.");
+    sqlite3 *database;
+    int return_value, row_count, column_count;
+    char **table;
+    char *error_message;
+    std::string event_ids;
 
-  nlohmann::json events = nlohmann::json::array();
-  bool no_events;
-
-#ifndef COUNTLY_USE_SQLITE
-  no_events = event_queue.empty();
-  if (!no_events) {
-    for (const auto &event_json : event_queue) {
-      events.push_back(nlohmann::json::parse(event_json));
-    }
-  }
-#else
-  if (database_path.empty()) {
-    mutex->unlock();
-    log(LogLevel::FATAL, "Cannot fetch events, sqlite database path is not set");
-    return false;
-  }
-
-  log(LogLevel::DEBUG, "[Countly][updateSession] fetching events from storage.");
-  sqlite3 *database;
-  int return_value, row_count, column_count;
-  char **table;
-  char *error_message;
-  std::string event_ids;
-
-  return_value = sqlite3_open(database_path.c_str(), &database);
-  if (return_value == SQLITE_OK) {
-    std::ostringstream sql_statement_stream;
-    sql_statement_stream << "SELECT evtid, event FROM events LIMIT " << std::dec << configuration->eventQueueThreshold << ';';
-    std::string sql_statement = sql_statement_stream.str();
-
-    return_value = sqlite3_get_table(database, sql_statement.c_str(), &table, &row_count, &column_count, &error_message);
-    no_events = (row_count == 0);
-    if (return_value == SQLITE_OK && !no_events) {
-      std::ostringstream event_id_stream;
-      event_id_stream << '(';
-
-      for (int event_index = 1; event_index < row_count + 1; event_index++) {
-        event_id_stream << table[event_index * column_count] << ',';
-        events.push_back(nlohmann::json::parse(table[(event_index * column_count) + 1]));
-      }
-
-      log(LogLevel::DEBUG, "[Countly][updateSession] events count = " + events.size());
-
-      event_id_stream.seekp(-1, event_id_stream.cur);
-      event_id_stream << ')';
-      event_ids = event_id_stream.str();
-    } else if (return_value != SQLITE_OK) {
-      log(LogLevel::ERROR, error_message);
-      sqlite3_free(error_message);
-    }
-    sqlite3_free_table(table);
-  }
-  sqlite3_close(database);
-#endif
-  mutex->unlock();
-  auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
-  mutex->lock();
-
-  if (duration.count() >= configuration->sessionDuration) {
-    log(LogLevel::DEBUG, "[Countly][updateSession] sending session update.");
-    std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"session_duration", std::to_string(duration.count())}};
-    requestModule->addRequestToQueue(data);
-
-    last_sent_session_request += duration;
-  }
-
-  if (!no_events) {
-    log(LogLevel::DEBUG, "[Countly][updateSession] sending event.");
-    std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"events", events.dump()}};
-
-    requestModule->addRequestToQueue(data);
-  }
-
-#ifndef COUNTLY_USE_SQLITE
-  event_queue.clear();
-#else
-  if (!event_ids.empty()) {
-    log(LogLevel::DEBUG, "[Countly][updateSession] Removing events from storage: " + event_ids);
-    // we attempt to clear the events in the database only if there were any events collected previously
     return_value = sqlite3_open(database_path.c_str(), &database);
     if (return_value == SQLITE_OK) {
       std::ostringstream sql_statement_stream;
-      sql_statement_stream << "DELETE FROM events WHERE evtid IN " << event_ids << ';';
+      sql_statement_stream << "SELECT evtid, event FROM events LIMIT " << std::dec << configuration->eventQueueThreshold << ';';
       std::string sql_statement = sql_statement_stream.str();
 
-      return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
-      if (return_value != SQLITE_OK) {
+      return_value = sqlite3_get_table(database, sql_statement.c_str(), &table, &row_count, &column_count, &error_message);
+      no_events = (row_count == 0);
+      if (return_value == SQLITE_OK && !no_events) {
+        std::ostringstream event_id_stream;
+        event_id_stream << '(';
+
+        for (int event_index = 1; event_index < row_count + 1; event_index++) {
+          event_id_stream << table[event_index * column_count] << ',';
+          events.push_back(nlohmann::json::parse(table[(event_index * column_count) + 1]));
+        }
+
+        log(LogLevel::DEBUG, "[Countly][updateSession] events count = " + events.size());
+
+        event_id_stream.seekp(-1, event_id_stream.cur);
+        event_id_stream << ')';
+        event_ids = event_id_stream.str();
+      } else if (return_value != SQLITE_OK) {
         log(LogLevel::ERROR, error_message);
         sqlite3_free(error_message);
       }
+      sqlite3_free_table(table);
     }
     sqlite3_close(database);
-  }
-#endif
 
+#endif
+    mutex->unlock();
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
+    mutex->lock();
+
+    if (duration.count() >= configuration->sessionDuration) {
+      log(LogLevel::DEBUG, "[Countly][updateSession] sending session update.");
+      std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"session_duration", std::to_string(duration.count())}};
+      requestModule->addRequestToQueue(data);
+
+      last_sent_session_request += duration;
+    }
+
+    if (!no_events) {
+      log(LogLevel::DEBUG, "[Countly][updateSession] sending event.");
+      std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"events", events.dump()}};
+
+      requestModule->addRequestToQueue(data);
+    }
+
+#ifndef COUNTLY_USE_SQLITE
+    event_queue.clear();
+#else
+    if (!event_ids.empty()) {
+      log(LogLevel::DEBUG, "[Countly][updateSession] Removing events from storage: " + event_ids);
+      // we attempt to clear the events in the database only if there were any events collected previously
+      return_value = sqlite3_open(database_path.c_str(), &database);
+      if (return_value == SQLITE_OK) {
+        std::ostringstream sql_statement_stream;
+        sql_statement_stream << "DELETE FROM events WHERE evtid IN " << event_ids << ';';
+        std::string sql_statement = sql_statement_stream.str();
+
+        return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
+        if (return_value != SQLITE_OK) {
+          log(LogLevel::ERROR, error_message);
+          sqlite3_free(error_message);
+        }
+      }
+      sqlite3_close(database);
+    }
+#endif
+  } catch (const std::system_error &e) {
+    std::ostringstream log_message;
+    log_message << "update session, error: " << e.what();
+    log(LogLevel::FATAL, log_message.str());
+  }
   mutex->unlock();
   return true;
 }
@@ -835,31 +862,36 @@ void Countly::setDatabasePath(const std::string &path) {
 }
 
 bool Countly::createEventTableSchema() {
-  bool result = false;
-  sqlite3 *database;
-  int return_value, row_count, column_count;
-  char **table;
-  char *error_message;
+  try {
+    bool result = false;
+    sqlite3 *database;
+    int return_value, row_count, column_count;
+    char **table;
+    char *error_message;
 
-  database_path = configuration->databasePath;
+    database_path = configuration->databasePath;
 
-  return_value = sqlite3_open(database_path.c_str(), &database);
-  if (return_value == SQLITE_OK) {
-    return_value = sqlite3_exec(database, "CREATE TABLE IF NOT EXISTS events (evtid INTEGER PRIMARY KEY, event TEXT)", nullptr, nullptr, &error_message);
-    if (return_value != SQLITE_OK) {
-      log(LogLevel::ERROR, error_message);
-      sqlite3_free(error_message);
+    return_value = sqlite3_open(database_path.c_str(), &database);
+    if (return_value == SQLITE_OK) {
+      return_value = sqlite3_exec(database, "CREATE TABLE IF NOT EXISTS events (evtid INTEGER PRIMARY KEY, event TEXT)", nullptr, nullptr, &error_message);
+      if (return_value != SQLITE_OK) {
+        log(LogLevel::ERROR, error_message);
+        sqlite3_free(error_message);
+      } else {
+        result = true;
+      }
     } else {
-      result = true;
+      const char *error = sqlite3_errmsg(database);
+      log(LogLevel::ERROR, "[Countly][createEventTableSchema] " + std::string(error));
+      database_path.clear();
     }
-  } else {
-    log(LogLevel::ERROR, "Failed to open sqlite database");
-    sqlite3_free(error_message);
-    database_path.clear();
+    sqlite3_close(database);
+    return result;
+  } catch (const std::system_error &e) {
+    std::ostringstream log_message;
+    log_message << "createEventTableSchema, error: " << e.what();
+    log(LogLevel::FATAL, log_message.str());
   }
-  sqlite3_close(database);
-
-  return result;
 }
 #endif
 void Countly::log(LogLevel level, const std::string &message) { logger->log(cly::LogLevel(level), message); }

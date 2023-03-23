@@ -33,7 +33,7 @@ class Countly : public cly::CountlyDelegates {
 public:
   Countly();
 
-  ~Countly();
+  virtual ~Countly();
 
   // Returns the singleton instance of Countly
   static Countly &getInstance();
@@ -131,8 +131,6 @@ public:
   void SetPath(const std::string &path) {
 #ifdef COUNTLY_USE_SQLITE
     setDatabasePath(path);
-#elif defined _WIN32
-    UNREFERENCED_PARAMETER(path);
 #endif
   }
 

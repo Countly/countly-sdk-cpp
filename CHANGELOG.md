@@ -1,23 +1,26 @@
-22.09.0
+## 22.09.1
+* Mitigated a problem that caused invalid pointer error if the database path was set wrong 
+
+## 22.09.0
 * ! Minor breaking change ! SDK configuration now can't be changed after initialization/start
 * Added a persistent requests queue when building the SDK with the 'COUNTLY_USE_SQLITE' flag
 * Fixed a bug where view's name was being overriden by segmentation provided.
 
-22.06.4
+## 22.06.4
 * Fixed a bug where the SDK 'mutex' was being locked twice when built with the 'COUNTLY_USE_SQLITE' flag.
 
-22.06.3
+## 22.06.3
 * Fixed a bug where empty metrics were sent with session begin request.
 
-22.06.2
+## 22.06.2
 * Fixed a bug where metrics were not sent with session begin request.
 
-22.06.1
+## 22.06.1
 * !! Major breaking change !! We are removing the 'LogLevel' enum out of the 'Countly' class which will change how that enum can be referenced. 'Countly::LogLevel' will not work, you will have to use 'cly::LogLevel' instead.
 * Added functionality to record crash.
 * Added ability to record breadcrumbs for crash recording.
 
-22.06.0
+## 22.06.0
 * !! Major breaking change !! We are adding the 'cly' namespace on 'Countly' class which will change how that class can be referenced. 'Countly::' will not work, you will have to use 'cly::Countly::' instead.
 * !! Major breaking change !! We are extracting the 'Event' class out of the 'Countly' class which will change how that class can be referenced. 'Countly::Event' will not work, you will have to use 'cly::Event' instead.
 * !! Major breaking change !! Increased the compiler version required to compile the SDK. It's increased from version C++11 to C++14.
@@ -25,18 +28,18 @@
 * When making network requests, the SDK will now unlock it's mutex.
 * Fixed a bug that caused an exception on windows when encoding data that contains special characters. 
 
-22.02.0
+## 22.02.0
 * Added 10-second time-outs for all windows HTTP transactions.
 * Added ability to record views.
 
-21.11.3
+## 21.11.3
 * Added functionality to set custom SHA256.
 
-21.11.2
+## 21.11.2
 * Fixed a bug that occurred after trying to erase events from the SQLite database when there were none.
 * Fixed a bug with the checksum calculation.
 
-21.11.1
+## 21.11.1
 * !! Major breaking change !! Fixed a bug that triggered when providing segmentation to the "RecordEvent" call. Previously, by mistake, every segmentation value was parsed as a JSON and threw an exception when it wasn't a valid JSON string. 
 Now this will not be the case and every String value can be provided. This is marked as a "major breaking change" in case some integrations were adding workarounds to this issue.
 * ! Minor breaking change ! Default automatic session update duration changed to 60 seconds.
@@ -52,7 +55,7 @@ Now this will not be the case and every String value can be provided. This is ma
 * Fixed issues with location requests.
 * Deprecated old location calls and introduced a new location call
 
-21.11.0
+## 21.11.0
 * Fixed session duration issue.
 * Added functionality to report event duration manually.
 * 'startOnCloud' in 'Countly' is deprecated and this is going to be removed in the future.
