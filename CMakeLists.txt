@@ -62,15 +62,6 @@ set_target_properties(countly PROPERTIES
 
 find_package(Threads)
 target_link_libraries(countly Threads::Threads)
-# Add a library to the standard libraries
-
-
-
-# set(WinHTTP_INCLUDE_DIRS ${SQLite3_INCLUDE_DIR})
-# set(WinHTTP_LIBRARIES ${SQLite3_LIBRARY})
-# find_package(WinHTTP)
-# target_link_libraries(countly WinHTTP)
-
 target_include_directories(countly PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include)
 if (COUNTLY_BUILD_TESTS)
   message("Compiling definitions for tests")
@@ -150,10 +141,9 @@ if(COUNTLY_USE_SQLITE)
   target_compile_definitions(countly-sample PRIVATE COUNTLY_USE_SQLITE)
   target_include_directories(countly-sample PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/sqlite)
 endif()
-  list(APPEND CMAKE_CXX_STANDARD_LIBRARIES -lwinhttp)
-  # list(APPEND CMAKE_CXX_STANDARD_LIBRARIES "-lkernel32 -ladvapi32")
-  # target_link_libraries(countly-sample "C:/Windows/System32/winhttp.dll")
-  # target_link_libraries(countly-sample "C:/Windows/System32/advapi32.dll")
+if(WIN32)
+  string(APPEND CMAKE_CXX_STANDARD_LIBRARIES " -lwinhttp")
+endif()
   target_include_directories(countly-sample PRIVATE "C:/mingw-w64-crt/mingw-w64-headers/include")
   target_include_directories(countly-sample PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/doctest/doctest)
   target_include_directories(countly-sample PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include)
