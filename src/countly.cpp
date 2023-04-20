@@ -62,6 +62,21 @@ void Countly::setMaxRequestQueueSize(unsigned int requestQueueSize) {
   mutex->unlock();
 }
 
+/**
+ * Set limit for the number of requests that can be processed at a time.
+ * @param requestQueueProcessingSize: max size of requests to process at a time
+ */
+void Countly::setMaxRequestQueueProcessingSize(unsigned int requestQueueProcessingSize) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][setMaxRequestQueueProcessingSize] You can not set the request processing size after SDK initialization.");
+    return;
+  }
+
+  mutex->lock();
+  configuration->requestQueueProcessingThreshold = requestQueueProcessingSize;
+  mutex->unlock();
+}
+
 void Countly::alwaysUsePost(bool value) {
   if (is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly][alwaysUsePost] You can not set the http method after SDK initialization.");

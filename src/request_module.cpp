@@ -11,8 +11,8 @@
 
 #ifndef COUNTLY_USE_CUSTOM_HTTP
 #ifdef _WIN32
-#include "Windows.h"
 #include "WinHTTP.h"
+#include "Windows.h"
 #undef ERROR
 #pragma comment(lib, "winhttp.lib")
 #else
@@ -122,14 +122,19 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
   impl->is_queue_being_processed = true;
   mutex->unlock();
 
+  // this counter is used to make sure that we don't get stuck in an infinite/long loop of request processing
+  int processedRequestsCounter = 0;
+
   while (true) {
     mutex->lock();
+    impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] processQueue: Processing the request queue."));
     if (impl->_storageModule->RQCount() == 0) {
+      impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] processQueue: Queue is empty, stopping the process."));
+
       // stop sending requests once the queue is empty
       mutex->unlock();
       break;
     }
-
 
     std::shared_ptr<DataEntry> data = impl->_storageModule->RQPeekFront();
     mutex->unlock();
@@ -137,6 +142,7 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
 
     mutex->lock();
     if (!response.success) {
+      impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] processQueue: Failed to deliver to server, stopping the process."));
       // if the request was not a success, abort sending and try again in the future
       mutex->unlock();
       break;
@@ -145,6 +151,13 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
     // we pop the front only if it is still the same request
     // the queue might have changed while we were sending the request
     impl->_storageModule->RQRemoveFront(data);
+    processedRequestsCounter++;
+
+    if (processedRequestsCounter > impl->_configuration->requestQueueProcessingThreshold) {
+      impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] processQueue: Processing limit has been reached, stopping the process."));
+      mutex->unlock();
+      break;
+    }
 
     mutex->unlock();
   }

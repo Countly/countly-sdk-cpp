@@ -44,6 +44,7 @@ int main() {
   ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, true);
   ct.SetMaxEventsPerMessage(10);
   ct.setAutomaticSessionUpdateInterval(5);
+  ct.setMaxRequestQueueProcessingSize(2);
 
   ct.crash().addBreadcrumb("start");
 
