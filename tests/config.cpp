@@ -47,6 +47,7 @@ TEST_CASE("Validate setting configuration values") {
     CHECK(config.sessionDuration == 60);
     CHECK(config.eventQueueThreshold == 100);
     CHECK(config.requestQueueThreshold == 1000);
+    CHECK(config.requestQueueProcessingThreshold == 100);
     CHECK(config.breadcrumbsThreshold == 100);
     CHECK(config.forcePost == false);
     CHECK(config.port == 443);
@@ -74,6 +75,7 @@ TEST_CASE("Validate setting configuration values") {
     ct.setSalt("salt");
     ct.setMaxRequestQueueSize(10);
     ct.SetPath(TEST_DATABASE_NAME);
+    ct.setMaxRequestQueueProcessingSize(10);
     ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, false);
 
     // Get configuration values using Countly getters
@@ -88,6 +90,7 @@ TEST_CASE("Validate setting configuration values") {
     CHECK(config.sessionDuration == 5);
     CHECK(config.eventQueueThreshold == 10);
     CHECK(config.requestQueueThreshold == 10);
+    CHECK(config.requestQueueProcessingThreshold == 10);
     CHECK(config.breadcrumbsThreshold == 100);
     CHECK(config.forcePost == true);
     CHECK(config.port == 443);
@@ -127,6 +130,7 @@ TEST_CASE("Validate setting configuration values") {
     ct.setAutomaticSessionUpdateInterval(5);
     ct.setSalt("salt");
     ct.setMaxRequestQueueSize(10);
+    ct.setMaxRequestQueueProcessingSize(10);
     ct.SetPath(TEST_DATABASE_NAME);
 
     // Server and port
@@ -145,6 +149,7 @@ TEST_CASE("Validate setting configuration values") {
     CHECK(config.sessionDuration == 5);
     CHECK(config.eventQueueThreshold == 10);
     CHECK(config.requestQueueThreshold == 10);
+    CHECK(config.requestQueueProcessingThreshold == 10);
     CHECK(config.breadcrumbsThreshold == 100);
     CHECK(config.forcePost == true);
     CHECK(config.port == 443);
@@ -186,6 +191,7 @@ TEST_CASE("Validate setting configuration values") {
     CHECK(config.sessionDuration == 5);
     CHECK(config.eventQueueThreshold == 10);
     CHECK(config.requestQueueThreshold == 10);
+    CHECK(config.requestQueueProcessingThreshold == 10);
     CHECK(config.breadcrumbsThreshold == 100);
     CHECK(config.forcePost == true);
     CHECK(config.port == 443);
