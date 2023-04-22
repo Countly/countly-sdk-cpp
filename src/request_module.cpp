@@ -129,7 +129,7 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
     mutex->lock();
     impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] processQueue: Processing the request queue."));
     if (impl->_storageModule->RQCount() == 0) {
-      impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] processQueue: Queue is empty, stopping the process."));
+      impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] processQueue: Queue is empty."));
 
       // stop sending requests once the queue is empty
       mutex->unlock();
@@ -142,7 +142,7 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
 
     mutex->lock();
     if (!response.success) {
-      impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] processQueue: Failed to deliver to server, stopping the process."));
+      impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] processQueue: Failed to deliver to server, will try again later."));
       // if the request was not a success, abort sending and try again in the future
       mutex->unlock();
       break;
@@ -153,8 +153,8 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
     impl->_storageModule->RQRemoveFront(data);
     processedRequestsCounter++;
 
-    if (processedRequestsCounter > impl->_configuration->requestQueueProcessingThreshold) {
-      impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] processQueue: Processing limit has been reached, stopping the process."));
+    if (processedRequestsCounter > impl->_configuration->maxProcessingBatchSize) {
+      impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] processQueue: Batch limit has been reached, will do next batch later."));
       mutex->unlock();
       break;
     }

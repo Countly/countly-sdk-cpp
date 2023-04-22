@@ -64,16 +64,12 @@ void Countly::setMaxRequestQueueSize(unsigned int requestQueueSize) {
 
 /**
  * Set limit for the number of requests that can be processed at a time.
- * @param requestQueueProcessingSize: max size of requests to process at a time
+ * If the limit is reached, the rest of the requests will be processed in the next cycle.
+ * @param batchSize: max size of requests to process at a time
  */
-void Countly::setMaxRequestQueueProcessingSize(unsigned int requestQueueProcessingSize) {
-  if (is_sdk_initialized) {
-    log(LogLevel::WARNING, "[Countly][setMaxRequestQueueProcessingSize] You can not set the request processing size after SDK initialization.");
-    return;
-  }
-
+void Countly::setMaxRQProcessingBatchSize(unsigned int batchSize) {
   mutex->lock();
-  configuration->requestQueueProcessingThreshold = requestQueueProcessingSize;
+  configuration->maxProcessingBatchSize = batchSize;
   mutex->unlock();
 }
 

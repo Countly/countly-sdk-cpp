@@ -53,7 +53,7 @@ struct CountlyConfiguration {
   /**
    * Set limit for the number of requests that can be processed at a time.
    */
-  unsigned int requestQueueProcessingThreshold = 100;
+  unsigned int maxProcessingBatchSize = 100;
 
   /**
    * Set the maximum amount of breadcrumbs.

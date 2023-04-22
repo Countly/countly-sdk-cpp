@@ -48,7 +48,7 @@ public:
 
   void setMaxRequestQueueSize(unsigned int requestQueueSize);
 
-  void setMaxRequestQueueProcessingSize(unsigned int requestQueueProcessingSize);
+  void setMaxRQProcessingBatchSize(unsigned int requestQueueProcessingSize);
 
   void setSalt(const std::string &value);
 

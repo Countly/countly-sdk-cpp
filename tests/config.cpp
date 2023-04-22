@@ -47,7 +47,7 @@ TEST_CASE("Validate setting configuration values") {
     CHECK(config.sessionDuration == 60);
     CHECK(config.eventQueueThreshold == 100);
     CHECK(config.requestQueueThreshold == 1000);
-    CHECK(config.requestQueueProcessingThreshold == 100);
+    CHECK(config.maxProcessingBatchSize == 100);
     CHECK(config.breadcrumbsThreshold == 100);
     CHECK(config.forcePost == false);
     CHECK(config.port == 443);
@@ -75,7 +75,7 @@ TEST_CASE("Validate setting configuration values") {
     ct.setSalt("salt");
     ct.setMaxRequestQueueSize(10);
     ct.SetPath(TEST_DATABASE_NAME);
-    ct.setMaxRequestQueueProcessingSize(10);
+    ct.setMaxRQProcessingBatchSize(10);
     ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, false);
 
     // Get configuration values using Countly getters
@@ -90,7 +90,7 @@ TEST_CASE("Validate setting configuration values") {
     CHECK(config.sessionDuration == 5);
     CHECK(config.eventQueueThreshold == 10);
     CHECK(config.requestQueueThreshold == 10);
-    CHECK(config.requestQueueProcessingThreshold == 10);
+    CHECK(config.maxProcessingBatchSize == 10);
     CHECK(config.breadcrumbsThreshold == 100);
     CHECK(config.forcePost == true);
     CHECK(config.port == 443);
@@ -130,7 +130,7 @@ TEST_CASE("Validate setting configuration values") {
     ct.setAutomaticSessionUpdateInterval(5);
     ct.setSalt("salt");
     ct.setMaxRequestQueueSize(10);
-    ct.setMaxRequestQueueProcessingSize(10);
+    ct.setMaxRQProcessingBatchSize(10);
     ct.SetPath(TEST_DATABASE_NAME);
 
     // Server and port
@@ -149,7 +149,7 @@ TEST_CASE("Validate setting configuration values") {
     CHECK(config.sessionDuration == 5);
     CHECK(config.eventQueueThreshold == 10);
     CHECK(config.requestQueueThreshold == 10);
-    CHECK(config.requestQueueProcessingThreshold == 10);
+    CHECK(config.maxProcessingBatchSize == 10);
     CHECK(config.breadcrumbsThreshold == 100);
     CHECK(config.forcePost == true);
     CHECK(config.port == 443);
@@ -173,6 +173,7 @@ TEST_CASE("Validate setting configuration values") {
     ct.setHTTPClient(new_CustomClient);
     ct.SetMetrics("Windows 11", "10", "p", "800x800", "Car", "1.1");
 
+    ct.setMaxRQProcessingBatchSize(50);
     ct.SetMaxEventsPerMessage(100);
     ct.setAutomaticSessionUpdateInterval(50);
     ct.setSalt("new-salt");
@@ -191,7 +192,7 @@ TEST_CASE("Validate setting configuration values") {
     CHECK(config.sessionDuration == 5);
     CHECK(config.eventQueueThreshold == 10);
     CHECK(config.requestQueueThreshold == 10);
-    CHECK(config.requestQueueProcessingThreshold == 10);
+    CHECK(config.maxProcessingBatchSize == 50); // this one should be changed after init
     CHECK(config.breadcrumbsThreshold == 100);
     CHECK(config.forcePost == true);
     CHECK(config.port == 443);
