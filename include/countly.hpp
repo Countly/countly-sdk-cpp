@@ -98,6 +98,16 @@ public:
 
   void addEvent(const cly::Event &event);
 
+  /*
+  * Checks and returns the size of the event queue in persistent storage.
+  */
+  int checkEQSize();
+
+  /*
+  * Erases/clears the event queue in persistent storage.
+  */
+  void clearEQ();
+
   void addEventToSqlite(const cly::Event &event);
 
   void setMaxEvents(size_t value);
