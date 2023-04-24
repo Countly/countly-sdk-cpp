@@ -51,7 +51,7 @@ int main() {
 
   ct.SetMaxEventsPerMessage(10);
   ct.setAutomaticSessionUpdateInterval(5);
-  ct.setMaxRQProcessingBatchSize(2); // in most cases not needed to be set
+  ct.setMaxRQProcessingBatchSize(2); // in most cases not needed to be set. The value is set so low just for internal validation
 
   ct.crash().addBreadcrumb("start");
 
