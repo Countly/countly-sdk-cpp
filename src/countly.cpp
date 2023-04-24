@@ -469,13 +469,13 @@ void Countly::addEvent(const cly::Event &event) {
   }
   event_queue.push_back(event.serialize());
 #else
+  addEventToSqlite(event);
   mutex->unlock();
   int queueSize = checkEQSize();
   mutex->lock();
   if (queueSize >= configuration->eventQueueThreshold) {
     log(LogLevel::DEBUG, "Event queue threshold is reached");
   }
-  addEventToSqlite(event);
 #endif
   mutex->unlock();
 }
@@ -823,7 +823,6 @@ void Countly::addEventToSqlite(const cly::Event &event) {
   log(LogLevel::DEBUG, "[Countly][addEventToSqlite]");
   try {
     if (database_path.empty()) {
-      mutex->unlock();
       log(LogLevel::FATAL, "Cannot add event, sqlite database path is not set");
       return;
     }
