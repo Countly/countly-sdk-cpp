@@ -481,45 +481,15 @@ void Countly::addEvent(const cly::Event &event) {
   event_queue.push_back(event.serialize());
 #else
   addEventToSqlite(event);
+  mutex->unlock();
+  int queueSize = checkEQSize();
+  mutex->lock();
+  if (queueSize >= configuration->eventQueueThreshold) {
+    log(LogLevel::DEBUG, "Event queue threshold is reached");
+  }
 #endif
   mutex->unlock();
 }
-
-#ifdef COUNTLY_USE_SQLITE
-void Countly::addEventToSqlite(const cly::Event &event) {
-  log(LogLevel::DEBUG, "[Countly][addEventToSqlite]");
-  try {
-    if (database_path.empty()) {
-      mutex->unlock();
-      log(LogLevel::FATAL, "Cannot add event, sqlite database path is not set");
-      return;
-    }
-
-    sqlite3 *database;
-    int return_value;
-    char *error_message;
-
-    return_value = sqlite3_open(database_path.c_str(), &database);
-    if (return_value == SQLITE_OK) {
-      std::ostringstream sql_statement_stream;
-      // TODO Investigate if we need to escape single quotes in serialized event
-      sql_statement_stream << "INSERT INTO events (event) VALUES('" << event.serialize() << "');";
-      std::string sql_statement = sql_statement_stream.str();
-
-      return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
-      if (return_value != SQLITE_OK) {
-        log(LogLevel::ERROR, error_message);
-        sqlite3_free(error_message);
-      }
-    }
-    sqlite3_close(database);
-  } catch (const std::system_error &e) {
-    std::ostringstream log_message;
-    log_message << "addEventToSqlite, error: " << e.what();
-    log(LogLevel::FATAL, log_message.str());
-  }
-}
-#endif
 
 void Countly::setMaxEvents(size_t value) {
   if (is_sdk_initialized) {
@@ -539,6 +509,8 @@ void Countly::setMaxEvents(size_t value) {
 }
 
 void Countly::flushEvents(std::chrono::seconds timeout) {
+  log(LogLevel::DEBUG, "[Countly][flushEvents] timeout: " + std::to_string(timeout.count()) + " seconds");
+
   try {
     auto wait_duration = std::chrono::seconds(1);
     bool update_failed;
@@ -553,35 +525,11 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
 
       update_failed = !updateSession();
 #else
-      mutex->lock();
-      if (database_path.empty()) {
-        mutex->unlock();
-        log(LogLevel::FATAL, "Cannot flush events, sqlite database path is not set");
-        return;
-      }
-
-      sqlite3 *database;
-      int return_value, row_count, column_count;
-      char **table;
-      char *error_message;
-
       update_failed = true;
-      return_value = sqlite3_open(database_path.c_str(), &database);
-      mutex->unlock();
-      if (return_value == SQLITE_OK) {
-        return_value = sqlite3_get_table(database, "SELECT COUNT(*) FROM events;", &table, &row_count, &column_count, &error_message);
-        if (return_value == SQLITE_OK) {
-          int event_count = atoi(table[1]);
-          if (event_count > 0) {
-            update_failed = !updateSession();
-          }
-        } else {
-          log(LogLevel::ERROR, error_message);
-          sqlite3_free(error_message);
-        }
-        sqlite3_free_table(table);
+      int event_count = checkEQSize();
+      if (event_count > 0) {
+        update_failed = !updateSession();
       }
-      sqlite3_close(database);
 #endif
       if (update_failed) {
         std::this_thread::sleep_for(wait_duration);
@@ -593,20 +541,8 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
 #ifndef COUNTLY_USE_SQLITE
     event_queue.clear();
 #else
-    sqlite3 *database;
-    int return_value;
-    char *error_message;
-
     update_failed = true;
-    return_value = sqlite3_open(database_path.c_str(), &database);
-    if (return_value == SQLITE_OK) {
-      return_value = sqlite3_exec(database, "DELETE FROM events;", nullptr, nullptr, &error_message);
-      if (return_value != SQLITE_OK) {
-        log(LogLevel::FATAL, error_message);
-        sqlite3_free(error_message);
-      }
-    }
-    sqlite3_close(database);
+    clearEQ();
 #endif
   } catch (const std::system_error &e) {
     std::ostringstream log_message;
@@ -859,7 +795,95 @@ bool Countly::endSession() {
 
 std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chrono::system_clock::now(); }
 
+// Standalone Sqlite functions
 #ifdef COUNTLY_USE_SQLITE
+int Countly::checkEQSize() {
+  log(LogLevel::DEBUG, "[Countly][checkEQSize]");
+  int event_count = -1;
+  mutex->lock();
+  if (database_path.empty()) {
+    mutex->unlock();
+    log(LogLevel::FATAL, "[Countly][checkEQSize] Sqlite database path is not set");
+    return event_count;
+  }
+
+  sqlite3 *database;
+  int return_value = sqlite3_open(database_path.c_str(), &database);
+  mutex->unlock();
+
+  if (return_value == SQLITE_OK) {
+    char *error_message;
+    int row_count, column_count;
+    char **table;
+    return_value = sqlite3_get_table(database, "SELECT COUNT(*) FROM events;", &table, &row_count, &column_count, &error_message);
+    if (return_value == SQLITE_OK) {
+      event_count = atoi(table[1]);
+      log(LogLevel::DEBUG, "[Countly][checkEQSize] Fetched event count from database: " + std::to_string(event_count));
+    } else {
+      log(LogLevel::ERROR, error_message);
+      sqlite3_free(error_message);
+    }
+    sqlite3_free_table(table);
+  } else {
+    log(LogLevel::WARNING, "[Countly][checkEQSize] Could not open database");
+  }
+
+  sqlite3_close(database);
+  return event_count;
+}
+
+void Countly::addEventToSqlite(const cly::Event &event) {
+  log(LogLevel::DEBUG, "[Countly][addEventToSqlite]");
+  try {
+    if (database_path.empty()) {
+      log(LogLevel::FATAL, "Cannot add event, sqlite database path is not set");
+      return;
+    }
+
+    sqlite3 *database;
+    int return_value;
+    char *error_message;
+
+    return_value = sqlite3_open(database_path.c_str(), &database);
+    if (return_value == SQLITE_OK) {
+      std::ostringstream sql_statement_stream;
+      // TODO Investigate if we need to escape single quotes in serialized event
+      sql_statement_stream << "INSERT INTO events (event) VALUES('" << event.serialize() << "');";
+      std::string sql_statement = sql_statement_stream.str();
+
+      return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
+      if (return_value != SQLITE_OK) {
+        log(LogLevel::ERROR, error_message);
+        sqlite3_free(error_message);
+      }
+    }
+    sqlite3_close(database);
+  } catch (const std::system_error &e) {
+    std::ostringstream log_message;
+    log_message << "addEventToSqlite, error: " << e.what();
+    log(LogLevel::FATAL, log_message.str());
+  }
+}
+
+void Countly::clearEQ() {
+  log(LogLevel::DEBUG, "[Countly][clearEQ]");
+  sqlite3 *database;
+  int return_value;
+  char *error_message;
+
+  return_value = sqlite3_open(database_path.c_str(), &database);
+  if (return_value == SQLITE_OK) {
+    return_value = sqlite3_exec(database, "DELETE FROM events;", nullptr, nullptr, &error_message);
+    if (return_value != SQLITE_OK) {
+      log(LogLevel::FATAL, error_message);
+      sqlite3_free(error_message);
+    } else {
+      log(LogLevel::DEBUG, "[Countly][clearEQ] Cleared event queue");
+    }
+  }
+  sqlite3_close(database);
+}
+
 void Countly::setDatabasePath(const std::string &path) {
   if (is_sdk_initialized) {
     log(LogLevel::ERROR, "[Countly][setDatabasePath] You can not set the database path after SDK initialization.");
