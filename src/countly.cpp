@@ -62,6 +62,17 @@ void Countly::setMaxRequestQueueSize(unsigned int requestQueueSize) {
   mutex->unlock();
 }
 
+/**
+ * Set limit for the number of requests that can be processed at a time.
+ * If the limit is reached, the rest of the requests will be processed in the next cycle.
+ * @param batchSize: max size of requests to process at a time
+ */
+void Countly::setMaxRQProcessingBatchSize(unsigned int batchSize) {
+  mutex->lock();
+  configuration->maxProcessingBatchSize = batchSize;
+  mutex->unlock();
+}
+
 void Countly::alwaysUsePost(bool value) {
   if (is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly][alwaysUsePost] You can not set the http method after SDK initialization.");
@@ -603,6 +614,7 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
     log(LogLevel::FATAL, log_message.str());
   }
 }
+
 #ifdef COUNTLY_BUILD_TESTS
 std::vector<std::string> Countly::debugReturnStateOfEQ() {
   try {
@@ -729,7 +741,7 @@ bool Countly::updateSession() {
 #else
     if (database_path.empty()) {
       mutex->unlock();
-      log(LogLevel::FATAL, "Cannot fetch events, sqlite database path is not set");
+      log(LogLevel::FATAL, "Cannot fetch events, sqlite database path is not set.");
       return false;
     }
 
@@ -757,7 +769,7 @@ bool Countly::updateSession() {
           events.push_back(nlohmann::json::parse(table[(event_index * column_count) + 1]));
         }
 
-        log(LogLevel::DEBUG, "[Countly][updateSession] events count = " + events.size());
+        log(LogLevel::DEBUG, "[Countly][updateSession] events count = " + std::to_string(events.size()));
 
         event_id_stream.seekp(-1, event_id_stream.cur);
         event_id_stream << ')';
@@ -765,6 +777,8 @@ bool Countly::updateSession() {
       } else if (return_value != SQLITE_OK) {
         log(LogLevel::ERROR, error_message);
         sqlite3_free(error_message);
+      } else {
+        log(LogLevel::DEBUG, "[Countly][updateSession] no events detected at the storage.");
       }
       sqlite3_free_table(table);
     }

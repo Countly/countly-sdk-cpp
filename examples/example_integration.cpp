@@ -33,6 +33,11 @@ void printLog(LogLevel level, const string &msg) {
 int main() {
   cout << "Sample App" << endl;
   Countly &ct = Countly::getInstance();
+  // All configurations below are put here as an example
+  // Your configuration in your app may be different
+  // Please refer to the documentation for more information:
+  // https://support.count.ly/hc/en-us/articles/4416163384857-C-
+
   ct.alwaysUsePost(true);
   ct.setLogger(printLog);
   ct.SetPath("databaseFileName.db"); // this will be only built into account if the correct configurations are set
@@ -40,10 +45,13 @@ int main() {
   // ct.setSalt("test-salt");
   // OS, OS_version, device, resolution, carrier, app_version);
   ct.SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Carrier", "1.0");
-  // Server and port
+
+  // start the SDK (initialize the SDK)
   ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, true);
+
   ct.SetMaxEventsPerMessage(10);
-  ct.setAutomaticSessionUpdateInterval(5);
+  ct.setAutomaticSessionUpdateInterval(5);// The value is set so low just for internal validation.
+  ct.setMaxRQProcessingBatchSize(2); // in most cases not needed to be set. The value is set so low just for internal validation
 
   ct.crash().addBreadcrumb("start");
 

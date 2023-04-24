@@ -48,6 +48,8 @@ public:
 
   void setMaxRequestQueueSize(unsigned int requestQueueSize);
 
+  void setMaxRQProcessingBatchSize(unsigned int requestQueueProcessingSize);
+
   void setSalt(const std::string &value);
 
   void setLogger(void (*fun)(LogLevel level, const std::string &message));

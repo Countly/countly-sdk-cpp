@@ -53,7 +53,7 @@ long long StorageModuleMemory::RQCount() {
   }
 
   long long size = request_queue.size();
-  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQCount size = " + size);
+  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleMemory] RQCount size = [" + std::to_string(size) + "]");
   return size;
 }
 
