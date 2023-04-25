@@ -546,8 +546,6 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
 }
 
 bool Countly::attemptSessionUpdateEQ() {
-  bool update_failed = !updateSession();
-
   // return false if event queue is empty
 #ifndef COUNTLY_USE_SQLITE
   mutex->lock();
@@ -563,6 +561,7 @@ bool Countly::attemptSessionUpdateEQ() {
   }
 #endif
 
+  bool update_failed = !updateSession();
   return update_failed;
 }
 
@@ -709,7 +708,7 @@ bool Countly::updateSession() {
     std::string event_ids;
     if (!no_events) {
       // TODO: If database_path was empty there was return false here
-      peekAllEQ(events, event_ids);
+      fillEventsIntoJson(events, event_ids);
     } else {
       log(LogLevel::DEBUG, "[Countly][updateSession] EQ empty.");
     }
@@ -741,7 +740,7 @@ bool Countly::updateSession() {
     event_queue.clear();
 #else
     if (!event_ids.empty()) {
-      clearPersistentEQwithId(event_ids);
+      removeEventWithId(event_ids);
     }
 #endif
   } catch (const std::system_error &e) {
@@ -780,9 +779,9 @@ std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chro
 
 // Standalone Sqlite functions
 #ifdef COUNTLY_USE_SQLITE
-void Countly::clearPersistentEQwithId(const std::string &event_ids) {
+void Countly::removeEventWithId(const std::string &event_ids) {
   // TODO: Check if we should check database_path set or not
-  log(LogLevel::DEBUG, "[Countly][clearPersistentEQwithId] Removing events from storage: " + event_ids);
+  log(LogLevel::DEBUG, "[Countly][removeEventWithId] Removing events from storage: " + event_ids);
   sqlite3 *database;
   int return_value;
   char *error_message;
@@ -799,23 +798,23 @@ void Countly::clearPersistentEQwithId(const std::string &event_ids) {
       log(LogLevel::ERROR, error_message);
       sqlite3_free(error_message);
     } else {
-      log(LogLevel::DEBUG, "[Countly][clearPersistentEQwithId] Removed events with the given ID(s).");
+      log(LogLevel::DEBUG, "[Countly][removeEventWithId] Removed events with the given ID(s).");
     }
   } else {
-    log(LogLevel::ERROR, "[Countly][clearPersistentEQwithId] Could not open database.");
+    log(LogLevel::ERROR, "[Countly][removeEventWithId] Could not open database.");
   }
   sqlite3_close(database);
 }
 
-void Countly::peekAllEQ(nlohmann::json &events, std::string &event_ids) {
+void Countly::fillEventsIntoJson(nlohmann::json &events, std::string &event_ids) {
   if (database_path.empty()) {
     mutex->unlock();
-    log(LogLevel::FATAL, "[Countly][peekAllEQ] Sqlite database path is not set.");
+    log(LogLevel::FATAL, "[Countly][fillEventsIntoJson] Sqlite database path is not set.");
     event_ids = "";
     return;
   }
 
-  log(LogLevel::DEBUG, "[Countly][peekAllEQ] Fetching events from storage.");
+  log(LogLevel::DEBUG, "[Countly][fillEventsIntoJson] Fetching events from storage.");
   sqlite3 *database;
   int return_value, row_count, column_count;
   char **table;
@@ -844,7 +843,7 @@ void Countly::peekAllEQ(nlohmann::json &events, std::string &event_ids) {
         events.push_back(nlohmann::json::parse(table[(event_index * column_count) + 1]));
       }
 
-      log(LogLevel::DEBUG, "[Countly][peekAllEQ] Events count = " + std::to_string(events.size()));
+      log(LogLevel::DEBUG, "[Countly][fillEventsIntoJson] Events count = " + std::to_string(events.size()));
 
       event_id_stream.seekp(-1, event_id_stream.cur);
       event_id_stream << ')';
@@ -857,7 +856,7 @@ void Countly::peekAllEQ(nlohmann::json &events, std::string &event_ids) {
     }
     sqlite3_free_table(table);
   } else {
-    log(LogLevel::ERROR, "[Countly][peekAllEQ] Could not open database.");
+    log(LogLevel::ERROR, "[Countly][fillEventsIntoJson] Could not open database.");
   }
   sqlite3_close(database);
 }

@@ -113,7 +113,7 @@ public:
   /*
    * Erases/clears the event queue in persistent storage for given ID(s) .
    */
-  void clearPersistentEQwithId(const std::string &event_ids);
+  void removeEventWithId(const std::string &event_ids);
 
   /*
    * Clears the event queue (persistent or in memory depending on their availability) internally.
@@ -129,7 +129,7 @@ public:
   /*
    * Fetches events from the persistent storage and writes them into given json array, also gives event arrays
    */
-  void peekAllEQ(nlohmann::json &events, std::string &event_ids);
+  void fillEventsIntoJson(nlohmann::json &events, std::string &event_ids);
 
   void addEventToSqlite(const cly::Event &event);
 
