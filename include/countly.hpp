@@ -101,14 +101,35 @@ public:
   void addEvent(const cly::Event &event);
 
   /*
-  * Checks and returns the size of the event queue in persistent storage.
-  */
-  int checkEQSize();
+   * Checks and returns the size of the event queue in persistent storage.
+   */
+  int checkPersistentEQSize();
 
   /*
-  * Erases/clears the event queue in persistent storage.
-  */
-  void clearEQ();
+   * Erases/clears the event queue in persistent storage.
+   */
+  void clearPersistentEQ();
+
+  /*
+   * Erases/clears the event queue in persistent storage for given ID(s) .
+   */
+  void removeEventWithId(const std::string &event_ids);
+
+  /*
+   * Clears the event queue (persistent or in memory depending on their availability) internally.
+   */
+  void clearEQInternal();
+
+  /*
+   * Attempts to update the session if the session and return true if the session was updated successfully.
+   * It checks only does so if the event queue is not empty
+   */
+  bool attemptSessionUpdateEQ();
+
+  /*
+   * Fetches events from the persistent storage and writes them into given json array, also gives event arrays
+   */
+  void fillEventsIntoJson(nlohmann::json &events, std::string &event_ids);
 
   void addEventToSqlite(const cly::Event &event);
 
