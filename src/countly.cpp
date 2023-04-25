@@ -781,85 +781,85 @@ std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chro
 // Standalone Sqlite functions
 #ifdef COUNTLY_USE_SQLITE
 void Countly::clearPersistentEQwithId(const std::string &event_ids) {
-  // // TODO: Check if we should check database_path set or not
-  // log(LogLevel::DEBUG, "[Countly][clearPersistentEQwithId] Removing events from storage: " + event_ids);
-  // sqlite3 *database;
-  // int return_value;
-  // char *error_message;
+  // TODO: Check if we should check database_path set or not
+  log(LogLevel::DEBUG, "[Countly][clearPersistentEQwithId] Removing events from storage: " + event_ids);
+  sqlite3 *database;
+  int return_value;
+  char *error_message;
 
-  // // we attempt to clear the events in the database only if there were any events collected previously
-  // return_value = sqlite3_open(database_path.c_str(), &database);
-  // if (return_value == SQLITE_OK) {
-  //   std::ostringstream sql_statement_stream;
-  //   sql_statement_stream << "DELETE FROM events WHERE evtid IN " << event_ids << ';';
-  //   std::string sql_statement = sql_statement_stream.str();
+  // we attempt to clear the events in the database only if there were any events collected previously
+  return_value = sqlite3_open(database_path.c_str(), &database);
+  if (return_value == SQLITE_OK) {
+    std::ostringstream sql_statement_stream;
+    sql_statement_stream << "DELETE FROM events WHERE evtid IN " << event_ids << ';';
+    std::string sql_statement = sql_statement_stream.str();
 
-  //   return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
-  //   if (return_value != SQLITE_OK) {
-  //     log(LogLevel::ERROR, error_message);
-  //     sqlite3_free(error_message);
-  //   } else {
-  //     log(LogLevel::DEBUG, "[Countly][clearPersistentEQwithId] Removed events with the given ID(s).");
-  //   }
-  // } else {
-  //   log(LogLevel::ERROR, "[Countly][clearPersistentEQwithId] Could not open database.");
-  // }
-  // sqlite3_close(database);
+    return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
+    if (return_value != SQLITE_OK) {
+      log(LogLevel::ERROR, error_message);
+      sqlite3_free(error_message);
+    } else {
+      log(LogLevel::DEBUG, "[Countly][clearPersistentEQwithId] Removed events with the given ID(s).");
+    }
+  } else {
+    log(LogLevel::ERROR, "[Countly][clearPersistentEQwithId] Could not open database.");
+  }
+  sqlite3_close(database);
 }
 
 void Countly::peekAllEQ(nlohmann::json &events, std::string &event_ids) {
-  // if (database_path.empty()) {
-  //   mutex->unlock();
-  //   log(LogLevel::FATAL, "[Countly][peekAllEQ] Sqlite database path is not set.");
-  //   event_ids = "";
-  // 	return;
-  // }
+  if (database_path.empty()) {
+    mutex->unlock();
+    log(LogLevel::FATAL, "[Countly][peekAllEQ] Sqlite database path is not set.");
+    event_ids = "";
+    return;
+  }
 
-  // log(LogLevel::DEBUG, "[Countly][peekAllEQ] Fetching events from storage.");
-  // sqlite3 *database;
-  // int return_value, row_count, column_count;
-  // char **table;
-  // char *error_message;
+  log(LogLevel::DEBUG, "[Countly][peekAllEQ] Fetching events from storage.");
+  sqlite3 *database;
+  int return_value, row_count, column_count;
+  char **table;
+  char *error_message;
 
-  // // open database
-  // return_value = sqlite3_open(database_path.c_str(), &database);
-  // // if database opened successfully
-  // if (return_value == SQLITE_OK) {
+  // open database
+  return_value = sqlite3_open(database_path.c_str(), &database);
+  // if database opened successfully
+  if (return_value == SQLITE_OK) {
 
-  //   // create sql statement to fetch events as much as the event queue threshold
-  // 	// TODO: check if this is something we want to do
-  //   std::ostringstream sql_statement_stream;
-  //   sql_statement_stream << "SELECT evtid, event FROM events LIMIT " << std::dec << configuration->eventQueueThreshold << ';';
-  //   std::string sql_statement = sql_statement_stream.str();
+    // create sql statement to fetch events as much as the event queue threshold
+    // TODO: check if this is something we want to do
+    std::ostringstream sql_statement_stream;
+    sql_statement_stream << "SELECT evtid, event FROM events LIMIT " << std::dec << configuration->eventQueueThreshold << ';';
+    std::string sql_statement = sql_statement_stream.str();
 
-  //   // execute sql statement
-  //   return_value = sqlite3_get_table(database, sql_statement.c_str(), &table, &row_count, &column_count, &error_message);
-  //   if (return_value == SQLITE_OK) {
-  //     std::ostringstream event_id_stream;
-  //     event_id_stream << '(';
+    // execute sql statement
+    return_value = sqlite3_get_table(database, sql_statement.c_str(), &table, &row_count, &column_count, &error_message);
+    if (return_value == SQLITE_OK) {
+      std::ostringstream event_id_stream;
+      event_id_stream << '(';
 
-  //     for (int event_index = 1; event_index < row_count + 1; event_index++) {
-  //       event_id_stream << table[event_index * column_count] << ',';
-  // 			// add event to the events array
-  //       events.push_back(nlohmann::json::parse(table[(event_index * column_count) + 1]));
-  //     }
+      for (int event_index = 1; event_index < row_count + 1; event_index++) {
+        event_id_stream << table[event_index * column_count] << ',';
+        // add event to the events array
+        events.push_back(nlohmann::json::parse(table[(event_index * column_count) + 1]));
+      }
 
-  //     log(LogLevel::DEBUG, "[Countly][peekAllEQ] Events count = " + std::to_string(events.size()));
+      log(LogLevel::DEBUG, "[Countly][peekAllEQ] Events count = " + std::to_string(events.size()));
 
-  //     event_id_stream.seekp(-1, event_id_stream.cur);
-  //     event_id_stream << ')';
+      event_id_stream.seekp(-1, event_id_stream.cur);
+      event_id_stream << ')';
 
-  //     // write event ids to a string stream (or more like copy out that stream here) to be used in the delete statement
-  //     event_ids = event_id_stream.str();
-  //   } else {
-  //     log(LogLevel::ERROR, error_message);
-  //     sqlite3_free(error_message);
-  //   }
-  //   sqlite3_free_table(table);
-  // } else{
-  //   log(LogLevel::ERROR, "[Countly][peekAllEQ] Could not open database.");
-  //       }
-  // sqlite3_close(database);
+      // write event ids to a string stream (or more like copy out that stream here) to be used in the delete statement
+      event_ids = event_id_stream.str();
+    } else {
+      log(LogLevel::ERROR, error_message);
+      sqlite3_free(error_message);
+    }
+    sqlite3_free_table(table);
+  } else {
+    log(LogLevel::ERROR, "[Countly][peekAllEQ] Could not open database.");
+  }
+  sqlite3_close(database);
 }
 
 int Countly::checkPersistentEQSize() {
