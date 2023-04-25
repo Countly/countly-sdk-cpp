@@ -127,8 +127,8 @@ public:
   bool attemptSessionUpdateEQ();
 
   /*
-	* Fetches events from the persistent storage and writes them into given json array, also gives event arrays
-	*/
+   * Fetches events from the persistent storage and writes them into given json array, also gives event arrays
+   */
   void peekAllEQ(nlohmann::json &events, std::string &event_ids);
 
   void addEventToSqlite(const cly::Event &event);

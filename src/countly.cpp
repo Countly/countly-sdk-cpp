@@ -708,8 +708,8 @@ bool Countly::updateSession() {
 
     std::string event_ids;
     if (!no_events) {
-			// TODO: If database_path was empty there was return false here
-			peekAllEQ(events, event_ids);
+      // TODO: If database_path was empty there was return false here
+      peekAllEQ(events, event_ids);
     } else {
       log(LogLevel::DEBUG, "[Countly][updateSession] EQ empty.");
     }
@@ -718,7 +718,7 @@ bool Countly::updateSession() {
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
     mutex->lock();
 
-		// report session duration if it is greater than the configured session duration value
+    // report session duration if it is greater than the configured session duration value
     if (duration.count() >= configuration->sessionDuration) {
       log(LogLevel::DEBUG, "[Countly][updateSession] sending session update.");
       std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"session_duration", std::to_string(duration.count())}};
@@ -727,7 +727,7 @@ bool Countly::updateSession() {
       last_sent_session_request += duration;
     }
 
-		// report events if there are any to request queue
+    // report events if there are any to request queue
     if (!no_events) {
       log(LogLevel::DEBUG, "[Countly][updateSession] sending event.");
       std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"events", events.dump()}};
@@ -781,7 +781,7 @@ std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chro
 // Standalone Sqlite functions
 #ifdef COUNTLY_USE_SQLITE
 void Countly::clearPersistentEQwithId(const std::string &event_ids) {
-	// // TODO: Check if we should check database_path set or not
+  // // TODO: Check if we should check database_path set or not
   // log(LogLevel::DEBUG, "[Countly][clearPersistentEQwithId] Removing events from storage: " + event_ids);
   // sqlite3 *database;
   // int return_value;
@@ -812,7 +812,7 @@ void Countly::peekAllEQ(nlohmann::json &events, std::string &event_ids) {
   //   mutex->unlock();
   //   log(LogLevel::FATAL, "[Countly][peekAllEQ] Sqlite database path is not set.");
   //   event_ids = "";
-	// 	return;
+  // 	return;
   // }
 
   // log(LogLevel::DEBUG, "[Countly][peekAllEQ] Fetching events from storage.");
@@ -827,7 +827,7 @@ void Countly::peekAllEQ(nlohmann::json &events, std::string &event_ids) {
   // if (return_value == SQLITE_OK) {
 
   //   // create sql statement to fetch events as much as the event queue threshold
-	// 	// TODO: check if this is something we want to do
+  // 	// TODO: check if this is something we want to do
   //   std::ostringstream sql_statement_stream;
   //   sql_statement_stream << "SELECT evtid, event FROM events LIMIT " << std::dec << configuration->eventQueueThreshold << ';';
   //   std::string sql_statement = sql_statement_stream.str();
@@ -840,7 +840,7 @@ void Countly::peekAllEQ(nlohmann::json &events, std::string &event_ids) {
 
   //     for (int event_index = 1; event_index < row_count + 1; event_index++) {
   //       event_id_stream << table[event_index * column_count] << ',';
-	// 			// add event to the events array
+  // 			// add event to the events array
   //       events.push_back(nlohmann::json::parse(table[(event_index * column_count) + 1]));
   //     }
 
