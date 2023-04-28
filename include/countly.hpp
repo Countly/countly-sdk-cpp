@@ -131,6 +131,16 @@ public:
    */
   void fillEventsIntoJson(nlohmann::json &events, std::string &event_ids);
 
+  /*
+   * Sends the given events to the request queue.
+   */
+  void sendEventsToRQ(const nlohmann::json &events);
+
+	/*
+	 * Checks if the event queue is empty.
+	 */
+  bool isEQEmpty();
+
   void addEventToSqlite(const cly::Event &event);
 
   void setMaxEvents(size_t value);

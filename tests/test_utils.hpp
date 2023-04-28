@@ -28,6 +28,29 @@ static void clearSDK() {
   remove(TEST_DATABASE_NAME);
 }
 
+static void generateEvents(int events, cly::Countly &countly) {
+  for (int i = 0; i < events; i++) {
+    cly::Event event("click", i);
+    countly.addEvent(event);
+  }
+}
+
+static void checkEventSizeInRQ(int size, cly::Countly &countly) {
+  countly.processRQDebug();
+  CHECK(!http_call_queue.empty());
+  HTTPCall oldest_call = http_call_queue.front();
+  http_call_queue.pop_front();
+  HTTPCall http_call = oldest_call;
+
+  CHECK(http_call.use_post);
+  CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
+  CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
+
+  // check that the events are in the request
+  nlohmann::json events = nlohmann::json::parse(http_call.data["events"]);
+  CHECK(events.size() == size);
+}
+
 static void storageModuleNotInitialized(std::shared_ptr<StorageModuleBase> storageModule) {
   CHECK(storageModule->RQCount() == -1);
   CHECK(storageModule->RQPeekAll().size() == 0);

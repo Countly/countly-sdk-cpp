@@ -484,8 +484,17 @@ void Countly::addEvent(const cly::Event &event) {
   mutex->unlock();
   int queueSize = checkPersistentEQSize();
   mutex->lock();
-  if (queueSize >= configuration->eventQueueThreshold) {
+  if (queueSize >= configuration->maxProcessingBatchSize) {
     log(LogLevel::DEBUG, "Event queue threshold is reached");
+    nlohmann::json events = nlohmann::json::array();
+    std::string event_ids;
+
+		// fetch events up tp the threshold from the database
+    fillEventsIntoJson(events, event_ids);
+		// send them to request queue
+    sendEventsToRQ(events);
+		// remove them from database
+    removeEventWithId(event_ids);
   }
 #endif
   mutex->unlock();
@@ -561,8 +570,7 @@ bool Countly::attemptSessionUpdateEQ() {
   }
 #endif
 
-  bool update_failed = !updateSession();
-  return update_failed;
+  return !updateSession();
 }
 
 void Countly::clearEQInternal() {
@@ -689,30 +697,21 @@ bool Countly::updateSession() {
 
     // events array
     nlohmann::json events = nlohmann::json::array();
-    bool no_events;
+    std::string event_ids;
+    bool no_events = isEQEmpty();
 
-#ifndef COUNTLY_USE_SQLITE
-    no_events = event_queue.empty();
     if (!no_events) {
+#ifndef COUNTLY_USE_SQLITE
       for (const auto &event_json : event_queue) {
         events.push_back(nlohmann::json::parse(event_json));
       }
-    } else {
-      log(LogLevel::DEBUG, "[Countly][updateSession] EQ empty.");
-    }
 #else
-    mutex->unlock();
-    no_events = checkPersistentEQSize() > 0 ? false : true;
-    mutex->lock();
-
-    std::string event_ids;
-    if (!no_events) {
       // TODO: If database_path was empty there was return false here
       fillEventsIntoJson(events, event_ids);
+#endif
     } else {
       log(LogLevel::DEBUG, "[Countly][updateSession] EQ empty.");
     }
-#endif
     mutex->unlock();
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
     mutex->lock();
@@ -728,10 +727,7 @@ bool Countly::updateSession() {
 
     // report events if there are any to request queue
     if (!no_events) {
-      log(LogLevel::DEBUG, "[Countly][updateSession] sending event.");
-      std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"events", events.dump()}};
-
-      requestModule->addRequestToQueue(data);
+      sendEventsToRQ(events);
     }
 
 // clear event queue
@@ -740,6 +736,7 @@ bool Countly::updateSession() {
     event_queue.clear();
 #else
     if (!event_ids.empty()) {
+			// this is a partial clearance, we only remove the events that were sent
       removeEventWithId(event_ids);
     }
 #endif
@@ -750,6 +747,23 @@ bool Countly::updateSession() {
   }
   mutex->unlock();
   return true;
+}
+
+void Countly::sendEventsToRQ(const nlohmann::json &events) {
+  log(LogLevel::DEBUG, "[Countly][sendEventsToRQ] Sending events to RQ.");
+  std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"events", events.dump()}};
+  requestModule->addRequestToQueue(data);
+}
+
+bool Countly::isEQEmpty() {
+  log(LogLevel::DEBUG, "[Countly][isEQEmpty] Checking if the event queue is empty.");
+#ifdef COUNTLY_USE_SQLITE
+  mutex->unlock();
+  return checkPersistentEQSize() > 0 ? false : true;
+  mutex->lock();
+#else
+  return event_queue.empty();
+#endif
 }
 
 bool Countly::endSession() {
