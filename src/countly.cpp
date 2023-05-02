@@ -484,16 +484,16 @@ void Countly::addEvent(const cly::Event &event) {
   mutex->unlock();
   int queueSize = checkPersistentEQSize();
   mutex->lock();
-  if (queueSize >= configuration->maxProcessingBatchSize) {
+  if (queueSize >= configuration->eventQueueThreshold) {
     log(LogLevel::DEBUG, "Event queue threshold is reached");
     nlohmann::json events = nlohmann::json::array();
     std::string event_ids;
 
-		// fetch events up tp the threshold from the database
+    // fetch events up to the threshold from the database
     fillEventsIntoJson(events, event_ids);
-		// send them to request queue
+    // send them to request queue
     sendEventsToRQ(events);
-		// remove them from database
+    // remove them from database
     removeEventWithId(event_ids);
   }
 #endif
@@ -501,11 +501,11 @@ void Countly::addEvent(const cly::Event &event) {
 }
 
 void Countly::setMaxEvents(size_t value) {
-  if (is_sdk_initialized) {
-    log(LogLevel::WARNING, "[Countly][setMaxEvents] You can not set the event queue size after SDK initialization.");
-    return;
-  }
+  log(LogLevel::WARNING, "[Countly][setMaxEvents] This call is deprecated. Use 'setEventSendingThreshold' instead.");
+  setEventSendingThreshold(value);
+}
 
+void Countly::setEventSendingThreshold(size_t value) {
   mutex->lock();
   configuration->eventQueueThreshold = value;
 #ifndef COUNTLY_USE_SQLITE
@@ -736,7 +736,7 @@ bool Countly::updateSession() {
     event_queue.clear();
 #else
     if (!event_ids.empty()) {
-			// this is a partial clearance, we only remove the events that were sent
+      // this is a partial clearance, we only remove the events that were sent
       removeEventWithId(event_ids);
     }
 #endif

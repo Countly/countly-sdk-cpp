@@ -136,14 +136,22 @@ public:
    */
   void sendEventsToRQ(const nlohmann::json &events);
 
-	/*
-	 * Checks if the event queue is empty.
-	 */
+  /*
+   * Checks if the event queue is empty.
+   */
   bool isEQEmpty();
 
   void addEventToSqlite(const cly::Event &event);
 
+  /**
+   * @deprecated use setEventSendingThreshold instead
+   */
   void setMaxEvents(size_t value);
+
+  /*
+   * Sets the number of events after which all events will be sent to the RQ.
+   */
+  void setEventSendingThreshold(size_t value);
 
   void flushEvents(std::chrono::seconds timeout = std::chrono::seconds(30));
 

@@ -14,7 +14,7 @@ using namespace test_utils;
 using namespace cly;
 using namespace std::literals::chrono_literals;
 
-TEST_CASE("Default batch") {
+TEST_CASE("Default threshold") {
   clearSDK();
 
   Countly &countly = Countly::getInstance();
@@ -27,7 +27,7 @@ TEST_CASE("Default batch") {
   countly.clearRequestQueue(); // request queue contains session begin request
   http_call_queue.clear();     // clear local HTTP request queue.
 
-  SUBCASE("Adding events over the batch size should trigger the events to be sent to the RQ") {
+  SUBCASE("Adding events over the threshold size should trigger the events to be sent to the RQ") {
     // generate 120 events
 		test_utils::generateEvents(120, countly);
 
@@ -39,7 +39,7 @@ TEST_CASE("Default batch") {
   }
 }
 
-TEST_CASE("Default batch 2") {
+TEST_CASE("Default threshold 2") {
   clearSDK();
 
   Countly &countly = Countly::getInstance();
@@ -75,25 +75,25 @@ TEST_CASE("Default batch 2") {
   }
 }
 
-TEST_CASE("Setting the batch size before start") {
+TEST_CASE("Setting the threshold size before start") {
   clearSDK();
 
   Countly &countly = Countly::getInstance();
   countly.setHTTPClient(test_utils::fakeSendHTTP);
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   countly.SetPath(TEST_DATABASE_NAME);
-  countly.setMaxRQProcessingBatchSize(90); // before start
+  countly.setEventSendingThreshold(90); // before start
 	countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
 
   countly.processRQDebug();
   countly.clearRequestQueue(); // request queue contains session begin request
   http_call_queue.clear();     // clear local HTTP request queue.
 
-  SUBCASE("Custom batch size should be used instead of the default one") {
+  SUBCASE("Custom threshold size should be used instead of the default one") {
     // generate 100 events
     test_utils::generateEvents(100, countly);
 
-    // new batch size is 90 so we should have 10 events in the EQ left
+    // new threshold size is 90 so we should have 10 events in the EQ left
     CHECK(countly.checkPersistentEQSize() == 10);
 
     // RQ should have the 90 events
@@ -101,7 +101,7 @@ TEST_CASE("Setting the batch size before start") {
   }
 }
 
-TEST_CASE("Setting the batch size after start") {
+TEST_CASE("Setting the threshold size after start") {
   clearSDK();
 
   Countly &countly = Countly::getInstance();
@@ -109,17 +109,17 @@ TEST_CASE("Setting the batch size after start") {
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   countly.SetPath(TEST_DATABASE_NAME);
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-  countly.setMaxRQProcessingBatchSize(90); // after start
+  countly.setEventSendingThreshold(90); // after start
 
   countly.processRQDebug();
   countly.clearRequestQueue(); // request queue contains session begin request
   http_call_queue.clear();     // clear local HTTP request queue.
 
-  SUBCASE("Custom batch size should be used instead of the default one") {
+  SUBCASE("Custom threshold size should be used instead of the default one") {
     // generate 100 events
     test_utils::generateEvents(100, countly);
 
-    // new batch size is 90 so we should have 10 events in the EQ left
+    // new threshold size is 90 so we should have 10 events in the EQ left
     CHECK(countly.checkPersistentEQSize() == 10);
 
     // RQ should have the 90 events
@@ -127,14 +127,14 @@ TEST_CASE("Setting the batch size after start") {
   }
 }
 
-TEST_CASE("Setting a negative batch size") {
+TEST_CASE("Setting a negative threshold size") {
   clearSDK();
 
   Countly &countly = Countly::getInstance();
   countly.setHTTPClient(test_utils::fakeSendHTTP);
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   countly.SetPath(TEST_DATABASE_NAME);
-  countly.setMaxRQProcessingBatchSize(-6); // before start
+  countly.setEventSendingThreshold(-6); // before start
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
 
   countly.processRQDebug();
@@ -154,16 +154,16 @@ TEST_CASE("Setting a negative batch size") {
   }
 }
 
-TEST_CASE("Setting batch size both before and after start") {
+TEST_CASE("Setting threshold size both before and after start") {
   clearSDK();
 
   Countly &countly = Countly::getInstance();
   countly.setHTTPClient(test_utils::fakeSendHTTP);
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   countly.SetPath(TEST_DATABASE_NAME);
-  countly.setMaxRQProcessingBatchSize(-5); // before start
+  countly.setEventSendingThreshold(-5); // before start
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-  countly.setMaxRQProcessingBatchSize(90); // after start
+  countly.setEventSendingThreshold(90); // after start
 
   countly.processRQDebug();
   countly.clearRequestQueue(); // request queue contains session begin request
@@ -173,7 +173,7 @@ TEST_CASE("Setting batch size both before and after start") {
     // generate 100 events
     test_utils::generateEvents(100, countly);
 
-    // new batch size is 90 so we should have 10 events in the EQ left
+    // new threshold size is 90 so we should have 10 events in the EQ left
     CHECK(countly.checkPersistentEQSize() == 10);
 
     // RQ should have the 90 events
@@ -181,17 +181,17 @@ TEST_CASE("Setting batch size both before and after start") {
   }
 }
 
-TEST_CASE("Setting batch size both before and after start, with update session in between") {
+TEST_CASE("Setting threshold size both before and after start, with update session in between") {
   clearSDK();
 
   Countly &countly = Countly::getInstance();
   countly.setHTTPClient(test_utils::fakeSendHTTP);
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   countly.SetPath(TEST_DATABASE_NAME);
-  countly.setMaxRQProcessingBatchSize(-5); // before start
+  countly.setEventSendingThreshold(-5); // before start
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
   countly.updateSession();
-  countly.setMaxRQProcessingBatchSize(90); // after start
+  countly.setEventSendingThreshold(90); // after start
 
   countly.processRQDebug();
   countly.clearRequestQueue(); // request queue contains session begin request
@@ -201,7 +201,7 @@ TEST_CASE("Setting batch size both before and after start, with update session i
     // generate 100 events
     test_utils::generateEvents(100, countly);
 
-    // new batch size is 90 so we should have 10 events in the EQ left
+    // new threshold size is 90 so we should have 10 events in the EQ left
     CHECK(countly.checkPersistentEQSize() == 10);
 
     // RQ should have the 90 events
@@ -209,16 +209,16 @@ TEST_CASE("Setting batch size both before and after start, with update session i
   }
 }
 
-TEST_CASE("Setting batch size both before and after start, non-merge device ID change") {
+TEST_CASE("Setting threshold size both before and after start, non-merge device ID change") {
   clearSDK();
 
   Countly &countly = Countly::getInstance();
   countly.setHTTPClient(test_utils::fakeSendHTTP);
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   countly.SetPath(TEST_DATABASE_NAME);
-  countly.setMaxRQProcessingBatchSize(-5); // before start
+  countly.setEventSendingThreshold(-5); // before start
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-  countly.setMaxRQProcessingBatchSize(90); // after start
+  countly.setEventSendingThreshold(90); // after start
   countly.setDeviceID("new-device-id", false); 
 
   countly.processRQDebug();
@@ -229,7 +229,7 @@ TEST_CASE("Setting batch size both before and after start, non-merge device ID c
     // generate 100 events
     test_utils::generateEvents(100, countly);
 
-    // new batch size is 90 so we should have 10 events in the EQ left
+    // new threshold size is 90 so we should have 10 events in the EQ left
     CHECK(countly.checkPersistentEQSize() == 10);
 
     // RQ should have the 90 events
