@@ -144,6 +144,19 @@ static HTTPResponse fakeSendHTTP(bool use_post, const std::string &url, const st
 
   return response;
 }
+
+static void prepareCleanTestEnvironment(cly::Countly &countly) {
+  
+
+  countly.setHTTPClient(fakeSendHTTP);
+  countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+  countly.SetPath(TEST_DATABASE_NAME);
+  countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+
+  countly.processRQDebug();
+  countly.clearRequestQueue(); // request queue contains session begin request
+  http_call_queue.clear();     // clear local HTTP request queue.
+}
 } // namespace test_utils
 
 #endif

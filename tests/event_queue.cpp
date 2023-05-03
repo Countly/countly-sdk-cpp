@@ -14,45 +14,30 @@ using namespace test_utils;
 using namespace cly;
 using namespace std::literals::chrono_literals;
 
-TEST_CASE("Default threshold") {
-  clearSDK();
-
-  Countly &countly = Countly::getInstance();
-  countly.setHTTPClient(test_utils::fakeSendHTTP);
-  countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
-  countly.SetPath(TEST_DATABASE_NAME);
-  countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-
-  countly.processRQDebug();
-  countly.clearRequestQueue(); // request queue contains session begin request
-  http_call_queue.clear();     // clear local HTTP request queue.
+TEST_CASE("Tests that use the default value of event queue threshold ") {
 
   SUBCASE("Adding events over the threshold size should trigger the events to be sent to the RQ") {
+    // get ready for the test
+    clearSDK();
+    Countly &countly = Countly::getInstance();
+    test_utils::prepareCleanTestEnvironment(countly);
+
     // generate 120 events
-		test_utils::generateEvents(120, countly);
+    test_utils::generateEvents(120, countly);
 
     // default threshold is 100 so we should have 20 events in the EQ left
     CHECK(countly.checkPersistentEQSize() == 20);
 
-		// RQ should have the 100 events
+    // RQ should have the 100 events
     test_utils::checkEventSizeInRQ(100, countly);
   }
-}
-
-TEST_CASE("Default threshold 2") {
-  clearSDK();
-
-  Countly &countly = Countly::getInstance();
-  countly.setHTTPClient(test_utils::fakeSendHTTP);
-  countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
-  countly.SetPath(TEST_DATABASE_NAME);
-  countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-
-  countly.processRQDebug();
-  countly.clearRequestQueue(); // request queue contains session begin request
-  http_call_queue.clear();     // clear local HTTP request queue.
 
   SUBCASE("Adding events 'at' the threshold should trigger the events to be sent to the RQ") {
+    // get ready for the test
+    clearSDK();
+    Countly &countly = Countly::getInstance();
+    test_utils::prepareCleanTestEnvironment(countly);
+
     // generate 99 events
     test_utils::generateEvents(99, countly);
 
@@ -63,7 +48,7 @@ TEST_CASE("Default threshold 2") {
     // local HTTP request queue should be empty => no events sent to RQ
     CHECK(http_call_queue.empty());
 
-		// add one more event
+    // add one more event
     cly::Event event("click", 2);
     countly.addEvent(event);
 
@@ -75,21 +60,22 @@ TEST_CASE("Default threshold 2") {
   }
 }
 
-TEST_CASE("Setting the threshold size before start") {
-  clearSDK();
-
-  Countly &countly = Countly::getInstance();
-  countly.setHTTPClient(test_utils::fakeSendHTTP);
-  countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
-  countly.SetPath(TEST_DATABASE_NAME);
-  countly.setEventSendingThreshold(90); // before start
-	countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-
-  countly.processRQDebug();
-  countly.clearRequestQueue(); // request queue contains session begin request
-  http_call_queue.clear();     // clear local HTTP request queue.
+TEST_CASE("Tests that use a custom value of event queue threshold") {
 
   SUBCASE("Custom threshold size should be used instead of the default one") {
+    clearSDK();
+
+    Countly &countly = Countly::getInstance();
+    countly.setHTTPClient(test_utils::fakeSendHTTP);
+    countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+    countly.SetPath(TEST_DATABASE_NAME);
+    countly.setEventSendingThreshold(90); // before start
+    countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+
+    countly.processRQDebug();
+    countly.clearRequestQueue(); // request queue contains session begin request
+    http_call_queue.clear();     // clear local HTTP request queue.
+
     // generate 100 events
     test_utils::generateEvents(100, countly);
 
@@ -99,23 +85,21 @@ TEST_CASE("Setting the threshold size before start") {
     // RQ should have the 90 events
     test_utils::checkEventSizeInRQ(90, countly);
   }
-}
 
-TEST_CASE("Setting the threshold size after start") {
-  clearSDK();
-
-  Countly &countly = Countly::getInstance();
-  countly.setHTTPClient(test_utils::fakeSendHTTP);
-  countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
-  countly.SetPath(TEST_DATABASE_NAME);
-  countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-  countly.setEventSendingThreshold(90); // after start
-
-  countly.processRQDebug();
-  countly.clearRequestQueue(); // request queue contains session begin request
-  http_call_queue.clear();     // clear local HTTP request queue.
-
+  // Setting the threshold size after start
   SUBCASE("Custom threshold size should be used instead of the default one") {
+    clearSDK();
+
+    Countly &countly = Countly::getInstance();
+    countly.setHTTPClient(test_utils::fakeSendHTTP);
+    countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+    countly.SetPath(TEST_DATABASE_NAME);
+    countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+    countly.setEventSendingThreshold(90); // after start
+
+    countly.processRQDebug();
+    countly.clearRequestQueue(); // request queue contains session begin request
+    http_call_queue.clear();     // clear local HTTP request queue.
     // generate 100 events
     test_utils::generateEvents(100, countly);
 
@@ -125,23 +109,21 @@ TEST_CASE("Setting the threshold size after start") {
     // RQ should have the 90 events
     test_utils::checkEventSizeInRQ(90, countly);
   }
-}
 
-TEST_CASE("Setting a negative threshold size") {
-  clearSDK();
-
-  Countly &countly = Countly::getInstance();
-  countly.setHTTPClient(test_utils::fakeSendHTTP);
-  countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
-  countly.SetPath(TEST_DATABASE_NAME);
-  countly.setEventSendingThreshold(-6); // before start
-  countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-
-  countly.processRQDebug();
-  countly.clearRequestQueue(); // request queue contains session begin request
-  http_call_queue.clear();     // clear local HTTP request queue.
-
+  // Setting a negative threshold size
   SUBCASE("UINT_MAX should be used instead of the default one") {
+    clearSDK();
+
+    Countly &countly = Countly::getInstance();
+    countly.setHTTPClient(test_utils::fakeSendHTTP);
+    countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+    countly.SetPath(TEST_DATABASE_NAME);
+    countly.setEventSendingThreshold(-6); // before start
+    countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+
+    countly.processRQDebug();
+    countly.clearRequestQueue(); // request queue contains session begin request
+    http_call_queue.clear();     // clear local HTTP request queue.
     // generate 10000 events
     test_utils::generateEvents(10000, countly);
 
@@ -152,24 +134,22 @@ TEST_CASE("Setting a negative threshold size") {
     // local HTTP request queue should be empty => no events sent to RQ
     CHECK(http_call_queue.empty());
   }
-}
 
-TEST_CASE("Setting threshold size both before and after start") {
-  clearSDK();
-
-  Countly &countly = Countly::getInstance();
-  countly.setHTTPClient(test_utils::fakeSendHTTP);
-  countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
-  countly.SetPath(TEST_DATABASE_NAME);
-  countly.setEventSendingThreshold(-5); // before start
-  countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-  countly.setEventSendingThreshold(90); // after start
-
-  countly.processRQDebug();
-  countly.clearRequestQueue(); // request queue contains session begin request
-  http_call_queue.clear();     // clear local HTTP request queue.
-
+  // Setting threshold size both before and after start
   SUBCASE("custom threshold should be used instead of default threshold") {
+    clearSDK();
+
+    Countly &countly = Countly::getInstance();
+    countly.setHTTPClient(test_utils::fakeSendHTTP);
+    countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+    countly.SetPath(TEST_DATABASE_NAME);
+    countly.setEventSendingThreshold(-5); // before start
+    countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+    countly.setEventSendingThreshold(90); // after start
+
+    countly.processRQDebug();
+    countly.clearRequestQueue(); // request queue contains session begin request
+    http_call_queue.clear();     // clear local HTTP request queue.
     // generate 100 events
     test_utils::generateEvents(100, countly);
 
@@ -179,25 +159,23 @@ TEST_CASE("Setting threshold size both before and after start") {
     // RQ should have the 90 events
     test_utils::checkEventSizeInRQ(90, countly);
   }
-}
 
-TEST_CASE("Setting threshold size both before and after start, with update session in between") {
-  clearSDK();
-
-  Countly &countly = Countly::getInstance();
-  countly.setHTTPClient(test_utils::fakeSendHTTP);
-  countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
-  countly.SetPath(TEST_DATABASE_NAME);
-  countly.setEventSendingThreshold(-5); // before start
-  countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-  countly.updateSession();
-  countly.setEventSendingThreshold(90); // after start
-
-  countly.processRQDebug();
-  countly.clearRequestQueue(); // request queue contains session begin request
-  http_call_queue.clear();     // clear local HTTP request queue.
-
+  // Setting threshold size both before and after start, with update session in between
   SUBCASE("custom threshold should be used instead of default threshold") {
+    clearSDK();
+
+    Countly &countly = Countly::getInstance();
+    countly.setHTTPClient(test_utils::fakeSendHTTP);
+    countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+    countly.SetPath(TEST_DATABASE_NAME);
+    countly.setEventSendingThreshold(-5); // before start
+    countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+    countly.updateSession();
+    countly.setEventSendingThreshold(90); // after start
+
+    countly.processRQDebug();
+    countly.clearRequestQueue(); // request queue contains session begin request
+    http_call_queue.clear();     // clear local HTTP request queue.
     // generate 100 events
     test_utils::generateEvents(100, countly);
 
@@ -207,25 +185,23 @@ TEST_CASE("Setting threshold size both before and after start, with update sessi
     // RQ should have the 90 events
     test_utils::checkEventSizeInRQ(90, countly);
   }
-}
 
-TEST_CASE("Setting threshold size both before and after start, non-merge device ID change") {
-  clearSDK();
-
-  Countly &countly = Countly::getInstance();
-  countly.setHTTPClient(test_utils::fakeSendHTTP);
-  countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
-  countly.SetPath(TEST_DATABASE_NAME);
-  countly.setEventSendingThreshold(-5); // before start
-  countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-  countly.setEventSendingThreshold(90); // after start
-  countly.setDeviceID("new-device-id", false); 
-
-  countly.processRQDebug();
-  countly.clearRequestQueue(); // request queue contains session begin request
-  http_call_queue.clear();     // clear local HTTP request queue.
-
+  // Setting threshold size both before and after start, non-merge device ID change
   SUBCASE("custom threshold should be used instead of default threshold") {
+    clearSDK();
+
+    Countly &countly = Countly::getInstance();
+    countly.setHTTPClient(test_utils::fakeSendHTTP);
+    countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+    countly.SetPath(TEST_DATABASE_NAME);
+    countly.setEventSendingThreshold(-5); // before start
+    countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+    countly.setEventSendingThreshold(90); // after start
+    countly.setDeviceID("new-device-id", false);
+
+    countly.processRQDebug();
+    countly.clearRequestQueue(); // request queue contains session begin request
+    http_call_queue.clear();     // clear local HTTP request queue.
     // generate 100 events
     test_utils::generateEvents(100, countly);
 
