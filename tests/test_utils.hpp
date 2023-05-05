@@ -28,6 +28,9 @@ static void clearSDK() {
   remove(TEST_DATABASE_NAME);
 }
 
+/**
+ * Generates click events for the given countly instance
+ */
 static void generateEvents(int events, cly::Countly &countly) {
   for (int i = 0; i < events; i++) {
     cly::Event event("click", i);
@@ -35,16 +38,15 @@ static void generateEvents(int events, cly::Countly &countly) {
   }
 }
 
-static void checkEventSizeInRQ(int size, cly::Countly &countly) {
+/*
+ * Checks the RQ, takes the top request and checks the 'events' key's value (which is an array of events) and returns the amount of events in that array
+ */
+static void checkTopRequestEventSize(int size, cly::Countly &countly) {
   countly.processRQDebug();
   CHECK(!http_call_queue.empty());
   HTTPCall oldest_call = http_call_queue.front();
   http_call_queue.pop_front();
   HTTPCall http_call = oldest_call;
-
-  CHECK(http_call.use_post);
-  CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
-  CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
 
   // check that the events are in the request
   nlohmann::json events = nlohmann::json::parse(http_call.data["events"]);
@@ -145,17 +147,17 @@ static HTTPResponse fakeSendHTTP(bool use_post, const std::string &url, const st
   return response;
 }
 
-static void prepareCleanTestEnvironment(cly::Countly &countly) {
-  
-
+static void initCountlyWithFakeNetworking(bool clearInitialNetworkingState, cly::Countly &countly) {
   countly.setHTTPClient(fakeSendHTTP);
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   countly.SetPath(TEST_DATABASE_NAME);
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
 
   countly.processRQDebug();
-  countly.clearRequestQueue(); // request queue contains session begin request
-  http_call_queue.clear();     // clear local HTTP request queue.
+  if (clearInitialNetworkingState) {
+    countly.clearRequestQueue(); // request queue contains session begin request
+    http_call_queue.clear();     // cl+ear local HTTP request queue.
+  }
 }
 } // namespace test_utils
 

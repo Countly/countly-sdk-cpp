@@ -49,7 +49,6 @@ int main() {
   // start the SDK (initialize the SDK)
   ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, true);
 
-  ct.SetMaxEventsPerMessage(10);
   ct.setAutomaticSessionUpdateInterval(5);// The value is set so low just for internal validation.
   ct.setMaxRQProcessingBatchSize(2); // in most cases not needed to be set. The value is set so low just for internal validation
 

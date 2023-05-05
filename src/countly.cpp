@@ -500,13 +500,22 @@ void Countly::addEvent(const cly::Event &event) {
   mutex->unlock();
 }
 
-void Countly::setMaxEvents(size_t value) {
-  log(LogLevel::WARNING, "[Countly][setMaxEvents] This call is deprecated. Use 'setEventSendingThreshold' instead.");
-  setEventSendingThreshold(value);
+void Countly::setMaxEvents(int value) {
+  log(LogLevel::WARNING, "[Countly][setMaxEvents/SetMaxEventsPerMessage] These calls are deprecated. Use 'setEventsToRQThreshold' instead.");
+  setEventsToRQThreshold(value);
 }
 
-void Countly::setEventSendingThreshold(size_t value) {
+void Countly::setEventsToRQThreshold(int value) {
+  log(LogLevel::DEBUG, "[Countly][setEventsToRQThreshold] Given threshold:[" + std::to_string(value) + "]");
   mutex->lock();
+  if (value < 1) {
+    log(LogLevel::WARNING, "[Countly][setEventsToRQThreshold] Threshold can not be less than 1. Setting it to 1 instead of:[" + std::to_string(value)+"]");
+    value = 1;
+  } else if (value > 10000) {
+    log(LogLevel::WARNING, "[Countly][setEventsToRQThreshold] Threshold can not be greater than 10000. Setting it to 10000 instead of:[" + std::to_string(value) + "]");
+    value = 10000;
+  }
+
   configuration->eventQueueThreshold = value;
 #ifndef COUNTLY_USE_SQLITE
   if (event_queue.size() > configuration->eventQueueThreshold) {

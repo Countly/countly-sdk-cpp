@@ -144,14 +144,15 @@ public:
   void addEventToSqlite(const cly::Event &event);
 
   /**
-   * @deprecated use setEventSendingThreshold instead
+   * @deprecated use setEventsToRQThreshold instead
    */
-  void setMaxEvents(size_t value);
+  void setMaxEvents(int value);
 
   /*
    * Sets the number of events after which all events will be sent to the RQ.
+   * Minimum value is 1. Default value is 100. Maximum value is 10000.
    */
-  void setEventSendingThreshold(size_t value);
+  void setEventsToRQThreshold(int value);
 
   void flushEvents(std::chrono::seconds timeout = std::chrono::seconds(30));
 
@@ -187,6 +188,9 @@ public:
 
   void SetMetrics(const std::string &os, const std::string &os_version, const std::string &device, const std::string &resolution, const std::string &carrier, const std::string &app_version) { setMetrics(os, os_version, device, resolution, carrier, app_version); }
 
+  /*
+   * @deprecated use setEventsToRQThreshold instead
+   */
   void SetMaxEventsPerMessage(int maxEvents) { setMaxEvents(maxEvents); }
 
   void SetMinUpdatePeriod(int minUpdateMillis) { setUpdateInterval(minUpdateMillis); }
