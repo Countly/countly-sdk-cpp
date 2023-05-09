@@ -141,12 +141,18 @@ public:
    */
   bool isEQEmpty();
 
+	/*
+	 * Checks if the event queue size is over the threshold and send the events to the RQ if the threshold is reached.
+	 * In case of no  persistent storage drop the oldest request if the threshold is reached.
+	 */
+  void checkAndSendEventToRQ();
+
   void addEventToSqlite(const cly::Event &event);
 
   /**
    * @deprecated use setEventsToRQThreshold instead
    */
-  void setMaxEvents(int value);
+  void setMaxEvents(size_t value);
 
   /*
    * Sets the number of events after which all events will be sent to the RQ.

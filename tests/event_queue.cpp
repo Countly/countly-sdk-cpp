@@ -18,6 +18,7 @@ TEST_CASE("Tests that use the default value of event queue threshold ") {
   clearSDK();
   Countly &countly = Countly::getInstance();
   test_utils::initCountlyWithFakeNetworking(true, countly);
+  CHECK(countly.checkPersistentEQSize() == 0);
 
   SUBCASE("Adding events over the threshold size should trigger the events to be sent to the RQ") {
     // generate 120 events
@@ -56,6 +57,7 @@ TEST_CASE("Tests that use the default value of event queue threshold ") {
 TEST_CASE("Tests that use a custom value of event queue threshold") {
   clearSDK();
   Countly &countly = Countly::getInstance();
+  CHECK(countly.checkPersistentEQSize() == -1);
 
   SUBCASE("Custom threshold size should be used instead of the default one") {
     countly.setEventsToRQThreshold(90); // before start
@@ -87,19 +89,68 @@ TEST_CASE("Tests that use a custom value of event queue threshold") {
   }
 
   // Setting a negative threshold size
-  SUBCASE("UINT_MAX should be used instead of the default one") {
+  SUBCASE("Internal limits should be used instead of the custom values") {
     countly.setEventsToRQThreshold(-6); // before start
     test_utils::initCountlyWithFakeNetworking(true, countly);
-    // generate 10000 events
-    test_utils::generateEvents(1, countly);
+    // generate 3 events
+    test_utils::generateEvents(3, countly);
 
-    // threshold is now set to UINT_MAX (as we use unsigned int) so we should have all events still in the EQ
+    // threshold is now set to 1 so we should have 0 events still in the EQ
     CHECK(countly.checkPersistentEQSize() == 0);
 
-    test_utils::checkTopRequestEventSize(1, countly);
+    // queue should have 3 requests
+    countly.processRQDebug();
+    CHECK(!http_call_queue.empty());
+    CHECK(http_call_queue.size() == 3);
+    HTTPCall oldest_call1 = http_call_queue.front();
+    nlohmann::json events1 = nlohmann::json::parse(oldest_call1.data["events"]);
+    CHECK(events1.size() == 1);
+    http_call_queue.pop_front(); 
+
+    CHECK(http_call_queue.size() == 2);
+    HTTPCall oldest_call2 = http_call_queue.front();
+    nlohmann::json events2 = nlohmann::json::parse(oldest_call2.data["events"]);
+    CHECK(events2.size() == 1);
+    http_call_queue.pop_front();
+
+    CHECK(http_call_queue.size() == 1);
+    HTTPCall oldest_call3 = http_call_queue.front();
+    nlohmann::json events3 = nlohmann::json::parse(oldest_call3.data["events"]);
+    CHECK(events3.size() == 1);
+    http_call_queue.pop_front();
+
+    // now try to trigger upper limit
+    CHECK(countly.checkPersistentEQSize() == 0);
+    countly.setEventsToRQThreshold(10005);
+    test_utils::generateEvents(10005, countly);
+
+    CHECK(countly.checkPersistentEQSize() == 5); // internal limit is 10000
+    test_utils::checkTopRequestEventSize(10000, countly);
   }
 
-  // Setting threshold size both before and after start
+  // Setting threshold size before start first
+  SUBCASE("Setting new threshold should check if there are events in the EQ and send them to the RQ if needed") {
+    countly.setEventsToRQThreshold(10); // before start
+    test_utils::initCountlyWithFakeNetworking(true, countly);
+
+    // generate 18 events
+    test_utils::generateEvents(18, countly);
+
+    // new threshold size is 10 so we should have 8 events in the EQ left
+    CHECK(countly.checkPersistentEQSize() == 8);
+
+    // RQ should have the 90 events
+    test_utils::checkTopRequestEventSize(10, countly);
+
+		// reduce the threshold
+    countly.setEventsToRQThreshold(5);
+
+    // new threshold size is 5 so first 5 events must have been sent to RQ and 3 left
+    CHECK(countly.checkPersistentEQSize() == 3);
+    test_utils::checkTopRequestEventSize(5, countly);
+  }
+
+  // Setting threshold size both before and after start and see which one is used
   SUBCASE("custom threshold should be used instead of default threshold") {
     countly.setEventsToRQThreshold(-5); // before start
     test_utils::initCountlyWithFakeNetworking(true, countly);
@@ -116,6 +167,7 @@ TEST_CASE("Tests that use a custom value of event queue threshold") {
   }
 
   // Setting threshold size both before and after start, with update session in between
+	// to see if session update and its internal logic messes up the threshold size
   SUBCASE("custom threshold should be used instead of default threshold") {
     countly.setEventsToRQThreshold(-5); // before start
     test_utils::initCountlyWithFakeNetworking(true, countly);
@@ -133,6 +185,7 @@ TEST_CASE("Tests that use a custom value of event queue threshold") {
   }
 
   // Setting threshold size both before and after start, non-merge device ID change
+	// to see if device ID change and its internal logic messes up the threshold size
   SUBCASE("custom threshold should be used instead of default threshold") {
     countly.setEventsToRQThreshold(-2); // before start
     test_utils::initCountlyWithFakeNetworking(true, countly);

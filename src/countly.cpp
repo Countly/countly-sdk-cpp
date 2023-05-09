@@ -474,13 +474,16 @@ void Countly::setUpdateInterval(size_t milliseconds) {
 void Countly::addEvent(const cly::Event &event) {
   mutex->lock();
 #ifndef COUNTLY_USE_SQLITE
-  if (event_queue.size() == configuration->eventQueueThreshold) {
-    log(LogLevel::WARNING, "Event queue is full, dropping the oldest event to insert a new one");
-    event_queue.pop_front();
-  }
   event_queue.push_back(event.serialize());
 #else
   addEventToSqlite(event);
+#endif
+  checkAndSendEventToRQ();
+  mutex->unlock();
+}
+
+void Countly::checkAndSendEventToRQ() {
+#ifdef COUNTLY_USE_SQLITE
   mutex->unlock();
   int queueSize = checkPersistentEQSize();
   mutex->lock();
@@ -496,11 +499,15 @@ void Countly::addEvent(const cly::Event &event) {
     // remove them from database
     removeEventWithId(event_ids);
   }
+#else
+  if (event_queue.size() == configuration->eventQueueThreshold) {
+    log(LogLevel::WARNING, "Event queue is full, dropping the oldest event to insert a new one");
+    event_queue.pop_front();
+  }
 #endif
-  mutex->unlock();
 }
 
-void Countly::setMaxEvents(int value) {
+void Countly::setMaxEvents(size_t value) {
   log(LogLevel::WARNING, "[Countly][setMaxEvents/SetMaxEventsPerMessage] These calls are deprecated. Use 'setEventsToRQThreshold' instead.");
   setEventsToRQThreshold(value);
 }
@@ -509,20 +516,17 @@ void Countly::setEventsToRQThreshold(int value) {
   log(LogLevel::DEBUG, "[Countly][setEventsToRQThreshold] Given threshold:[" + std::to_string(value) + "]");
   mutex->lock();
   if (value < 1) {
-    log(LogLevel::WARNING, "[Countly][setEventsToRQThreshold] Threshold can not be less than 1. Setting it to 1 instead of:[" + std::to_string(value)+"]");
+    log(LogLevel::WARNING, "[Countly][setEventsToRQThreshold] Threshold can not be less than 1. Setting it to 1 instead of:[" + std::to_string(value) + "]");
     value = 1;
   } else if (value > 10000) {
     log(LogLevel::WARNING, "[Countly][setEventsToRQThreshold] Threshold can not be greater than 10000. Setting it to 10000 instead of:[" + std::to_string(value) + "]");
     value = 10000;
   }
 
+	// set the value
   configuration->eventQueueThreshold = value;
-#ifndef COUNTLY_USE_SQLITE
-  if (event_queue.size() > configuration->eventQueueThreshold) {
-    log(LogLevel::WARNING, "New event queue size is smaller than the old one, dropping the oldest events to fit");
-    event_queue.resize(configuration->eventQueueThreshold);
-  }
-#endif
+	// if current queue size is greater than the new threshold, send events to RQ
+  checkAndSendEventToRQ();
   mutex->unlock();
 }
 
