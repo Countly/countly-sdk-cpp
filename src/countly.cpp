@@ -523,9 +523,9 @@ void Countly::setEventsToRQThreshold(int value) {
     value = 10000;
   }
 
-	// set the value
+  // set the value
   configuration->eventQueueThreshold = value;
-	// if current queue size is greater than the new threshold, send events to RQ
+  // if current queue size is greater than the new threshold, send events to RQ
   checkAndSendEventToRQ();
   mutex->unlock();
 }
