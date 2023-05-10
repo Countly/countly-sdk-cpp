@@ -484,10 +484,10 @@ void Countly::addEvent(const cly::Event &event) {
 
 void Countly::checkAndSendEventToRQ() {
   nlohmann::json events = nlohmann::json::array();
-#ifdef COUNTLY_USE_SQLITE
   mutex->unlock();
   int queueSize = checkEQSize();
   mutex->lock();
+#ifdef COUNTLY_USE_SQLITE
   if (queueSize >= configuration->eventQueueThreshold) {
     log(LogLevel::DEBUG, "Event queue threshold is reached");
     std::string event_ids;
@@ -500,8 +500,7 @@ void Countly::checkAndSendEventToRQ() {
     removeEventWithId(event_ids);
   }
 #else
-  mutex->unlock();
-  if (checkEQSize() >= configuration->eventQueueThreshold) {
+  if (queueSize >= configuration->eventQueueThreshold) {
     log(LogLevel::WARNING, "Event queue is full, dropping the oldest event to insert a new one");
     for (const auto &event_json : event_queue) {
       events.push_back(nlohmann::json::parse(event_json));
@@ -509,7 +508,6 @@ void Countly::checkAndSendEventToRQ() {
     sendEventsToRQ(events);
     event_queue.clear();
   }
-  mutex->lock();
 #endif
 }
 

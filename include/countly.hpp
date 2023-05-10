@@ -143,7 +143,6 @@ public:
 
   /*
    * Checks if the event queue size is over the threshold and send the events to the RQ if the threshold is reached.
-   * In case of no  persistent storage drop the oldest request if the threshold is reached.
    */
   void checkAndSendEventToRQ();
 

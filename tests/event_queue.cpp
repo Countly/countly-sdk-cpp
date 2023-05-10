@@ -89,7 +89,7 @@ TEST_CASE("Tests that use a custom value of event queue threshold") {
   }
 
   // Setting a negative threshold size
-  SUBCASE("Internal limits should be used instead of the custom values") {
+  SUBCASE("Internal constraints should be used instead of the custom values") {
     countly.setEventsToRQThreshold(-6); // before start
     test_utils::initCountlyWithFakeNetworking(true, countly);
     // generate 3 events
