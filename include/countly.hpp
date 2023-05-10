@@ -105,6 +105,16 @@ public:
    */
   int checkEQSize();
 
+  /**
+   * Checks and returns the size of the event queue in persistent storage.
+   */
+  int checkPersistentEQSize();
+
+  /**
+   * Checks and returns the size of the event queue in memory.
+   */
+  int checkMemoryEQSize();
+
   /*
    * Erases/clears the event queue in persistent storage.
    */

@@ -811,48 +811,25 @@ std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chro
 int Countly::checkEQSize() {
   log(LogLevel::DEBUG, "[Countly][checkEQSize]");
   int event_count = -1;
-
-#ifdef COUNTLY_USE_SQLITE
-  mutex->lock();
-  if (database_path.empty()) {
-    mutex->unlock();
-    log(LogLevel::FATAL, "[Countly][checkEQSize] Sqlite database path is not set");
+  if (!is_sdk_initialized) {
+    log(LogLevel::DEBUG, "[Countly][checkEQSize] SDK is not initialized.");
     return event_count;
   }
 
-  sqlite3 *database;
-  int return_value = sqlite3_open(database_path.c_str(), &database);
-  mutex->unlock();
-
-  if (return_value == SQLITE_OK) {
-    char *error_message;
-    int row_count, column_count;
-    char **table;
-    return_value = sqlite3_get_table(database, "SELECT COUNT(*) FROM events;", &table, &row_count, &column_count, &error_message);
-    if (return_value == SQLITE_OK) {
-      event_count = atoi(table[1]);
-      log(LogLevel::DEBUG, "[Countly][checkEQSize] Fetched event count from database: " + std::to_string(event_count));
-    } else {
-      log(LogLevel::ERROR, error_message);
-      sqlite3_free(error_message);
-    }
-    sqlite3_free_table(table);
-  } else {
-    log(LogLevel::WARNING, "[Countly][checkEQSize] Could not open database");
-  }
-
-  sqlite3_close(database);
+#ifdef COUNTLY_USE_SQLITE
+  event_count = checkPersistentEQSize();
 #else
-  log(LogLevel::DEBUG, "[Countly][checkEQSize] Checking event queue size in memory");
-  // return the size if the sdk initialize (most probably 0)
-  // else return -1 to be consistent with the persistent storage
-  if (is_sdk_initialized) {
-    event_count = event_queue.size();
-  }
+  event_count = checkMemoryEQSize();
 #endif
-
   return event_count;
 }
+
+#ifndef COUNTLY_USE_SQLITE
+int Countly::checkMemoryEQSize() {
+  log(LogLevel::DEBUG, "[Countly][checkMemoryEQSize] Checking event queue size in memory");
+  return event_queue.size();
+}
+#endif
 
 // Standalone Sqlite functions
 #ifdef COUNTLY_USE_SQLITE
@@ -904,9 +881,7 @@ void Countly::fillEventsIntoJson(nlohmann::json &events, std::string &event_ids)
 
     // create sql statement to fetch events as much as the event queue threshold
     // TODO: check if this is something we want to do
-    std::ostringstream sql_statement_stream;
-    sql_statement_stream << "SELECT evtid, event FROM events LIMIT " << std::dec << configuration->eventQueueThreshold << ';';
-    std::string sql_statement = sql_statement_stream.str();
+    std::string sql_statement = "SELECT evtid, event FROM events;";
 
     // execute sql statement
     return_value = sqlite3_get_table(database, sql_statement.c_str(), &table, &row_count, &column_count, &error_message);
@@ -936,6 +911,39 @@ void Countly::fillEventsIntoJson(nlohmann::json &events, std::string &event_ids)
     log(LogLevel::ERROR, "[Countly][fillEventsIntoJson] Could not open database.");
   }
   sqlite3_close(database);
+}
+
+int Countly::checkPersistentEQSize() {
+  int result = -1;
+  mutex->lock();
+  if (database_path.empty()) {
+    mutex->unlock();
+    log(LogLevel::FATAL, "[Countly][checkEQSize] Sqlite database path is not set");
+    return result;
+  }
+
+  sqlite3 *database;
+  int return_value = sqlite3_open(database_path.c_str(), &database);
+  mutex->unlock();
+
+  if (return_value == SQLITE_OK) {
+    char *error_message;
+    int row_count, column_count;
+    char **table;
+    return_value = sqlite3_get_table(database, "SELECT COUNT(*) FROM events;", &table, &row_count, &column_count, &error_message);
+    if (return_value == SQLITE_OK) {
+      result = atoi(table[1]);
+      log(LogLevel::DEBUG, "[Countly][checkEQSize] Fetched event count from database: " + std::to_string(result));
+    } else {
+      log(LogLevel::ERROR, error_message);
+      sqlite3_free(error_message);
+    }
+    sqlite3_free_table(table);
+  } else {
+    log(LogLevel::WARNING, "[Countly][checkEQSize] Could not open database");
+  }
+  sqlite3_close(database);
+  return result;
 }
 
 void Countly::addEventToSqlite(const cly::Event &event) {

@@ -145,15 +145,9 @@ TEST_CASE("Tests that use a custom value of event queue threshold") {
     // reduce the threshold
     countly.setEventsToRQThreshold(5);
 
-#ifdef COUNTLY_USE_SQLITE
-    // new threshold size is 5 so first 5 events must have been sent to RQ and 3 left
-    CHECK(countly.checkEQSize() == 3);
-    test_utils::checkTopRequestEventSize(5, countly);
-#else
     // new threshold size is smaller than previous so all events must be sent to RQ
     CHECK(countly.checkEQSize() == 0);
     test_utils::checkTopRequestEventSize(8, countly);
-#endif
   }
 
   // Setting threshold size both before and after start and see which one is used
