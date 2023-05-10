@@ -101,9 +101,9 @@ public:
   void addEvent(const cly::Event &event);
 
   /*
-   * Checks and returns the size of the event queue in persistent storage.
+   * Checks and returns the size of the event queue in memory or persistent storage.
    */
-  int checkPersistentEQSize();
+  int checkEQSize();
 
   /*
    * Erases/clears the event queue in persistent storage.

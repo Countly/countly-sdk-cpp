@@ -18,14 +18,14 @@ TEST_CASE("Tests that use the default value of event queue threshold ") {
   clearSDK();
   Countly &countly = Countly::getInstance();
   test_utils::initCountlyWithFakeNetworking(true, countly);
-  CHECK(countly.checkPersistentEQSize() == 0);
+  CHECK(countly.checkEQSize() == 0);
 
   SUBCASE("Adding events over the threshold size should trigger the events to be sent to the RQ") {
     // generate 120 events
     test_utils::generateEvents(120, countly);
 
     // default threshold is 100 so we should have 20 events in the EQ left
-    CHECK(countly.checkPersistentEQSize() == 20);
+    CHECK(countly.checkEQSize() == 20);
 
     // RQ should have the 100 events
     test_utils::checkTopRequestEventSize(100, countly);
@@ -36,7 +36,7 @@ TEST_CASE("Tests that use the default value of event queue threshold ") {
     test_utils::generateEvents(99, countly);
 
     // default threshold is 100 so we should have 99 events in the EQ still
-    CHECK(countly.checkPersistentEQSize() == 99);
+    CHECK(countly.checkEQSize() == 99);
 
     countly.processRQDebug();
     // local HTTP request queue should be empty => no events sent to RQ
@@ -47,7 +47,7 @@ TEST_CASE("Tests that use the default value of event queue threshold ") {
     countly.addEvent(event);
 
     // reached threshold so we should have 0 events in the EQ
-    CHECK(countly.checkPersistentEQSize() == 0);
+    CHECK(countly.checkEQSize() == 0);
 
     // RQ should have the 100 events
     test_utils::checkTopRequestEventSize(100, countly);
@@ -57,7 +57,7 @@ TEST_CASE("Tests that use the default value of event queue threshold ") {
 TEST_CASE("Tests that use a custom value of event queue threshold") {
   clearSDK();
   Countly &countly = Countly::getInstance();
-  CHECK(countly.checkPersistentEQSize() == -1);
+  CHECK(countly.checkEQSize() == -1);
 
   SUBCASE("Custom threshold size should be used instead of the default one") {
     countly.setEventsToRQThreshold(90); // before start
@@ -67,7 +67,7 @@ TEST_CASE("Tests that use a custom value of event queue threshold") {
     test_utils::generateEvents(100, countly);
 
     // new threshold size is 90 so we should have 10 events in the EQ left
-    CHECK(countly.checkPersistentEQSize() == 10);
+    CHECK(countly.checkEQSize() == 10);
 
     // RQ should have the 90 events
     test_utils::checkTopRequestEventSize(90, countly);
@@ -82,7 +82,7 @@ TEST_CASE("Tests that use a custom value of event queue threshold") {
     test_utils::generateEvents(100, countly);
 
     // new threshold size is 90 so we should have 10 events in the EQ left
-    CHECK(countly.checkPersistentEQSize() == 10);
+    CHECK(countly.checkEQSize() == 10);
 
     // RQ should have the 90 events
     test_utils::checkTopRequestEventSize(90, countly);
@@ -96,7 +96,7 @@ TEST_CASE("Tests that use a custom value of event queue threshold") {
     test_utils::generateEvents(3, countly);
 
     // threshold is now set to 1 so we should have 0 events still in the EQ
-    CHECK(countly.checkPersistentEQSize() == 0);
+    CHECK(countly.checkEQSize() == 0);
 
     // queue should have 3 requests
     countly.processRQDebug();
@@ -120,11 +120,11 @@ TEST_CASE("Tests that use a custom value of event queue threshold") {
     http_call_queue.pop_front();
 
     // now try to trigger upper limit
-    CHECK(countly.checkPersistentEQSize() == 0);
+    CHECK(countly.checkEQSize() == 0);
     countly.setEventsToRQThreshold(10005);
     test_utils::generateEvents(10005, countly);
 
-    CHECK(countly.checkPersistentEQSize() == 5); // internal limit is 10000
+    CHECK(countly.checkEQSize() == 5); // internal limit is 10000
     test_utils::checkTopRequestEventSize(10000, countly);
   }
 
@@ -137,17 +137,23 @@ TEST_CASE("Tests that use a custom value of event queue threshold") {
     test_utils::generateEvents(18, countly);
 
     // new threshold size is 10 so we should have 8 events in the EQ left
-    CHECK(countly.checkPersistentEQSize() == 8);
+    CHECK(countly.checkEQSize() == 8);
 
-    // RQ should have the 90 events
+    // RQ should have the 10 events
     test_utils::checkTopRequestEventSize(10, countly);
 
     // reduce the threshold
     countly.setEventsToRQThreshold(5);
 
+#ifdef COUNTLY_USE_SQLITE
     // new threshold size is 5 so first 5 events must have been sent to RQ and 3 left
-    CHECK(countly.checkPersistentEQSize() == 3);
+    CHECK(countly.checkEQSize() == 3);
     test_utils::checkTopRequestEventSize(5, countly);
+#else
+    // new threshold size is smaller than previous so all events must be sent to RQ
+    CHECK(countly.checkEQSize() == 0);
+    test_utils::checkTopRequestEventSize(8, countly);
+#endif
   }
 
   // Setting threshold size both before and after start and see which one is used
@@ -160,7 +166,7 @@ TEST_CASE("Tests that use a custom value of event queue threshold") {
     test_utils::generateEvents(100, countly);
 
     // new threshold size is 90 so we should have 10 events in the EQ left
-    CHECK(countly.checkPersistentEQSize() == 10);
+    CHECK(countly.checkEQSize() == 10);
 
     // RQ should have the 90 events
     test_utils::checkTopRequestEventSize(90, countly);
@@ -178,7 +184,7 @@ TEST_CASE("Tests that use a custom value of event queue threshold") {
     test_utils::generateEvents(100, countly);
 
     // new threshold size is 90 so we should have 10 events in the EQ left
-    CHECK(countly.checkPersistentEQSize() == 10);
+    CHECK(countly.checkEQSize() == 10);
 
     // RQ should have the 90 events
     test_utils::checkTopRequestEventSize(90, countly);
@@ -196,7 +202,7 @@ TEST_CASE("Tests that use a custom value of event queue threshold") {
     test_utils::generateEvents(4, countly);
 
     // new threshold size is 3 so we should have 1 events in the EQ left
-    CHECK(countly.checkPersistentEQSize() == 1);
+    CHECK(countly.checkEQSize() == 1);
 
     // RQ should have the 3 events
     // trigger RQ to send requests to http_call_queue

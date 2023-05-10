@@ -483,13 +483,13 @@ void Countly::addEvent(const cly::Event &event) {
 }
 
 void Countly::checkAndSendEventToRQ() {
+  nlohmann::json events = nlohmann::json::array();
 #ifdef COUNTLY_USE_SQLITE
   mutex->unlock();
-  int queueSize = checkPersistentEQSize();
+  int queueSize = checkEQSize();
   mutex->lock();
   if (queueSize >= configuration->eventQueueThreshold) {
     log(LogLevel::DEBUG, "Event queue threshold is reached");
-    nlohmann::json events = nlohmann::json::array();
     std::string event_ids;
 
     // fetch events up to the threshold from the database
@@ -500,10 +500,16 @@ void Countly::checkAndSendEventToRQ() {
     removeEventWithId(event_ids);
   }
 #else
-  if (event_queue.size() == configuration->eventQueueThreshold) {
+  mutex->unlock();
+  if (checkEQSize() >= configuration->eventQueueThreshold) {
     log(LogLevel::WARNING, "Event queue is full, dropping the oldest event to insert a new one");
-    event_queue.pop_front();
+    for (const auto &event_json : event_queue) {
+      events.push_back(nlohmann::json::parse(event_json));
+    }
+    sendEventsToRQ(events);
+    event_queue.clear();
   }
+  mutex->lock();
 #endif
 }
 
@@ -577,7 +583,7 @@ bool Countly::attemptSessionUpdateEQ() {
   }
   mutex->unlock();
 #else
-  int event_count = checkPersistentEQSize();
+  int event_count = checkEQSize();
   if (event_count <= 0) {
     return false;
   }
@@ -772,7 +778,7 @@ bool Countly::isEQEmpty() {
   log(LogLevel::DEBUG, "[Countly][isEQEmpty] Checking if the event queue is empty.");
 #ifdef COUNTLY_USE_SQLITE
   mutex->unlock();
-  return checkPersistentEQSize() > 0 ? false : true;
+  return checkEQSize() > 0 ? false : true;
   mutex->lock();
 #else
   return event_queue.empty();
@@ -803,6 +809,52 @@ bool Countly::endSession() {
 }
 
 std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chrono::system_clock::now(); }
+
+int Countly::checkEQSize() {
+  log(LogLevel::DEBUG, "[Countly][checkEQSize]");
+  int event_count = -1;
+
+#ifdef COUNTLY_USE_SQLITE
+  mutex->lock();
+  if (database_path.empty()) {
+    mutex->unlock();
+    log(LogLevel::FATAL, "[Countly][checkEQSize] Sqlite database path is not set");
+    return event_count;
+  }
+
+  sqlite3 *database;
+  int return_value = sqlite3_open(database_path.c_str(), &database);
+  mutex->unlock();
+
+  if (return_value == SQLITE_OK) {
+    char *error_message;
+    int row_count, column_count;
+    char **table;
+    return_value = sqlite3_get_table(database, "SELECT COUNT(*) FROM events;", &table, &row_count, &column_count, &error_message);
+    if (return_value == SQLITE_OK) {
+      event_count = atoi(table[1]);
+      log(LogLevel::DEBUG, "[Countly][checkEQSize] Fetched event count from database: " + std::to_string(event_count));
+    } else {
+      log(LogLevel::ERROR, error_message);
+      sqlite3_free(error_message);
+    }
+    sqlite3_free_table(table);
+  } else {
+    log(LogLevel::WARNING, "[Countly][checkEQSize] Could not open database");
+  }
+
+  sqlite3_close(database);
+#else
+  log(LogLevel::DEBUG, "[Countly][checkEQSize] Checking event queue size in memory");
+  // return the size if the sdk initialize (most probably 0)
+  // else return -1 to be consistent with the persistent storage
+  if (is_sdk_initialized) {
+    event_count = event_queue.size();
+  }
+#endif
+
+  return event_count;
+}
 
 // Standalone Sqlite functions
 #ifdef COUNTLY_USE_SQLITE
@@ -886,41 +938,6 @@ void Countly::fillEventsIntoJson(nlohmann::json &events, std::string &event_ids)
     log(LogLevel::ERROR, "[Countly][fillEventsIntoJson] Could not open database.");
   }
   sqlite3_close(database);
-}
-
-int Countly::checkPersistentEQSize() {
-  log(LogLevel::DEBUG, "[Countly][checkEQSize]");
-  int event_count = -1;
-  mutex->lock();
-  if (database_path.empty()) {
-    mutex->unlock();
-    log(LogLevel::FATAL, "[Countly][checkEQSize] Sqlite database path is not set");
-    return event_count;
-  }
-
-  sqlite3 *database;
-  int return_value = sqlite3_open(database_path.c_str(), &database);
-  mutex->unlock();
-
-  if (return_value == SQLITE_OK) {
-    char *error_message;
-    int row_count, column_count;
-    char **table;
-    return_value = sqlite3_get_table(database, "SELECT COUNT(*) FROM events;", &table, &row_count, &column_count, &error_message);
-    if (return_value == SQLITE_OK) {
-      event_count = atoi(table[1]);
-      log(LogLevel::DEBUG, "[Countly][checkEQSize] Fetched event count from database: " + std::to_string(event_count));
-    } else {
-      log(LogLevel::ERROR, error_message);
-      sqlite3_free(error_message);
-    }
-    sqlite3_free_table(table);
-  } else {
-    log(LogLevel::WARNING, "[Countly][checkEQSize] Could not open database");
-  }
-
-  sqlite3_close(database);
-  return event_count;
 }
 
 void Countly::addEventToSqlite(const cly::Event &event) {
