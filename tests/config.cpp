@@ -174,7 +174,7 @@ TEST_CASE("Validate setting configuration values") {
     ct.SetMetrics("Windows 11", "10", "p", "800x800", "Car", "1.1");
 
     ct.setMaxRQProcessingBatchSize(50);
-    ct.SetMaxEventsPerMessage(100);
+    ct.SetMaxEventsPerMessage(100); // this calls setMaxEvents
     ct.setAutomaticSessionUpdateInterval(50);
     ct.setSalt("new-salt");
     ct.setMaxRequestQueueSize(100);
@@ -190,7 +190,7 @@ TEST_CASE("Validate setting configuration values") {
     CHECK(config.databasePath == TEST_DATABASE_NAME);
 #endif
     CHECK(config.sessionDuration == 5);
-    CHECK(config.eventQueueThreshold == 10);
+    CHECK(config.eventQueueThreshold == 100); // this one should be changed after init
     CHECK(config.requestQueueThreshold == 10);
     CHECK(config.maxProcessingBatchSize == 50); // this one should be changed after init
     CHECK(config.breadcrumbsThreshold == 100);

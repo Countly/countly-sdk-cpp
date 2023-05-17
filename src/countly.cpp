@@ -474,37 +474,63 @@ void Countly::setUpdateInterval(size_t milliseconds) {
 void Countly::addEvent(const cly::Event &event) {
   mutex->lock();
 #ifndef COUNTLY_USE_SQLITE
-  if (event_queue.size() == configuration->eventQueueThreshold) {
-    log(LogLevel::WARNING, "Event queue is full, dropping the oldest event to insert a new one");
-    event_queue.pop_front();
-  }
   event_queue.push_back(event.serialize());
 #else
   addEventToSqlite(event);
-  mutex->unlock();
-  int queueSize = checkPersistentEQSize();
-  mutex->lock();
-  if (queueSize >= configuration->eventQueueThreshold) {
-    log(LogLevel::DEBUG, "Event queue threshold is reached");
-  }
 #endif
+  checkAndSendEventToRQ();
   mutex->unlock();
 }
 
-void Countly::setMaxEvents(size_t value) {
-  if (is_sdk_initialized) {
-    log(LogLevel::WARNING, "[Countly][setMaxEvents] You can not set the event queue size after SDK initialization.");
-    return;
-  }
-
+void Countly::checkAndSendEventToRQ() {
+  nlohmann::json events = nlohmann::json::array();
+  mutex->unlock();
+  int queueSize = checkEQSize();
   mutex->lock();
-  configuration->eventQueueThreshold = value;
-#ifndef COUNTLY_USE_SQLITE
-  if (event_queue.size() > configuration->eventQueueThreshold) {
-    log(LogLevel::WARNING, "New event queue size is smaller than the old one, dropping the oldest events to fit");
-    event_queue.resize(configuration->eventQueueThreshold);
+#ifdef COUNTLY_USE_SQLITE
+  if (queueSize >= configuration->eventQueueThreshold) {
+    log(LogLevel::DEBUG, "Event queue threshold is reached");
+    std::string event_ids;
+
+    // fetch events up to the threshold from the database
+    fillEventsIntoJson(events, event_ids);
+    // send them to request queue
+    sendEventsToRQ(events);
+    // remove them from database
+    removeEventWithId(event_ids);
+  }
+#else
+  if (queueSize >= configuration->eventQueueThreshold) {
+    log(LogLevel::WARNING, "Event queue is full, dropping the oldest event to insert a new one");
+    for (const auto &event_json : event_queue) {
+      events.push_back(nlohmann::json::parse(event_json));
+    }
+    sendEventsToRQ(events);
+    event_queue.clear();
   }
 #endif
+}
+
+void Countly::setMaxEvents(size_t value) {
+  log(LogLevel::WARNING, "[Countly][setMaxEvents/SetMaxEventsPerMessage] These calls are deprecated. Use 'setEventsToRQThreshold' instead.");
+  setEventsToRQThreshold(value);
+}
+
+void Countly::setEventsToRQThreshold(int value) {
+  log(LogLevel::DEBUG, "[Countly][setEventsToRQThreshold] Given threshold:[" + std::to_string(value) + "]");
+  mutex->lock();
+  if (value < 1) {
+    log(LogLevel::WARNING, "[Countly][setEventsToRQThreshold] Threshold can not be less than 1. Setting it to 1 instead of:[" + std::to_string(value) + "]");
+    value = 1;
+  } else if (value > 10000) {
+    log(LogLevel::WARNING, "[Countly][setEventsToRQThreshold] Threshold can not be greater than 10000. Setting it to 10000 instead of:[" + std::to_string(value) + "]");
+    value = 10000;
+  }
+
+  // set the value
+  configuration->eventQueueThreshold = value;
+  // if current queue size is greater than the new threshold, send events to RQ
+  checkAndSendEventToRQ();
   mutex->unlock();
 }
 
@@ -555,14 +581,13 @@ bool Countly::attemptSessionUpdateEQ() {
   }
   mutex->unlock();
 #else
-  int event_count = checkPersistentEQSize();
+  int event_count = checkEQSize();
   if (event_count <= 0) {
     return false;
   }
 #endif
 
-  bool update_failed = !updateSession();
-  return update_failed;
+  return !updateSession();
 }
 
 void Countly::clearEQInternal() {
@@ -689,30 +714,21 @@ bool Countly::updateSession() {
 
     // events array
     nlohmann::json events = nlohmann::json::array();
-    bool no_events;
+    std::string event_ids;
+    bool no_events = isEQEmpty();
 
-#ifndef COUNTLY_USE_SQLITE
-    no_events = event_queue.empty();
     if (!no_events) {
+#ifndef COUNTLY_USE_SQLITE
       for (const auto &event_json : event_queue) {
         events.push_back(nlohmann::json::parse(event_json));
       }
-    } else {
-      log(LogLevel::DEBUG, "[Countly][updateSession] EQ empty.");
-    }
 #else
-    mutex->unlock();
-    no_events = checkPersistentEQSize() > 0 ? false : true;
-    mutex->lock();
-
-    std::string event_ids;
-    if (!no_events) {
       // TODO: If database_path was empty there was return false here
       fillEventsIntoJson(events, event_ids);
+#endif
     } else {
       log(LogLevel::DEBUG, "[Countly][updateSession] EQ empty.");
     }
-#endif
     mutex->unlock();
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
     mutex->lock();
@@ -728,10 +744,7 @@ bool Countly::updateSession() {
 
     // report events if there are any to request queue
     if (!no_events) {
-      log(LogLevel::DEBUG, "[Countly][updateSession] sending event.");
-      std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"events", events.dump()}};
-
-      requestModule->addRequestToQueue(data);
+      sendEventsToRQ(events);
     }
 
 // clear event queue
@@ -740,6 +753,7 @@ bool Countly::updateSession() {
     event_queue.clear();
 #else
     if (!event_ids.empty()) {
+      // this is a partial clearance, we only remove the events that were sent
       removeEventWithId(event_ids);
     }
 #endif
@@ -750,6 +764,23 @@ bool Countly::updateSession() {
   }
   mutex->unlock();
   return true;
+}
+
+void Countly::sendEventsToRQ(const nlohmann::json &events) {
+  log(LogLevel::DEBUG, "[Countly][sendEventsToRQ] Sending events to RQ.");
+  std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"events", events.dump()}};
+  requestModule->addRequestToQueue(data);
+}
+
+bool Countly::isEQEmpty() {
+  log(LogLevel::DEBUG, "[Countly][isEQEmpty] Checking if the event queue is empty.");
+#ifdef COUNTLY_USE_SQLITE
+  mutex->unlock();
+  return checkEQSize() > 0 ? false : true;
+  mutex->lock();
+#else
+  return event_queue.empty();
+#endif
 }
 
 bool Countly::endSession() {
@@ -776,6 +807,29 @@ bool Countly::endSession() {
 }
 
 std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chrono::system_clock::now(); }
+
+int Countly::checkEQSize() {
+  log(LogLevel::DEBUG, "[Countly][checkEQSize]");
+  int event_count = -1;
+  if (!is_sdk_initialized) {
+    log(LogLevel::DEBUG, "[Countly][checkEQSize] SDK is not initialized.");
+    return event_count;
+  }
+
+#ifdef COUNTLY_USE_SQLITE
+  event_count = checkPersistentEQSize();
+#else
+  event_count = checkMemoryEQSize();
+#endif
+  return event_count;
+}
+
+#ifndef COUNTLY_USE_SQLITE
+int Countly::checkMemoryEQSize() {
+  log(LogLevel::DEBUG, "[Countly][checkMemoryEQSize] Checking event queue size in memory");
+  return event_queue.size();
+}
+#endif
 
 // Standalone Sqlite functions
 #ifdef COUNTLY_USE_SQLITE
@@ -827,9 +881,7 @@ void Countly::fillEventsIntoJson(nlohmann::json &events, std::string &event_ids)
 
     // create sql statement to fetch events as much as the event queue threshold
     // TODO: check if this is something we want to do
-    std::ostringstream sql_statement_stream;
-    sql_statement_stream << "SELECT evtid, event FROM events LIMIT " << std::dec << configuration->eventQueueThreshold << ';';
-    std::string sql_statement = sql_statement_stream.str();
+    std::string sql_statement = "SELECT evtid, event FROM events;";
 
     // execute sql statement
     return_value = sqlite3_get_table(database, sql_statement.c_str(), &table, &row_count, &column_count, &error_message);
@@ -862,13 +914,12 @@ void Countly::fillEventsIntoJson(nlohmann::json &events, std::string &event_ids)
 }
 
 int Countly::checkPersistentEQSize() {
-  log(LogLevel::DEBUG, "[Countly][checkEQSize]");
-  int event_count = -1;
+  int result = -1;
   mutex->lock();
   if (database_path.empty()) {
     mutex->unlock();
     log(LogLevel::FATAL, "[Countly][checkEQSize] Sqlite database path is not set");
-    return event_count;
+    return result;
   }
 
   sqlite3 *database;
@@ -881,8 +932,8 @@ int Countly::checkPersistentEQSize() {
     char **table;
     return_value = sqlite3_get_table(database, "SELECT COUNT(*) FROM events;", &table, &row_count, &column_count, &error_message);
     if (return_value == SQLITE_OK) {
-      event_count = atoi(table[1]);
-      log(LogLevel::DEBUG, "[Countly][checkEQSize] Fetched event count from database: " + std::to_string(event_count));
+      result = atoi(table[1]);
+      log(LogLevel::DEBUG, "[Countly][checkEQSize] Fetched event count from database: " + std::to_string(result));
     } else {
       log(LogLevel::ERROR, error_message);
       sqlite3_free(error_message);
@@ -891,9 +942,8 @@ int Countly::checkPersistentEQSize() {
   } else {
     log(LogLevel::WARNING, "[Countly][checkEQSize] Could not open database");
   }
-
   sqlite3_close(database);
-  return event_count;
+  return result;
 }
 
 void Countly::addEventToSqlite(const cly::Event &event) {

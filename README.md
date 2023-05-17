@@ -44,7 +44,6 @@ int main(int argc, char *argv[]) {
 	ct.setCustomUserDetails({{"Account Type", "Basic"}, {"Employer", "Company4"}});
 	// Server and port
 	ct.Start("abf2034f975393fa994d1cf8adf9a93e4a29ac29", "https://myserver.com", 403);
-	ct.SetMaxEventsPerMessage(40);
 	ct.SetMinUpdatePeriod(2000);
 
 	ct.RecordEvent("MyCustomEvent", 123);

@@ -28,6 +28,36 @@ static void clearSDK() {
   remove(TEST_DATABASE_NAME);
 }
 
+/**
+ * Generates click events for the given countly instance
+ */
+static void generateEvents(int events, cly::Countly &countly) {
+  for (int i = 0; i < events; i++) {
+    cly::Event event("click", i); // TODO: the key name should be settable too
+    countly.addEvent(event);
+  }
+}
+
+/*
+ * Checks the RQ, takes the top request and checks the 'events' key's value (which is an array of events) and returns the amount of events in that array
+ */
+static void checkTopRequestEventSize(int size, cly::Countly &countly) {
+  // process the RQ so that the events are sent to the local HTTP request queue
+  countly.processRQDebug();
+
+  // check that the local HTTP request queue has atleast 1 event
+  CHECK(!http_call_queue.empty());
+  // get the oldest event
+  HTTPCall oldest_call = http_call_queue.front();
+  // remove the oldest event from the queue
+  http_call_queue.pop_front();
+  HTTPCall http_call = oldest_call;
+
+  // check that the events are in the request
+  nlohmann::json events = nlohmann::json::parse(http_call.data["events"]);
+  CHECK(events.size() == size);
+}
+
 static void storageModuleNotInitialized(std::shared_ptr<StorageModuleBase> storageModule) {
   CHECK(storageModule->RQCount() == -1);
   CHECK(storageModule->RQPeekAll().size() == 0);
@@ -120,6 +150,27 @@ static HTTPResponse fakeSendHTTP(bool use_post, const std::string &url, const st
   }
 
   return response;
+}
+
+static void initCountlyWithFakeNetworking(bool clearInitialNetworkingState, cly::Countly &countly) {
+  // set the HTTP client to the fake one which just stores the HTTP calls in a queue
+  countly.setHTTPClient(fakeSendHTTP);
+
+  // set the device ID to the test device ID and path to the test database
+  countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+  countly.SetPath(TEST_DATABASE_NAME);
+  CHECK(countly.checkEQSize() == -1);
+
+  // start the Countly SDK
+  countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+  CHECK(countly.checkEQSize() == 0);
+
+  // Process the RQ so that thing will be at the http call queue
+  countly.processRQDebug();
+  if (clearInitialNetworkingState) {
+    countly.clearRequestQueue(); // request queue contains session begin request
+    http_call_queue.clear();     // cl+ear local HTTP request queue.
+  }
 }
 } // namespace test_utils
 

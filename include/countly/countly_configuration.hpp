@@ -42,7 +42,7 @@ struct CountlyConfiguration {
   /**
    * Set threshold value for the number of events that can be stored locally.
    */
-  unsigned int eventQueueThreshold = 100;
+  int eventQueueThreshold = 100;
 
   /**
    * Set limit for the number of requests that can be stored locally.

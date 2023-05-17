@@ -101,9 +101,19 @@ public:
   void addEvent(const cly::Event &event);
 
   /*
+   * Checks and returns the size of the event queue in memory or persistent storage.
+   */
+  int checkEQSize();
+
+  /**
    * Checks and returns the size of the event queue in persistent storage.
    */
   int checkPersistentEQSize();
+
+  /**
+   * Checks and returns the size of the event queue in memory.
+   */
+  int checkMemoryEQSize();
 
   /*
    * Erases/clears the event queue in persistent storage.
@@ -131,9 +141,33 @@ public:
    */
   void fillEventsIntoJson(nlohmann::json &events, std::string &event_ids);
 
+  /*
+   * Sends the given events to the request queue.
+   */
+  void sendEventsToRQ(const nlohmann::json &events);
+
+  /*
+   * Checks if the event queue is empty.
+   */
+  bool isEQEmpty();
+
+  /*
+   * Checks if the event queue size is over the threshold and send the events to the RQ if the threshold is reached.
+   */
+  void checkAndSendEventToRQ();
+
   void addEventToSqlite(const cly::Event &event);
 
+  /**
+   * @deprecated use setEventsToRQThreshold instead
+   */
   void setMaxEvents(size_t value);
+
+  /*
+   * Sets the number of events after which all events will be sent to the RQ.
+   * Minimum value is 1. Default value is 100. Maximum value is 10000.
+   */
+  void setEventsToRQThreshold(int value);
 
   void flushEvents(std::chrono::seconds timeout = std::chrono::seconds(30));
 
@@ -169,6 +203,9 @@ public:
 
   void SetMetrics(const std::string &os, const std::string &os_version, const std::string &device, const std::string &resolution, const std::string &carrier, const std::string &app_version) { setMetrics(os, os_version, device, resolution, carrier, app_version); }
 
+  /*
+   * @deprecated use setEventsToRQThreshold instead
+   */
   void SetMaxEventsPerMessage(int maxEvents) { setMaxEvents(maxEvents); }
 
   void SetMinUpdatePeriod(int minUpdateMillis) { setUpdateInterval(minUpdateMillis); }

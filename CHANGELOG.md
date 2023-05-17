@@ -1,5 +1,6 @@
 ## xx.xx.x
 - Request queue processing now is limited to 100 requests at a time
+- Added 'setEventsToRQThreshold' method that sets the number of events after which all events will be sent to the RQ. Default value is set to 100.
 
 ## 22.09.1
 - Mitigated a problem that caused invalid pointer error if the database path was set wrong 
@@ -7,7 +8,7 @@
 ## 22.09.0
 - ! Minor breaking change ! SDK configuration now can't be changed after initialization/start
 - Added a persistent requests queue when building the SDK with the 'COUNTLY_USE_SQLITE' flag
-- Fixed a bug where view's name was being overriden by segmentation provided.
+- Fixed a bug where view's name was being overridden by segmentation provided.
 
 ## 22.06.4
 - Fixed a bug where the SDK 'mutex' was being locked twice when built with the 'COUNTLY_USE_SQLITE' flag.
