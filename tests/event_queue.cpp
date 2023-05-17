@@ -14,6 +14,9 @@ using namespace test_utils;
 using namespace cly;
 using namespace std::literals::chrono_literals;
 
+//TODO: Change device ID should flush all events to RQ
+//TODO: End Session should flush all events to RQ
+
 TEST_CASE("Tests that use the default value of event queue threshold ") {
   clearSDK();
   Countly &countly = Countly::getInstance();
