@@ -33,7 +33,7 @@ static void clearSDK() {
  */
 static void generateEvents(int events, cly::Countly &countly) {
   for (int i = 0; i < events; i++) {
-    cly::Event event("click", i);
+    cly::Event event("click", i); // TODO: the key name should be settable too
     countly.addEvent(event);
   }
 }
