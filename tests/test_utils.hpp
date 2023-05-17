@@ -159,9 +159,11 @@ static void initCountlyWithFakeNetworking(bool clearInitialNetworkingState, cly:
   // set the device ID to the test device ID and path to the test database
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   countly.SetPath(TEST_DATABASE_NAME);
+  CHECK(countly.checkEQSize() == -1);
 
   // start the Countly SDK
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+  CHECK(countly.checkEQSize() == 0);
 
   // Process the RQ so that thing will be at the http call queue
   countly.processRQDebug();
