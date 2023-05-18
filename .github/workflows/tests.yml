@@ -70,6 +70,6 @@ jobs:
 
       - name: Build and run tests
         run: |
-          cmake ${{ matrix.cmake_option }} -B build . ${{ matrix.cmake-generator }}
+          cmake ${{ matrix.cmake_option }} -B build . ${{ matrix.cmake-sqlite }}
           cd build
-          ${{ matrix.make }}
+          make ./countly-tests && ./countly-tests
