@@ -1,15 +1,15 @@
 name: Run Tests
+on:
+  push:
+    branches: [master, staging]
+  pull_request:
+    branches: [master, staging]
 env:
   CMAKE_OPTION_1: -DCOUNTLY_BUILD_TESTS=1
   CMAKE_OPTION_2: -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_CUSTOM_SHA256=1
   CMAKE_OPTION_3: -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_CUSTOM_SHA256=1 -DCOUNTLY_USE_SQLITE=1
   CMAKE_OPTION_4: -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=1
 
-on:
-  push:
-    branches: [master, staging]
-  pull_request:
-    branches: [master, staging]
 
 jobs:
   doctests:
