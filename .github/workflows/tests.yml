@@ -1,4 +1,9 @@
 name: Run Tests
+env:
+  CMAKE_OPTION_1: -DCOUNTLY_BUILD_TESTS=1
+  CMAKE_OPTION_2: -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_CUSTOM_SHA256=1
+  CMAKE_OPTION_3: -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_CUSTOM_SHA256=1 -DCOUNTLY_USE_SQLITE=1
+  CMAKE_OPTION_4: -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=1
 
 on:
   push:
@@ -17,6 +22,7 @@ jobs:
           - ubuntu-20.04
           - macos-11.0
           - windows-2019
+        cmake_option: [env.CMAKE_OPTION_1, env.CMAKE_OPTION_2, env.CMAKE_OPTION_3, env.CMAKE_OPTION_4]
 
         include:
           - os: windows-2019
@@ -55,8 +61,15 @@ jobs:
         if: matrix.os == 'windows-2019'
         uses: microsoft/setup-msbuild@v1
 
+      - name: Build SQLite
+        run: |
+          cd vendor/sqlite
+          cmake -D BUILD_SHARED_LIBS=ON -B build .
+          cd build
+          make
+
       - name: Build and run tests
         run: |
-          cmake -DCOUNTLY_BUILD_TESTS=1 -B build . ${{ matrix.cmake-generator }}
+          cmake $({ matrix.cmake_option }) -B build . ${{ matrix.cmake-generator }}
           cd build
           ${{ matrix.make }}
