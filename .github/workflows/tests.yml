@@ -70,6 +70,7 @@ jobs:
 
       - name: Build and run tests
         run: |
+          cd ../../..
           cmake $({ matrix.cmake_option }) -B build . ${{ matrix.cmake-generator }}
           cd build
           ${{ matrix.make }}
