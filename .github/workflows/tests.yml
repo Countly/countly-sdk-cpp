@@ -30,8 +30,6 @@ jobs:
             cmake-install: "choco install -y cmake"
             dependencies: |
               choco install -y openssl
-              choco install -y visualstudio2017-workload-vctools
-              choco upgrade -y visualstudio2017-workload-vctools
             make: msbuild  countly-tests.vcxproj -t:rebuild -verbosity:diag -property:Configuration=Release && .\Release\countly-tests.exe
           - os: macos-11.0
             cmake-install: "brew install cmake"
