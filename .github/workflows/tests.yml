@@ -22,7 +22,7 @@ jobs:
           - ubuntu-20.04
           - macos-11.0
           - windows-2019
-        cmake_option: [$env.CMAKE_OPTION_1, $env.CMAKE_OPTION_2, $env.CMAKE_OPTION_3, $env.CMAKE_OPTION_4]
+        cmake_option: [-DCOUNTLY_BUILD_TESTS=1,-DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_CUSTOM_SHA256=1, -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_CUSTOM_SHA256=1 -DCOUNTLY_USE_SQLITE=1, -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=1]
 
         include:
           - os: windows-2019
