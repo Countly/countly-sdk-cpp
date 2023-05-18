@@ -4,12 +4,6 @@ on:
     branches: [master, staging]
   pull_request:
     branches: [master, staging]
-env:
-  CMAKE_OPTION_1: -DCOUNTLY_BUILD_TESTS=1
-  CMAKE_OPTION_2: -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_CUSTOM_SHA256=1
-  CMAKE_OPTION_3: -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_CUSTOM_SHA256=1 -DCOUNTLY_USE_SQLITE=1
-  CMAKE_OPTION_4: -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=1
-
 
 jobs:
   doctests:
@@ -22,11 +16,17 @@ jobs:
           - ubuntu-20.04
           - macos-11.0
           - windows-2019
-        cmake_option: [-DCOUNTLY_BUILD_TESTS=1,-DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_CUSTOM_SHA256=1, -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_CUSTOM_SHA256=1 -DCOUNTLY_USE_SQLITE=1, -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=1]
+        cmake_option: [
+          -DCOUNTLY_BUILD_TESTS=1,
+          -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_CUSTOM_SHA256=1,
+          -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_CUSTOM_SHA256=1 -DCOUNTLY_USE_SQLITE=1,
+          -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=1
+          ]
 
         include:
           - os: windows-2019
             cmake-generator: -G "Visual Studio 16 2019" -A x64
+            cmake-sqlite: -G "Unix Makefiles"
             cmake-install: "choco install -y cmake"
             dependencies: |
               choco install -y openssl
@@ -64,7 +64,7 @@ jobs:
       - name: Build SQLite
         run: |
           cd vendor/sqlite
-          cmake -D BUILD_SHARED_LIBS=ON -B build .
+          cmake -D BUILD_SHARED_LIBS=ON -B build . ${{ matrix.cmake-sqlite }}
           cd build
           make
 
