@@ -780,11 +780,7 @@ void Countly::sendEventsToRQ(const nlohmann::json &events) {
 
 bool Countly::isEQEmpty() {
   log(LogLevel::DEBUG, "[Countly][isEQEmpty] Checking if the event queue is empty.");
-#ifdef COUNTLY_USE_SQLITE
   return checkEQSize() > 0 ? false : true;
-#else
-  return event_queue.empty();
-#endif
 }
 
 bool Countly::endSession() {
