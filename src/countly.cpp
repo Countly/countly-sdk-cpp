@@ -827,7 +827,11 @@ int Countly::checkEQSize() {
 #ifndef COUNTLY_USE_SQLITE
 int Countly::checkMemoryEQSize() {
   log(LogLevel::DEBUG, "[Countly][checkMemoryEQSize] Checking event queue size in memory");
-  return event_queue.size();
+	int result = 0;
+	mutex->lock();
+	result = event_queue.size();
+	mutex->unlock();
+  return result;
 }
 #endif
 
