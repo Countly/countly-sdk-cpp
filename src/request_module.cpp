@@ -212,7 +212,7 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
     size_t scheme_offset = impl->use_https ? (sizeof("https://") - 1) : (sizeof("http://") - 1);
     size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, impl->_configuration->serverUrl.c_str() + scheme_offset, -1, nullptr, 0);
     wchar_t *wide_hostname = new wchar_t[buffer_size];
-    MultiByteToWideChar(CP_ACP, 0, impl->_configuration->serverUrl.c_str() + scheme_offset, -1, wide_hostname, buffer_size);
+    MultiByteToWideChar(CP_ACP, 0, impl->_configuration->serverUrl.c_str() + scheme_offset, -1, wide_hostname, static_cast<int>(buffer_size));
 
     hConnect = WinHttpConnect(hSession, wide_hostname, impl->_configuration->port, 0);
 
@@ -227,7 +227,7 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
 
     size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, path.c_str(), -1, nullptr, 0);
     wchar_t *wide_path = new wchar_t[buffer_size];
-    MultiByteToWideChar(CP_ACP, 0, path.c_str(), -1, wide_path, buffer_size);
+    MultiByteToWideChar(CP_ACP, 0, path.c_str(), -1, wide_path, static_cast<int>(buffer_size));
 
     hRequest = WinHttpOpenRequest(hConnect, use_post ? L"POST" : L"GET", wide_path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, impl->use_https ? WINHTTP_FLAG_SECURE : 0);
     delete[] wide_path;
@@ -240,7 +240,7 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
       ok = WinHttpReceiveResponse(hRequest, NULL);
       if (ok) {
         DWORD dwStatusCode = 0;
-        DWORD dwSize = sizeof(dwStatusCode);
+        DWORD dwSize = static_cast<DWORD>(sizeof(dwStatusCode));
         WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &dwStatusCode, &dwSize, WINHTTP_NO_HEADER_INDEX);
         response.success = (dwStatusCode >= 200 && dwStatusCode < 300);
         if (response.success) {

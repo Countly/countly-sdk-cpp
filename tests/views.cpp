@@ -18,7 +18,7 @@ using namespace std::literals::chrono_literals;
  * @param isOpenView: set 'true' if it is a open view.
  * @param isFirstView: set 'true' if it is very first view.
  */
-void validateViewSegmentation(nlohmann::json e, std::string name, std::string &viewId, double duration, bool isOpenView, bool isFirstView = false) {
+void validateViewSegmentation(nlohmann::json e, const std::string name, std::string &viewId, double duration, bool isOpenView, bool isFirstView = false) {
   CHECK(e["key"].get<std::string>() == "[CLY]_view");
   CHECK(e["count"].get<int>() == 1);
   CHECK(e["dur"].get<double>() >= duration);

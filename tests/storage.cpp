@@ -21,7 +21,7 @@ void validateSizes(std::shared_ptr<StorageModuleBase> storageModule, long long s
 /**
  * Validates request.
  */
-void validateDataEntry(std::shared_ptr<DataEntry> testedEntry, long long id, std::string data) {
+void validateDataEntry(std::shared_ptr<DataEntry> testedEntry, long long id, const std::string data) {
   CHECK(testedEntry->getId() == id);
   CHECK(testedEntry->getData() == data);
 }

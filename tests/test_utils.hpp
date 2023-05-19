@@ -123,7 +123,7 @@ static HTTPResponse fakeSendHTTP(bool use_post, const std::string &url, const st
 
   if (http_call.url == "/i") {
     response.success = true;
-  } else if (http_call.url == "/o/sdk" && http_call.data["method"] == "fetch_remote_config") {
+  } else if ((http_call.url == "/o/sdk") && (http_call.data["method"] == "fetch_remote_config")) {
     nlohmann::json remote_config = {{"color", "#FF9900"}, {"playerQueueTimeout", 32}, {"isChristmas", true}};
 
     response.success = true;
