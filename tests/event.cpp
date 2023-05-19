@@ -4,7 +4,7 @@
 #include <string>
 using namespace cly;
 
-void valideEventParams(nlohmann::json eventJson, std::string key, int count) {
+void valideEventParams(nlohmann::json eventJson, const std::string key, int count) {
   CHECK(eventJson["key"].get<std::string>() == key);
   CHECK(eventJson["count"].get<int>() == count);
   CHECK(std::to_string(eventJson["timestamp"].get<long long>()).size() == 13);

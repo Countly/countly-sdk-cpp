@@ -72,7 +72,7 @@ struct CountlyConfiguration {
 
   nlohmann::json metrics;
 
-  CountlyConfiguration(std::string appKey, std::string serverUrl) {
+  CountlyConfiguration(const std::string appKey, std::string serverUrl) {
     this->appKey = appKey;
     this->serverUrl = serverUrl;
   }
