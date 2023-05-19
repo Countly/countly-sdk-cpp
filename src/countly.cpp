@@ -390,6 +390,11 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   enable_automatic_session = start_thread;
   start_thread = true;
 
+  if (port < 0 || port > 65535) {
+    log(LogLevel::WARNING, "[Countly][start] Port number is out of valid boundaries. Setting it to 0.");
+    port = 0;
+  }
+
   configuration->port = port;
   configuration->appKey = app_key;
   configuration->serverUrl = host;
