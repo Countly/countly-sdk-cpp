@@ -1,6 +1,7 @@
 ## xx.xx.x
 - Request queue processing now is limited to 100 requests at a time
 - Added 'setEventsToRQThreshold' method that sets the number of events after which all events will be sent to the RQ. Default value is set to 100.
+- Mitigated an issue where not providing a virtual port number (or providing a negative value) at the 'start' was causing SDK to assign a wrong port number.
 
 ## 22.09.1
 - Mitigated a problem that caused invalid pointer error if the database path was set wrong 
