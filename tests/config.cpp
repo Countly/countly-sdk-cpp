@@ -76,7 +76,7 @@ TEST_CASE("Validate setting configuration values") {
     ct.setMaxRequestQueueSize(10);
     ct.SetPath(TEST_DATABASE_NAME);
     ct.setMaxRQProcessingBatchSize(10);
-    ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, false);
+    ct.start("YOUR_APP_KEY", "https://try.count.ly", -1, false);
 
     // Get configuration values using Countly getters
     const CountlyConfiguration config = ct.getConfiguration();

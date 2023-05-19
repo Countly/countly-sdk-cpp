@@ -90,7 +90,7 @@ public:
 
   void setDeviceID(const std::string &value, bool same_user = false);
 
-  void start(const std::string &app_key, const std::string &host, int port = -1, bool start_thread = false);
+  void start(const std::string &app_key, const std::string &host, int port = 0, bool start_thread = false);
 
   void startOnCloud(const std::string &app_key);
 
