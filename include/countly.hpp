@@ -147,11 +147,6 @@ public:
   void sendEventsToRQ(const nlohmann::json &events);
 
   /*
-   * Checks if the event queue is empty.
-   */
-  bool isEQEmpty();
-
-  /*
    * Checks if the event queue size is over the threshold and send the events to the RQ if the threshold is reached.
    */
   void checkAndSendEventToRQ();

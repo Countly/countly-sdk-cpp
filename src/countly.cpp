@@ -718,7 +718,7 @@ bool Countly::updateSession() {
     nlohmann::json events = nlohmann::json::array();
     std::string event_ids;
     mutex->unlock();
-    bool no_events = isEQEmpty();
+    bool no_events = checkEQSize() > 0 ? false : true;
     mutex->lock();
 
     if (!no_events) {
@@ -776,11 +776,6 @@ void Countly::sendEventsToRQ(const nlohmann::json &events) {
   log(LogLevel::DEBUG, "[Countly][sendEventsToRQ] Sending events to RQ.");
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"events", events.dump()}};
   requestModule->addRequestToQueue(data);
-}
-
-bool Countly::isEQEmpty() {
-  log(LogLevel::DEBUG, "[Countly][isEQEmpty] Checking if the event queue is empty.");
-  return checkEQSize() > 0 ? false : true;
 }
 
 bool Countly::endSession() {
