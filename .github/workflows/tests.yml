@@ -25,12 +25,9 @@ jobs:
 
         include:
           - os: windows-2019
-            cmake-generator: -G "Visual Studio 16 2019" -A x64
-            cmake-sqlite: -G "Unix Makefiles"
+            cmake-sqlite: -G "MinGW Makefiles"
             cmake-install: "choco install -y cmake"
-            dependencies: |
-              choco install -y openssl
-            make: msbuild  countly-tests.vcxproj -t:rebuild -verbosity:diag -property:Configuration=Release && .\Release\countly-tests.exe
+            dependencies: "choco install -y openssl"
           - os: macos-11.0
             cmake-install: "brew install cmake"
             dependencies: "brew install openssl"
@@ -70,4 +67,5 @@ jobs:
         run: |
           cmake ${{ matrix.cmake_option }} -B build . ${{ matrix.cmake-sqlite }}
           cd build
-          make ./countly-tests && ./countly-tests
+          make ./countly-tests
+          ./countly-tests
