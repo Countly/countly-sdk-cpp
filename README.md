@@ -2,7 +2,7 @@
 
 # Countly C++ SDK
 
-This repository contains the Countly C++ SDK, which can be integrated into C++ applications. The Countly C++ SDK is intended to be used with [Countly Community Edition](https://github.com/Countly/countly-server) or [Countly Enterprise Edition](https://count.ly/product).
+This repository contains the Countly C++ SDK, which can be integrated into C++ applications. The Countly C++ SDK is intended to be used with [Countly Lite](https://countly.com/lite), [Countly Flex](https://countly.com/flex) or [Countly Enterprise](https://countly.com/enterprise).
 
 ## What is Countly?
 [Countly](https://count.ly) is a product analytics solution and innovation enabler that helps teams track product performance and customer journey and behavior across [mobile](https://count.ly/mobile-analytics), [web](http://count.ly/web-analytics),
@@ -11,7 +11,7 @@ and [desktop](https://count.ly/desktop-analytics) applications. [Ensuring privac
 Track, measure, and take action - all without leaving Countly.
 
 * **Questions or feature requests?** [Join the Countly Community on Discord](https://discord.gg/countly)
-* **Looking for the Countly Server?** [Countly Community Edition repository](https://github.com/Countly/countly-server)
+* **Looking for the Countly Server?** [Countly Server repository](https://github.com/Countly/countly-server)
 * **Looking for other Countly SDKs?** [An overview of all Countly SDKs for mobile, web and desktop](https://support.count.ly/hc/en-us/articles/360037236571-Downloading-and-Installing-SDKs#officially-supported-sdks)
 
 ## Integrating Countly SDK in your projects
@@ -28,52 +28,6 @@ This SDK supports the following features:
 * [Analytics](https://support.count.ly/hc/en-us/articles/4431589003545-Analytics)
 * [User Profiles](https://support.count.ly/hc/en-us/articles/4403281285913-User-Profiles)
 * [A/B Testing](https://support.count.ly/hc/en-us/articles/4416496362393-A-B-Testing-)
-
-## Usage
-
-Typical use is:
-
-```C++
-#include "countly.hpp"
-using namespace cly;
-
-int main(int argc, char *argv[]) {
-	Countly& ct = Countly::getInstance();
-	// OS, OS_version, device, resolution, carrier, app_version);
-	ct.SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Carrier", "1.0");
-	ct.setCustomUserDetails({{"Account Type", "Basic"}, {"Employer", "Company4"}});
-	// Server and port
-	ct.Start("abf2034f975393fa994d1cf8adf9a93e4a29ac29", "https://myserver.com", 403);
-	ct.SetMinUpdatePeriod(2000);
-
-	ct.RecordEvent("MyCustomEvent", 123);
-	ct.RecordEvent("MyCustomEvent", 17);
-	ct.RecordEvent("MyCustomEvent", 34);
-	ct.RecordEvent("AnotherCustomEvent", 644, 13.3);
-
-	// Your program is supposed to do something..
-
-	return 0;
-}
-```
-
-## Testing
-
-Build with the option `COUNTLY_BUILD_TESTS` on to build an executable that will run the tests:
-
-``` shell
-cmake -D COUNTLY_BUILD_TESTS=1 -B build . # or do it interactively with ccmake
-cd build
-make
-./countly-tests
-```
-
-To run unit tests associated with 'SQLITE' and 'Custom SHA-256' build executable with the options 
-`COUNTLY_USE_SQLITE` and `COUNTLY_BUILD_TESTS`:
-
-``` shell
-cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=1 -DCOUNTLY_USE_CUSTOM_SHA256=1 -B build
-```
 
 ## Security
 Security is very important to us. If you discover any issue regarding security, please disclose the information responsibly by sending an email to security@count.ly and **not by creating a GitHub issue**.
