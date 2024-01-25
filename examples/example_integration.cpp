@@ -47,7 +47,15 @@ int main() {
   ct.SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Carrier", "1.0");
 
   // start the SDK (initialize the SDK)
-  ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, true);
+  string _appKey = "YOUR_APP_KEY";
+  string _serverUrl = "https://your.server.ly";
+
+  if(_appKey.compare("YOUR_APP_KEY") == 0 || _serverUrl.compare("https://your.server.ly") == 0){
+    cerr << "Please do not use default set of app key and server url" << endl;
+    return 0;
+  }
+
+  ct.start(_appKey, _serverUrl, 443, true);
 
   ct.setAutomaticSessionUpdateInterval(5);// The value is set so low just for internal validation.
   ct.setMaxRQProcessingBatchSize(2); // in most cases not needed to be set. The value is set so low just for internal validation
