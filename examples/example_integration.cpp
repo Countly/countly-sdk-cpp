@@ -50,7 +50,7 @@ int main() {
   string _appKey = "YOUR_APP_KEY";
   string _serverUrl = "https://your.server.ly";
 
-  if(_appKey.compare("YOUR_APP_KEY") == 0 || _serverUrl.compare("https://your.server.ly") == 0){
+  if(_appKey.compare("YOUR_APP_KEY") == 0 || _serverUrl.compare("https://your.server.ly") == 0) {
     cerr << "Please do not use default set of app key and server url" << endl;
   }
 
