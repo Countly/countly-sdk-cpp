@@ -51,7 +51,7 @@ int main() {
   string _serverUrl = "https://your.server.ly";
 
   if(_appKey.compare("YOUR_APP_KEY") == 0 || _serverUrl.compare("https://your.server.ly") == 0) {
-    cerr << "Please do not use default set of app key and server url" << endl;
+    printLog(LogLevel::WARNING, "[ExampleIntegration] Please do not use default set of app key and server url");
   }
 
   ct.start(_appKey, _serverUrl, 443, true);
@@ -164,7 +164,7 @@ int main() {
       flag = false;
       break;
     default:
-      cout << "Option not found!" << endl;
+      printLog(LogLevel::DEBUG, "[ExampleIntegration] Please do not use default set of app key and server url");
       break;
     }
   }
