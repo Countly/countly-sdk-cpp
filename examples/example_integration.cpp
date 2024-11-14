@@ -2,8 +2,8 @@
 #include <chrono>
 #include <iostream>
 #include <random>
+#include <string>
 #include <thread>
-
 using namespace std;
 using namespace cly;
 
@@ -30,6 +30,27 @@ void printLog(LogLevel level, const string &msg) {
   cout << lvl << msg << endl;
 }
 
+// // Custom HTTP client
+// HTTPResponse customClient(bool use_post, const std::string &path, const std::string &data) {
+//   HTTPResponse response;
+//   response.success = false;
+//   cout << "Will send the request!!" << endl;
+
+//   // asynchronous operation
+//   std::thread requestThread([&response]() {
+//     std::this_thread::sleep_for(std::chrono::seconds(2)); // network delay
+//     // you should add extra logic to check if request is successful normally
+//     response.success = true;
+//     response.data = R"({"some":"data"})"; // response data
+//   });
+
+//   // Wait for the request to complete
+//   requestThread.join();
+//   cout << "Got RESPONSE:[" + response.data.dump() + "]" << endl;
+
+//   return response;
+// }
+
 int main() {
   cout << "Sample App" << endl;
   Countly &ct = Countly::getInstance();
@@ -38,13 +59,17 @@ int main() {
   // Please refer to the documentation for more information:
   // https://support.count.ly/hc/en-us/articles/4416163384857-C-
 
-  ct.alwaysUsePost(true);
+  // Custom HTTP client
+  // HTTPClientFunction clientPtr = customClient;
+  // ct.setHTTPClient(clientPtr);
+  // ct.alwaysUsePost(true);
+
   ct.setLogger(printLog);
   ct.SetPath("databaseFileName.db"); // this will be only built into account if the correct configurations are set
   ct.setDeviceID("test-device-id");
   // ct.setSalt("test-salt");
   // OS, OS_version, device, resolution, carrier, app_version);
-  ct.SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Carrier", "1.0");
+  // ct.SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Carrier", "1.0");
 
   // start the SDK (initialize the SDK)
   string _appKey = "YOUR_APP_KEY";
