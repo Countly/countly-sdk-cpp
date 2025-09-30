@@ -13,7 +13,7 @@
 #include <string>
 
 #define COUNTLY_SDK_NAME "cpp-native-unknown"
-#define COUNTLY_SDK_VERSION "23.2.0"
+#define COUNTLY_SDK_VERSION "23.2.1"
 #define COUNTLY_POST_THRESHOLD 2000
 #define COUNTLY_KEEPALIVE_INTERVAL 3000
 #define COUNTLY_MAX_EVENTS_DEFAULT 200
