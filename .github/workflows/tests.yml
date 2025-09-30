@@ -30,11 +30,7 @@ jobs:
           - os: macos-15
             cmake-install: "brew install cmake"
             dependencies: "brew install openssl"
-            make: |
-              mkdir -p build && cd build
-              cmake -DCOUNTLY_BUILD_TESTS=1
-              cmake --build . --config Release
-              ctest --output-on-failure
+            make: make ./countly-tests && ./countly-tests
           - os: ubuntu-24.04
             cmake-install: |
               sudo apt-get update && sudo apt-get install -y \
@@ -43,11 +39,7 @@ jobs:
                 make \
                 libcurl4-openssl-dev \
                 libssl-dev
-            make: |
-              mkdir -p build && cd build
-              cmake -DCOUNTLY_BUILD_TESTS=1
-              cmake --build . --config Release
-              ctest --output-on-failure
+            make: make ./countly-tests && ./countly-tests
 
     steps:
       - name: Checkout code
