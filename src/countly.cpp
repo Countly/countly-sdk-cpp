@@ -346,17 +346,19 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
 
   // send all event to server and end current session of old user
   flushEvents();
-  if (began_session) {
+  if(!configuration->manualSessionControl){
     endSession();
-    mutex->lock();
-    session_params["device_id"] = value;
-    mutex->unlock();
-    beginSession();
-  } else {
-    mutex->lock();
-    session_params["device_id"] = value;
-    mutex->unlock();
   }
+
+  mutex->lock();
+  session_params["device_id"] = value;
+  mutex->unlock();
+
+  // start a new session for new user
+  if(!configuration->manualSessionControl){
+    beginSession();
+  }
+  
 }
 #pragma endregion Device Id
 
@@ -401,7 +403,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   log(LogLevel::INFO, "[Countly][start] '_WIN32' is not defined");
 #endif
 
-  enable_automatic_session = start_thread;
+  enable_automatic_session = start_thread && !configuration->manualSessionControl;
   start_thread = true;
 
   if (port < 0 || port > 65535) {
@@ -436,9 +438,11 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 
   if (!running) {
 
-    mutex->unlock();
-    beginSession();
-    mutex->lock();
+    if(!configuration->manualSessionControl){
+      mutex->unlock();
+      beginSession();
+      mutex->lock();
+    }
 
     if (start_thread) {
       stop_thread = false;
@@ -465,7 +469,7 @@ void Countly::startOnCloud(const std::string &app_key) {
 
 void Countly::stop() {
   _deleteThread();
-  if (began_session) {
+  if (!configuration->manualSessionControl) {
     endSession();
   }
 }
@@ -607,8 +611,16 @@ bool Countly::attemptSessionUpdateEQ() {
     return false;
   }
 #endif
-
-  return !updateSession();
+  bool result;
+  if(!configuration->manualSessionControl){
+    result = !updateSession();
+  } else {
+    log(LogLevel::WARNING, "[Countly][attemptSessionUpdateEQ] SDK is in manual session control mode. Please start a session first.");
+    result = false;
+  }
+  
+  packEvents();
+  return result;
 }
 
 void Countly::clearEQInternal() {
@@ -670,6 +682,7 @@ bool Countly::beginSession() {
   log(LogLevel::INFO, "[Countly][beginSession]");
   if (began_session) {
     mutex->unlock();
+    log(LogLevel::DEBUG, "[Countly][beginSession] Session is already active.");
     return true;
   }
 
@@ -725,6 +738,10 @@ bool Countly::updateSession() {
     mutex->lock();
     if (!began_session) {
       mutex->unlock();
+      if(configuration->manualSessionControl){
+        log(LogLevel::WARNING, "[Countly][updateSession] SDK is in manual session control mode and there is no active session. Please start a session first.");
+        return false;
+      }
       if (!beginSession()) {
         // if beginSession fails, we should not try to update session
         return false;
@@ -732,8 +749,31 @@ bool Countly::updateSession() {
       mutex->lock();
       began_session = true;
     }
+   
+    mutex->unlock();
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
+    mutex->lock();
 
-    // events array
+    // report session duration if it is greater than the configured session duration value
+    if (duration.count() >= configuration->sessionDuration) {
+      log(LogLevel::DEBUG, "[Countly][updateSession] sending session update.");
+      std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"session_duration", std::to_string(duration.count())}};
+      requestModule->addRequestToQueue(data);
+
+      last_sent_session_request += duration;
+    }
+  } catch (const std::system_error &e) {
+    std::ostringstream log_message;
+    log_message << "update session, error: " << e.what();
+    log(LogLevel::FATAL, log_message.str());
+  }
+  mutex->unlock();
+  return true;
+}
+
+void Countly::packEvents() {
+  try {
+   // events array
     nlohmann::json events = nlohmann::json::array();
     std::string event_ids;
     mutex->unlock();
@@ -754,20 +794,7 @@ bool Countly::updateSession() {
     } else {
       log(LogLevel::DEBUG, "[Countly][updateSession] EQ empty.");
     }
-    mutex->unlock();
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
-    mutex->lock();
-
-    // report session duration if it is greater than the configured session duration value
-    if (duration.count() >= configuration->sessionDuration) {
-      log(LogLevel::DEBUG, "[Countly][updateSession] sending session update.");
-      std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"session_duration", std::to_string(duration.count())}};
-      requestModule->addRequestToQueue(data);
-
-      last_sent_session_request += duration;
-    }
-
-    // report events if there are any to request queue
+ // report events if there are any to request queue
     if (!no_events) {
       sendEventsToRQ(events);
     }
@@ -788,8 +815,8 @@ bool Countly::updateSession() {
     log(LogLevel::FATAL, log_message.str());
   }
   mutex->unlock();
-  return true;
 }
+
 
 void Countly::sendEventsToRQ(const nlohmann::json &events) {
   log(LogLevel::DEBUG, "[Countly][sendEventsToRQ] Sending events to RQ.");
@@ -799,6 +826,10 @@ void Countly::sendEventsToRQ(const nlohmann::json &events) {
 
 bool Countly::endSession() {
   log(LogLevel::INFO, "[Countly][endSession]");
+  if(!began_session) {
+    log(LogLevel::DEBUG, "[Countly][endSession] There is no active session to end.");
+    return true;
+  }
   const std::chrono::system_clock::time_point now = Countly::getTimestamp();
   const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
   const auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration(now));
@@ -1127,6 +1158,7 @@ void Countly::updateLoop() {
     if (enable_automatic_session) {
       updateSession();
     }
+    packEvents();
     requestModule->processQueue(mutex);
   }
   mutex->lock();
