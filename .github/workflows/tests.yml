@@ -27,14 +27,23 @@ jobs:
               choco install -y visualstudio2017-workload-vctools
               choco upgrade -y visualstudio2017-workload-vctools
             make: msbuild  countly-tests.vcxproj -t:rebuild -verbosity:diag -property:Configuration=Release && .\Release\countly-tests.exe
-          - os: macos-11.0
+          - os: macos-15
             cmake-install: "brew install cmake"
             dependencies: "brew install openssl"
             make: make ./countly-tests && ./countly-tests
-          - os: ubuntu-20.04
-            cmake-install: "sudo apt-get update && sudo apt-get install -y cmake"
-            dependencies: "sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev"
-            make: make ./countly-tests && ./countly-tests
+          - os: ubuntu-24.04
+            cmake-install: |
+              sudo apt-get update && sudo apt-get install -y \
+                cmake \
+                g++ \
+                make \
+                libcurl4-openssl-dev \
+                libssl-dev
+            build-and-test: |
+              mkdir -p build && cd build
+              cmake ..
+              make countly-tests
+              ./countly-tests
 
     steps:
       - name: Checkout code
