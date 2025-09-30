@@ -6,6 +6,7 @@
 #include <string>
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#define DOCTEST_CONFIG_NO_BREAK_INTO_DEBUGGER
 
 #include "doctest.h"
 
