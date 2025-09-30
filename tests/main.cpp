@@ -6,7 +6,9 @@
 #include <string>
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#ifdef __APPLE__
 #define DOCTEST_CONFIG_NO_BREAK_INTO_DEBUGGER
+#endif
 
 #include "doctest.h"
 
