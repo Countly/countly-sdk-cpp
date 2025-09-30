@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-24.04
+          - ubuntu-22.04
           - macos-15
           - windows-2022
 
@@ -28,7 +28,7 @@ jobs:
             cmake-install: "brew install cmake"
             dependencies: "brew install openssl"
             make: make ./countly-tests && ./countly-tests
-          - os: ubuntu-24.04
+          - os: ubuntu-22.04
             cmake-install: |
               sudo apt-get update && sudo apt-get install -y \
                 cmake \
