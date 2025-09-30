@@ -16,16 +16,16 @@ jobs:
         os:
           - ubuntu-24.04
           - macos-15
-          - windows-2019
+          - windows-2022
 
         include:
-          - os: windows-2019
-            cmake-generator: -G "Visual Studio 16 2019" -A x64
+          - os: windows-2022
+            cmake-generator: -G "Visual Studio 17 2022" -A x64
             cmake-install: "choco install -y cmake"
             dependencies: |
               choco install -y openssl
-              choco install -y visualstudio2017-workload-vctools
-              choco upgrade -y visualstudio2017-workload-vctools
+              choco install -y visualstudio2022-workload-vctools
+              choco upgrade -y visualstudio2022-workload-vctools
             make: msbuild  countly-tests.vcxproj -t:rebuild -verbosity:diag -property:Configuration=Release && .\Release\countly-tests.exe
           - os: macos-15
             cmake-install: "brew install cmake"
