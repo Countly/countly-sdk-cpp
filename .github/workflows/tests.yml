@@ -28,10 +28,7 @@ jobs:
               choco upgrade -y visualstudio2022-workload-vctools
             make: msbuild  countly-tests.vcxproj -t:rebuild -verbosity:diag -property:Configuration=Release && .\Release\countly-tests.exe
           - os: macos-15
-            cmake-install: |
-              curl -LO https://github.com/Kitware/CMake/releases/download/v3.31.9/cmake-3.31.9-macos-universal.tar.gz
-              tar -xzf cmake-3.31.9-macos-universal.tar.gz
-              sudo cp -R cmake-3.31.9-macos-universal/CMake.app/Contents/bin/* /usr/local/bin/
+            cmake-install: "brew install cmake"
             dependencies: "brew install openssl"
             make: make ./countly-tests && ./countly-tests
           - os: ubuntu-24.04
@@ -72,3 +69,5 @@ jobs:
           cmake -DCOUNTLY_BUILD_TESTS=1 -B build . ${{ matrix.cmake-generator }}
           cd build
           ${{ matrix.make }}
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: 3.0
