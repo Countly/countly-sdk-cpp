@@ -70,4 +70,4 @@ jobs:
           cd build
           ${{ matrix.make }}
         env:
-          CMAKE_POLICY_VERSION_MINIMUM: 3.0
+          CMAKE_POLICY_VERSION_MINIMUM: 3.31
