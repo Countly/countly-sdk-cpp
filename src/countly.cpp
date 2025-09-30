@@ -128,6 +128,20 @@ void Countly::setSha256(SHA256Function fun) {
   mutex->unlock();
 }
 
+/**
+ * Enable manual session handling.
+ */
+void Countly::enableManualSessionControl() {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][enableManualSessionControl] You can not enable manual session control after SDK initialization.");
+    return;
+  }
+
+  mutex->lock();
+  configuration->manualSessionControl = true;
+  mutex->unlock();
+}
+
 void Countly::setMetrics(const std::string &os, const std::string &os_version, const std::string &device, const std::string &resolution, const std::string &carrier, const std::string &app_version) {
   if (is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly][setMetrics] You can not set metrics after SDK initialization.");

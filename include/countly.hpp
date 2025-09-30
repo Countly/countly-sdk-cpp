@@ -56,6 +56,8 @@ public:
 
   void setSha256(cly::SHA256Function fun);
 
+  void enableManualSessionControl();
+
   void setHTTPClient(HTTPClientFunction fun);
 
   void setMetrics(const std::string &os, const std::string &os_version, const std::string &device, const std::string &resolution, const std::string &carrier, const std::string &app_version);
