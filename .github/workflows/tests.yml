@@ -25,19 +25,12 @@ jobs:
             dependencies: "" #Already installed on hosted runner
             make: msbuild countly-tests.vcxproj -t:rebuild -verbosity:diag -property:Configuration=Release && .\Release\countly-tests.exe
           - os: macos-15
-            cmake-install: "brew install cmake"
-            dependencies: "brew install openssl"
+            cmake-install: "" #Already installed on hosted runner
+            dependencies: "" #Already installed on hosted runner
             make: make ./countly-tests && ./countly-tests
           - os: ubuntu-22.04
-            cmake-install: |
-              sudo apt-get update && sudo apt-get install -y \
-                cmake \
-                g++ \
-                make
-            dependencies: |
-              sudo apt-get update && sudo apt-get install -y \
-                libcurl4-openssl-dev \
-                libssl-dev
+            cmake-install: "" #Already installed on hosted runner
+            dependencies: "" #Already installed on hosted runner
             make: make ./countly-tests && ./countly-tests
 
     steps:
