@@ -1,5 +1,6 @@
 ## XX.XX.XX
 - Added manual session control, which can be enabled via "Countly::enableManualSessionControl".
+- Added "checkRQSize" function to return the current number of requests in the queue.
 
 ## 23.2.0
 - Request queue processing now is limited to 100 requests at a time

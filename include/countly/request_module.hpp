@@ -35,6 +35,8 @@ public:
    */
   void clearRequestQueue();
 
+  long long RQSize();
+
 private:
   class RequestModuleImpl;
   std::unique_ptr<RequestModuleImpl> impl;

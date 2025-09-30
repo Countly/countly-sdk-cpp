@@ -538,7 +538,7 @@ void Countly::checkAndSendEventToRQ() {
 
 void Countly::setMaxEvents(size_t value) {
   log(LogLevel::WARNING, "[Countly][setMaxEvents/SetMaxEventsPerMessage] These calls are deprecated. Use 'setEventsToRQThreshold' instead.");
-  setEventsToRQThreshold(value);
+  setEventsToRQThreshold(static_cast<int>(value));
 }
 
 void Countly::setEventsToRQThreshold(int value) {
@@ -869,12 +869,24 @@ int Countly::checkEQSize() {
   return event_count;
 }
 
+int Countly::checkRQSize() {
+  log(LogLevel::DEBUG, "[Countly][checkRQSize]");
+  int request_count = -1;
+  if (!is_sdk_initialized) {
+    log(LogLevel::DEBUG, "[Countly][checkRQSize] SDK is not initialized.");
+    return request_count;
+  }
+
+  request_count = static_cast<int>(requestModule->RQSize());
+  return request_count;
+}
+
 #ifndef COUNTLY_USE_SQLITE
 int Countly::checkMemoryEQSize() {
   log(LogLevel::DEBUG, "[Countly][checkMemoryEQSize] Checking event queue size in memory");
   int result = 0;
   mutex->lock();
-  result = event_queue.size();
+  result = static_cast<int>(event_queue.size());
   mutex->unlock();
   return result;
 }

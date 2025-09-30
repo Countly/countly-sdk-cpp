@@ -341,4 +341,5 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
   return response;
 #endif
 }
+long long RequestModule::RQSize() { return impl->_storageModule->RQCount(); }
 } // namespace cly

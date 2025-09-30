@@ -14,26 +14,26 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-20.04
-          - macos-11.0
-          - windows-2019
+          - ubuntu-22.04
+          - macos-15
+          - windows-2022
 
         include:
-          - os: windows-2019
-            cmake-generator: -G "Visual Studio 16 2019" -A x64
-            cmake-install: "choco install -y cmake"
-            dependencies: |
-              choco install -y openssl
-              choco install -y visualstudio2017-workload-vctools
-              choco upgrade -y visualstudio2017-workload-vctools
-            make: msbuild  countly-tests.vcxproj -t:rebuild -verbosity:diag -property:Configuration=Release && .\Release\countly-tests.exe
-          - os: macos-11.0
-            cmake-install: "brew install cmake"
-            dependencies: "brew install openssl"
+          - os: windows-2022
+            cmake-generator: -G "Visual Studio 17 2022" -A x64
+            cmake-install: "" #Already installed on hosted runner
+            dependencies: "" #Already installed on hosted runner
+            make: msbuild countly-tests.vcxproj -t:rebuild -verbosity:diag -property:Configuration=Release && .\Release\countly-tests.exe
+          - os: macos-15
+            cmake-install: "" #Already installed on hosted runner
+            dependencies: "" #Already installed on hosted runner
             make: make ./countly-tests && ./countly-tests
-          - os: ubuntu-20.04
-            cmake-install: "sudo apt-get update && sudo apt-get install -y cmake"
-            dependencies: "sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev"
+          - os: ubuntu-22.04
+            cmake-install: "" #Already installed on hosted runner
+            dependencies: |
+              sudo apt-get update && sudo apt-get install -y \
+                libcurl4-openssl-dev \
+                libssl-dev
             make: make ./countly-tests && ./countly-tests
 
     steps:
@@ -52,7 +52,7 @@ jobs:
         run: ${{ matrix.dependencies }}
 
       - name: Set up MSVC
-        if: matrix.os == 'windows-2019'
+        if: matrix.os == 'windows-2022'
         uses: microsoft/setup-msbuild@v1
 
       - name: Build and run tests
@@ -60,3 +60,5 @@ jobs:
           cmake -DCOUNTLY_BUILD_TESTS=1 -B build . ${{ matrix.cmake-generator }}
           cd build
           ${{ matrix.make }}
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: 3.31
