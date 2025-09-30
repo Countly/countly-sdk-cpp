@@ -2,8 +2,8 @@
 #include <chrono>
 #include <iostream>
 #include <random>
-#include <string>
 #include <thread>
+
 using namespace std;
 using namespace cly;
 
@@ -30,24 +30,112 @@ void printLog(LogLevel level, const string &msg) {
   cout << lvl << msg << endl;
 }
 
-// // Custom HTTP client
+// // Callback function to write response data
+// static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp) {
+//     ((std::string*)userp)->append((char*)contents, size * nmemb);
+//     return size * nmemb;
+// }
+
+// // Custom HTTP client for macOS
 // HTTPResponse customClient(bool use_post, const std::string &path, const std::string &data) {
 //   HTTPResponse response;
 //   response.success = false;
-//   cout << "Will send the request!!" << endl;
+//   cout << "Making real HTTP request to: " << path << endl;
 
-//   // asynchronous operation
-//   std::thread requestThread([&response]() {
-//     std::this_thread::sleep_for(std::chrono::seconds(2)); // network delay
-//     // you should add extra logic to check if request is successful normally
-//     response.success = true;
-//     response.data = R"({"some":"data"})"; // response data
-//   });
+//   CURL *curl;
+//   CURLcode res;
+//   std::string readBuffer;
 
-//   // Wait for the request to complete
-//   requestThread.join();
-//   cout << "Got RESPONSE:[" + response.data.dump() + "]" << endl;
+//   curl = curl_easy_init();
+//   if(curl) {
+//     // Set URL
+//     curl_easy_setopt(curl, CURLOPT_URL, path.c_str());
+    
+//     // Set callback function to write data
+//     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+//     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+    
+//     // Set timeout
+//     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+    
+//     // Follow redirects
+//     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    
+//     // SSL verification (set to 0 for testing, 1 for production)
+//     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+//     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    
+//     // Set User-Agent
+//     curl_easy_setopt(curl, CURLOPT_USERAGENT, "Countly-SDK-CPP/1.0");
+    
+//     if (use_post) {
+//       // Set POST method
+//       curl_easy_setopt(curl, CURLOPT_POST, 1L);
+      
+//       if (!data.empty()) {
+//         // Set POST data
+//         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.c_str());
+//         curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, data.length());
+//       }
+      
+//       // Set content type for POST
+//       struct curl_slist *headers = NULL;
+//       headers = curl_slist_append(headers, "Content-Type: application/x-www-form-urlencoded");
+//       curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+//     } else {
+//       // For GET requests, append data as query parameters
+//       if (!data.empty()) {
+//         std::string fullUrl = path;
+//         fullUrl += (path.find('?') != std::string::npos) ? "&" : "?";
+//         fullUrl += data;
+//         curl_easy_setopt(curl, CURLOPT_URL, fullUrl.c_str());
+//       }
+//     }
+    
+//     // Perform the request
+//     res = curl_easy_perform(curl);
+    
+//     if(res != CURLE_OK) {
+//       cout << "curl_easy_perform() failed: " << curl_easy_strerror(res) << endl;
+//     } else {
+//       // Get response code
+//       long response_code;
+//       curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+      
+//       cout << "HTTP Response Code: " << response_code << endl;
+//       cout << "Raw response: " << readBuffer << endl;
+      
+//       // Check if HTTP request was successful (2xx status codes)
+//       if (response_code >= 200 && response_code < 300) {
+//         // Check if response contains { result: 'Success' } or {"result":"Success"}
+//         if (readBuffer.find("\"result\"") != std::string::npos && 
+//             (readBuffer.find("\"Success\"") != std::string::npos || 
+//              readBuffer.find("'Success'") != std::string::npos)) {
+//           response.success = true;
+//           cout << "Success response detected!" << endl;
+//         } else {
+//           cout << "Response does not indicate success" << endl;
+//         }
+        
+//         // Parse as JSON
+//         try {
+//           response.data = nlohmann::json::parse(readBuffer);
+//         } catch (const std::exception& e) {
+//           cout << "Failed to parse JSON response: " << e.what() << endl;
+//           response.data = nlohmann::json::object();
+//         }
+//       } else {
+//         cout << "HTTP request failed with code: " << response_code << endl;
+//       }
+//     }
+    
+//     // Cleanup
+//     curl_easy_cleanup(curl);
+//   } else {
+//     cout << "Failed to initialize curl" << endl;
+//   }
 
+//   cout << "Request completed. Success: " << (response.success ? "true" : "false") << endl;
 //   return response;
 // }
 
@@ -63,13 +151,12 @@ int main() {
   // HTTPClientFunction clientPtr = customClient;
   // ct.setHTTPClient(clientPtr);
   // ct.alwaysUsePost(true);
-
   ct.setLogger(printLog);
   ct.SetPath("databaseFileName.db"); // this will be only built into account if the correct configurations are set
   ct.setDeviceID("test-device-id");
   // ct.setSalt("test-salt");
   // OS, OS_version, device, resolution, carrier, app_version);
-  // ct.SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Carrier", "1.0");
+  ct.SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Carrier", "1.0");
 
   // start the SDK (initialize the SDK)
   string _appKey = "YOUR_APP_KEY";
