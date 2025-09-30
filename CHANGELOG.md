@@ -1,4 +1,5 @@
-## XX.XX.XX
+## XX.XX.XX
+- Added manual session control, which can be enabled via "Countly::enableManualSessionControl".
 - Added "checkRQSize" function to return the current number of requests in the queue.
 
 ## 23.2.0

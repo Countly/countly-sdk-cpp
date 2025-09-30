@@ -68,6 +68,8 @@ struct CountlyConfiguration {
 
   SHA256Function sha256_function = nullptr;
 
+  bool manualSessionControl = false;
+
   HTTPClientFunction http_client_function = nullptr;
 
   nlohmann::json metrics;
