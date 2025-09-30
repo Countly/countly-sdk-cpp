@@ -321,6 +321,7 @@ private:
   std::chrono::system_clock::duration getSessionDuration();
 
   void updateLoop();
+  void packEvents();
   bool began_session = false;
   bool is_being_disposed = false;
   bool is_sdk_initialized = false;
