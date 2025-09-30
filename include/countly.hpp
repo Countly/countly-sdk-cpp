@@ -105,6 +105,11 @@ public:
    */
   int checkEQSize();
 
+  /*
+   * Checks and returns the size of the request queue in memory or persistent storage.
+   */
+  int checkRQSize();
+
   /**
    * Checks and returns the size of the event queue in persistent storage.
    */
