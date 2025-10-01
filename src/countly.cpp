@@ -346,7 +346,7 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
 
   // send all event to server and end current session of old user
   flushEvents();
-  if(!configuration->manualSessionControl){
+  if(configuration->manualSessionControl == false){
     endSession();
   }
 
@@ -355,7 +355,7 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
   mutex->unlock();
 
   // start a new session for new user
-  if(!configuration->manualSessionControl){
+  if(configuration->manualSessionControl == false){
     beginSession();
   }
   
@@ -438,7 +438,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 
   if (!running) {
 
-    if(!configuration->manualSessionControl){
+    if(configuration->manualSessionControl == false){
       mutex->unlock();
       beginSession();
       mutex->lock();
@@ -469,7 +469,7 @@ void Countly::startOnCloud(const std::string &app_key) {
 
 void Countly::stop() {
   _deleteThread();
-  if (!configuration->manualSessionControl) {
+  if (configuration->manualSessionControl == false) {
     endSession();
   }
 }
@@ -611,7 +611,7 @@ bool Countly::attemptSessionUpdateEQ() {
     return false;
   }
 #endif
-  if(!configuration->manualSessionControl){
+  if(configuration->manualSessionControl == false){
     return !updateSession();
   } else {
     packEvents();
@@ -676,7 +676,7 @@ std::vector<std::string> Countly::debugReturnStateOfEQ() {
 bool Countly::beginSession() {
   mutex->lock();
   log(LogLevel::INFO, "[Countly][beginSession]");
-  if (began_session) {
+  if (began_session == true) {
     mutex->unlock();
     log(LogLevel::DEBUG, "[Countly][beginSession] Session is already active.");
     return true;
@@ -732,9 +732,9 @@ bool Countly::updateSession() {
   try {
     // Check if there was a session, if not try to start one
     mutex->lock();
-    if (!began_session) {
+    if (began_session == false) {
       mutex->unlock();
-      if(configuration->manualSessionControl){
+      if(configuration->manualSessionControl == true){
         log(LogLevel::WARNING, "[Countly][updateSession] SDK is in manual session control mode and there is no active session. Please start a session first.");
         return false;
       }
@@ -859,7 +859,7 @@ void Countly::sendEventsToRQ(const nlohmann::json &events) {
 
 bool Countly::endSession() {
   log(LogLevel::INFO, "[Countly][endSession]");
-  if(!began_session) {
+  if(began_session == false) {
     log(LogLevel::DEBUG, "[Countly][endSession] There is no active session to end.");
     return true;
   }
@@ -1200,9 +1200,9 @@ void Countly::updateLoop() {
     size_t last_wait_milliseconds = wait_milliseconds;
     mutex->unlock();
     std::this_thread::sleep_for(std::chrono::milliseconds(last_wait_milliseconds));
-    if (enable_automatic_session && !configuration->manualSessionControl) {
+    if (enable_automatic_session == true && configuration->manualSessionControl == false) {
       updateSession();
-    } else {
+    } else if (configuration->manualSessionControl == true) {
       packEvents();
     }
     requestModule->processQueue(mutex);
