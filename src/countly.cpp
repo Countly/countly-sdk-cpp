@@ -403,7 +403,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   log(LogLevel::INFO, "[Countly][start] '_WIN32' is not defined");
 #endif
 
-  enable_automatic_session = start_thread && !configuration->manualSessionControl;
+  enable_automatic_session = start_thread;
   start_thread = true;
 
   if (port < 0 || port > 65535) {
@@ -611,16 +611,12 @@ bool Countly::attemptSessionUpdateEQ() {
     return false;
   }
 #endif
-  bool result;
   if(!configuration->manualSessionControl){
-    result = !updateSession();
+    return !updateSession();
   } else {
-    log(LogLevel::WARNING, "[Countly][attemptSessionUpdateEQ] SDK is in manual session control mode. Please start a session first.");
-    result = false;
+    packEvents();
+    return false;
   }
-  
-  packEvents();
-  return result;
 }
 
 void Countly::clearEQInternal() {
@@ -749,7 +745,28 @@ bool Countly::updateSession() {
       mutex->lock();
       began_session = true;
     }
-   
+
+    // events array
+    nlohmann::json events = nlohmann::json::array();
+    std::string event_ids;
+    mutex->unlock();
+    bool no_events = checkEQSize() > 0 ? false : true;
+    mutex->lock();
+
+    if (!no_events) {
+#ifndef COUNTLY_USE_SQLITE
+      for (const auto &event_json : event_queue) {
+        events.push_back(nlohmann::json::parse(event_json));
+      }
+#else
+      // TODO: If database_path was empty there was return false here
+      mutex->unlock();
+      fillEventsIntoJson(events, event_ids);
+      mutex->lock();
+#endif
+    } else {
+      log(LogLevel::DEBUG, "[Countly][updateSession] EQ empty.");
+    }
     mutex->unlock();
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
     mutex->lock();
@@ -762,6 +779,22 @@ bool Countly::updateSession() {
 
       last_sent_session_request += duration;
     }
+
+    // report events if there are any to request queue
+    if (!no_events) {
+      sendEventsToRQ(events);
+    }
+
+// clear event queue
+// TODO: check if we want to totally wipe the event queue in memory but not in database
+#ifndef COUNTLY_USE_SQLITE
+    event_queue.clear();
+#else
+    if (!event_ids.empty()) {
+      // this is a partial clearance, we only remove the events that were sent
+      removeEventWithId(event_ids);
+    }
+#endif
   } catch (const std::system_error &e) {
     std::ostringstream log_message;
     log_message << "update session, error: " << e.what();
@@ -792,7 +825,7 @@ void Countly::packEvents() {
       mutex->lock();
 #endif
     } else {
-      log(LogLevel::DEBUG, "[Countly][updateSession] EQ empty.");
+      log(LogLevel::DEBUG, "[Countly][packEvents] EQ empty.");
     }
  // report events if there are any to request queue
     if (!no_events) {
@@ -811,7 +844,7 @@ void Countly::packEvents() {
 #endif
   } catch (const std::system_error &e) {
     std::ostringstream log_message;
-    log_message << "update session, error: " << e.what();
+    log_message << "packEvents, error: " << e.what();
     log(LogLevel::FATAL, log_message.str());
   }
   mutex->unlock();
@@ -1167,10 +1200,11 @@ void Countly::updateLoop() {
     size_t last_wait_milliseconds = wait_milliseconds;
     mutex->unlock();
     std::this_thread::sleep_for(std::chrono::milliseconds(last_wait_milliseconds));
-    if (enable_automatic_session) {
+    if (enable_automatic_session && !configuration->manualSessionControl) {
       updateSession();
+    } else {
+      packEvents();
     }
-    packEvents();
     requestModule->processQueue(mutex);
   }
   mutex->lock();
