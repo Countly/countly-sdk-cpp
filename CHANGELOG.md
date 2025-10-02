@@ -1,4 +1,4 @@
-## 23.2.1
+## 23.2.1
 - Added manual session control via "Countly::enableManualSessionControl". When enabled, automatic session calls are ignored, while manual calls remain usable for finer control.
 - Added "checkRQSize" function to return the current number of requests in the queue.
 
