@@ -1,4 +1,4 @@
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/f3268a85b0034b68aa4fc47c9dce596c)](https://www.codacy.com/gh/Countly/countly-sdk-cpp/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=Countly/countly-sdk-cpp&amp;utm_campaign=Badge_Grade)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/f3268a85b0034b68aa4fc47c9dce596c)](https://app.codacy.com/gh/Countly/countly-sdk-cpp/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 
 # Countly C++ SDK
 

@@ -1,3 +1,10 @@
+## 23.2.2
+- Mitigated a mutex issue that can happen during update loop.
+
+## 23.2.1
+- Added manual session control via "Countly::enableManualSessionControl". When enabled, automatic session calls are ignored, while manual calls remain usable for finer control.
+- Added "checkRQSize" function to return the current number of requests in the queue.
+
 ## 23.2.0
 - Request queue processing now is limited to 100 requests at a time
 - Added 'setEventsToRQThreshold' method that sets the number of events after which all events will be sent to the RQ. Default value is set to 100.

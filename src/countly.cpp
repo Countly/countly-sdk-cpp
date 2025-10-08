@@ -128,6 +128,20 @@ void Countly::setSha256(SHA256Function fun) {
   mutex->unlock();
 }
 
+/**
+ * Enable manual session handling.
+ */
+void Countly::enableManualSessionControl() {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][enableManualSessionControl] You can not enable manual session control after SDK initialization.");
+    return;
+  }
+
+  mutex->lock();
+  configuration->manualSessionControl = true;
+  mutex->unlock();
+}
+
 void Countly::setMetrics(const std::string &os, const std::string &os_version, const std::string &device, const std::string &resolution, const std::string &carrier, const std::string &app_version) {
   if (is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly][setMetrics] You can not set metrics after SDK initialization.");
@@ -332,17 +346,19 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
 
   // send all event to server and end current session of old user
   flushEvents();
-  if (began_session) {
+  if(configuration->manualSessionControl == false){
     endSession();
-    mutex->lock();
-    session_params["device_id"] = value;
-    mutex->unlock();
-    beginSession();
-  } else {
-    mutex->lock();
-    session_params["device_id"] = value;
-    mutex->unlock();
   }
+
+  mutex->lock();
+  session_params["device_id"] = value;
+  mutex->unlock();
+
+  // start a new session for new user
+  if(configuration->manualSessionControl == false){
+    beginSession();
+  }
+  
 }
 #pragma endregion Device Id
 
@@ -357,6 +373,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 #ifdef COUNTLY_USE_SQLITE
   if (configuration->databasePath == "" || configuration->databasePath == " ") {
     log(LogLevel::ERROR, "[Countly][start] Database path can not be empty or blank.");
+    mutex->unlock();
     return;
   }
 #endif
@@ -422,9 +439,11 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 
   if (!running) {
 
-    mutex->unlock();
-    beginSession();
-    mutex->lock();
+    if(configuration->manualSessionControl == false){
+      mutex->unlock();
+      beginSession();
+      mutex->lock();
+    }
 
     if (start_thread) {
       stop_thread = false;
@@ -451,7 +470,7 @@ void Countly::startOnCloud(const std::string &app_key) {
 
 void Countly::stop() {
   _deleteThread();
-  if (began_session) {
+  if (configuration->manualSessionControl == false) {
     endSession();
   }
 }
@@ -520,7 +539,7 @@ void Countly::checkAndSendEventToRQ() {
 
 void Countly::setMaxEvents(size_t value) {
   log(LogLevel::WARNING, "[Countly][setMaxEvents/SetMaxEventsPerMessage] These calls are deprecated. Use 'setEventsToRQThreshold' instead.");
-  setEventsToRQThreshold(value);
+  setEventsToRQThreshold(static_cast<int>(value));
 }
 
 void Countly::setEventsToRQThreshold(int value) {
@@ -593,8 +612,12 @@ bool Countly::attemptSessionUpdateEQ() {
     return false;
   }
 #endif
-
-  return !updateSession();
+  if(configuration->manualSessionControl == false){
+    return !updateSession();
+  } else {
+    packEvents();
+    return false;
+  }
 }
 
 void Countly::clearEQInternal() {
@@ -654,8 +677,9 @@ std::vector<std::string> Countly::debugReturnStateOfEQ() {
 bool Countly::beginSession() {
   mutex->lock();
   log(LogLevel::INFO, "[Countly][beginSession]");
-  if (began_session) {
+  if (began_session == true) {
     mutex->unlock();
+    log(LogLevel::DEBUG, "[Countly][beginSession] Session is already active.");
     return true;
   }
 
@@ -709,8 +733,12 @@ bool Countly::updateSession() {
   try {
     // Check if there was a session, if not try to start one
     mutex->lock();
-    if (!began_session) {
+    if (began_session == false) {
       mutex->unlock();
+      if(configuration->manualSessionControl == true){
+        log(LogLevel::WARNING, "[Countly][updateSession] SDK is in manual session control mode and there is no active session. Please start a session first.");
+        return false;
+      }
       if (!beginSession()) {
         // if beginSession fails, we should not try to update session
         return false;
@@ -777,6 +805,54 @@ bool Countly::updateSession() {
   return true;
 }
 
+void Countly::packEvents() {
+  try {
+    mutex->lock();
+    // events array
+    nlohmann::json events = nlohmann::json::array();
+    std::string event_ids;
+    mutex->unlock();
+    bool no_events = checkEQSize() > 0 ? false : true;
+    mutex->lock();
+
+    if (!no_events) {
+#ifndef COUNTLY_USE_SQLITE
+      for (const auto &event_json : event_queue) {
+        events.push_back(nlohmann::json::parse(event_json));
+      }
+#else
+      // TODO: If database_path was empty there was return false here
+      mutex->unlock();
+      fillEventsIntoJson(events, event_ids);
+      mutex->lock();
+#endif
+    } else {
+      log(LogLevel::DEBUG, "[Countly][packEvents] EQ empty.");
+    }
+ // report events if there are any to request queue
+    if (!no_events) {
+      sendEventsToRQ(events);
+    }
+
+// clear event queue
+// TODO: check if we want to totally wipe the event queue in memory but not in database
+#ifndef COUNTLY_USE_SQLITE
+    event_queue.clear();
+#else
+    if (!event_ids.empty()) {
+      // this is a partial clearance, we only remove the events that were sent
+      removeEventWithId(event_ids);
+    }
+#endif
+  } catch (const std::system_error &e) {
+    std::ostringstream log_message;
+    log_message << "packEvents, error: " << e.what();
+    log(LogLevel::FATAL, log_message.str());
+  }
+  mutex->unlock();
+}
+
+
 void Countly::sendEventsToRQ(const nlohmann::json &events) {
   log(LogLevel::DEBUG, "[Countly][sendEventsToRQ] Sending events to RQ.");
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"events", events.dump()}};
@@ -785,6 +861,10 @@ void Countly::sendEventsToRQ(const nlohmann::json &events) {
 
 bool Countly::endSession() {
   log(LogLevel::INFO, "[Countly][endSession]");
+  if(began_session == false) {
+    log(LogLevel::DEBUG, "[Countly][endSession] There is no active session to end.");
+    return true;
+  }
   const std::chrono::system_clock::time_point now = Countly::getTimestamp();
   const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
   const auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration(now));
@@ -824,12 +904,24 @@ int Countly::checkEQSize() {
   return event_count;
 }
 
+int Countly::checkRQSize() {
+  log(LogLevel::DEBUG, "[Countly][checkRQSize]");
+  int request_count = -1;
+  if (!is_sdk_initialized) {
+    log(LogLevel::DEBUG, "[Countly][checkRQSize] SDK is not initialized.");
+    return request_count;
+  }
+
+  request_count = static_cast<int>(requestModule->RQSize());
+  return request_count;
+}
+
 #ifndef COUNTLY_USE_SQLITE
 int Countly::checkMemoryEQSize() {
   log(LogLevel::DEBUG, "[Countly][checkMemoryEQSize] Checking event queue size in memory");
   int result = 0;
   mutex->lock();
-  result = event_queue.size();
+  result = static_cast<int>(event_queue.size());
   mutex->unlock();
   return result;
 }
@@ -1110,8 +1202,10 @@ void Countly::updateLoop() {
     size_t last_wait_milliseconds = wait_milliseconds;
     mutex->unlock();
     std::this_thread::sleep_for(std::chrono::milliseconds(last_wait_milliseconds));
-    if (enable_automatic_session) {
+    if (enable_automatic_session == true && configuration->manualSessionControl == false) {
       updateSession();
+    } else if (configuration->manualSessionControl == true) {
+      packEvents();
     }
     requestModule->processQueue(mutex);
   }
