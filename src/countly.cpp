@@ -373,6 +373,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 #ifdef COUNTLY_USE_SQLITE
   if (configuration->databasePath == "" || configuration->databasePath == " ") {
     log(LogLevel::ERROR, "[Countly][start] Database path can not be empty or blank.");
+    mutex->unlock();
     return;
   }
 #endif
@@ -806,7 +807,8 @@ bool Countly::updateSession() {
 
 void Countly::packEvents() {
   try {
-   // events array
+    mutex->lock();
+    // events array
     nlohmann::json events = nlohmann::json::array();
     std::string event_ids;
     mutex->unlock();
