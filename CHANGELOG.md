@@ -1,4 +1,4 @@
-## X.X.X
+## 23.2.2
 - Mitigated a mutex issue that can happen during update loop.
 
 ## 23.2.1
