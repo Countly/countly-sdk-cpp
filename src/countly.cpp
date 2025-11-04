@@ -288,19 +288,18 @@ void Countly::_sendIndependantLocationRequest() {
 #pragma region Device Id
 void Countly::setDeviceID(const std::string &value, bool same_user) {
   mutex->lock();
-  configuration->deviceId = value;
-  log(LogLevel::INFO, "[Countly][changeDeviceIdWithMerge] setDeviceID = '" + value + "'");
+  log(LogLevel::INFO, "[Countly][setDeviceID] setDeviceID requested = '" + value + "'");
 
-  // Checking old and new devices ids are same
-  if (session_params.contains("device_id") && session_params["device_id"].get<std::string>() == value) {
-    log(LogLevel::DEBUG, "[Countly][setDeviceID] new device id and old device id are same.");
+  if (!session_params.contains("device_id")) {
+    session_params["device_id"] = value;
+    configuration->deviceId = value;
+    log(LogLevel::DEBUG, "[Countly][setDeviceID] no previous device id, assigning initial device id");
     mutex->unlock();
     return;
   }
 
-  if (!session_params.contains("device_id")) {
-    session_params["device_id"] = value;
-    log(LogLevel::DEBUG, "[Countly][setDeviceID] no device was set, setting device id");
+  if (session_params["device_id"].get<std::string>() == value) {
+    log(LogLevel::DEBUG, "[Countly][setDeviceID] new device id equals existing device id, ignoring.");
     mutex->unlock();
     return;
   }
@@ -325,6 +324,7 @@ void Countly::_changeDeviceIdWithMerge(const std::string &value) {
 
   session_params["old_device_id"] = session_params["device_id"];
   session_params["device_id"] = value;
+  configuration->deviceId = value;
 
   const std::chrono::system_clock::time_point now = Countly::getTimestamp();
   const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
@@ -340,7 +340,6 @@ void Countly::_changeDeviceIdWithMerge(const std::string &value) {
   mutex->unlock();
 }
 
-/* Change device ID without merge after SDK has been initialized.*/
 void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
   log(LogLevel::DEBUG, "[Countly][changeDeviceIdWithoutMerge] deviceId = '" + value + "'");
 
@@ -352,6 +351,7 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
 
   mutex->lock();
   session_params["device_id"] = value;
+  configuration->deviceId = value;
   mutex->unlock();
 
   // start a new session for new user
