@@ -1,3 +1,6 @@
+## 23.2.3
+- Mitigated an issue where the new device ID was used when ending a session if device ID was changed without merging.
+
 ## 23.2.2
 - Mitigated a mutex issue that can happen during update loop.
 
