@@ -1,3 +1,6 @@
+## XX.XX.XX
+- Events are automatically packed on user properties now. This bevavior could be reversed with "Countly::disableAutoEventsOnUserProperties".
+
 ## 23.2.3
 - Mitigated an issue where the new device ID was used when ending a session if device ID was changed without merging.
 
