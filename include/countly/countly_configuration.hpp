@@ -70,6 +70,8 @@ struct CountlyConfiguration {
 
   bool manualSessionControl = false;
 
+  bool autoEventsOnUserProperties = true;
+
   HTTPClientFunction http_client_function = nullptr;
 
   nlohmann::json metrics;
