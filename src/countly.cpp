@@ -22,6 +22,7 @@ namespace cly {
 Countly::Countly() {
   crash_module = nullptr;
   views_module = nullptr;
+  user_profile_module = nullptr;
   logger.reset(new cly::LoggerModule());
   configuration.reset(new cly::CountlyConfiguration("", ""));
 }
@@ -31,6 +32,7 @@ Countly::~Countly() {
   stop();
   crash_module.reset();
   views_module.reset();
+  user_profile_module.reset();
   logger.reset();
 }
 
@@ -429,6 +431,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   requestModule.reset(new RequestModule(configuration, logger, requestBuilder, storageModule));
   crash_module.reset(new cly::CrashModule(configuration, logger, requestModule, mutex));
   views_module.reset(new cly::ViewsModule(this, logger));
+  user_profile_module.reset(new cly::UserProfileModule(configuration, logger, requestModule, mutex));
 
   bool result = true;
 #ifdef COUNTLY_USE_SQLITE

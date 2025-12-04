@@ -25,6 +25,7 @@
 #include "countly/storage_module_base.hpp"
 #include "countly/views_module.hpp"
 #include <countly/crash_module.hpp>
+#include <countly/user_profile_module.hpp>
 #include <countly/request_builder.hpp>
 #include <countly/request_module.hpp>
 
@@ -220,6 +221,7 @@ public:
 
   inline cly::ViewsModule &views() const { return *views_module.get(); }
   inline cly::CrashModule &crash() const { return *crash_module.get(); }
+  inline cly::UserProfileModule &userProfile() { return *user_profile_module.get(); }
 
   void RecordEvent(const std::string &key, int count) override { addEvent(cly::Event(key, count)); }
 
@@ -337,6 +339,7 @@ private:
   std::unique_ptr<std::thread> thread;
   std::unique_ptr<cly::CrashModule> crash_module;
   std::unique_ptr<cly::ViewsModule> views_module;
+  std::unique_ptr<cly::UserProfileModule> user_profile_module;
 
   std::shared_ptr<cly::CountlyConfiguration> configuration;
   std::shared_ptr<cly::LoggerModule> logger;
