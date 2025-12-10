@@ -1,4 +1,4 @@
-## XX.XX.XX
+## 23.2.4
 - Mitigated an issue where cached events were not queued when a user property was recorded.
 
 ## 23.2.3
