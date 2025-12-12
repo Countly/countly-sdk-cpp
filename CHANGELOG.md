@@ -1,3 +1,6 @@
+## 23.2.4
+- Mitigated an issue where cached events were not queued when a user property was recorded.
+
 ## 23.2.3
 - Mitigated an issue where the new device ID was used when ending a session if device ID was changed without merging.
 

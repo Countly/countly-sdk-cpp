@@ -235,3 +235,92 @@ TEST_CASE("Tests that sets 'setEventsToRQThreshold' before and after SDK starts"
     CHECK(events.size() == 3);
   }
 }
+
+TEST_CASE("Tests that saving user details trigger flushing EQ"){
+  clearSDK();
+  Countly &countly = Countly::getInstance();
+
+  // Automatic saving of events before user props calls
+  SUBCASE("Saving user properties should flush EQ") {
+    countly.enableManualSessionControl();
+    test_utils::initCountlyWithFakeNetworking(true, countly);
+
+    test_utils::generateEvents(4, countly);
+    CHECK(countly.checkEQSize() == 4);
+
+    // set user properties, this should flush the EQ
+    countly.setUserDetails({{"name", "Full name"}});
+    CHECK(countly.checkEQSize() == 0);
+
+    test_utils::generateEvents(4, countly);
+    CHECK(countly.checkEQSize() == 4);
+
+    // set custom user properties, this should flush the EQ
+    countly.setCustomUserDetails({{"custom_key", "custom_value"}});
+    CHECK(countly.checkEQSize() == 0);
+
+    // RQ should have 4 events and user details
+    // trigger RQ to send requests to http_call_queue
+    countly.processRQDebug();
+    // queue should have 4 requests
+    CHECK(!http_call_queue.empty());
+    CHECK(http_call_queue.size() == 4);
+    HTTPCall eventsReq1 = http_call_queue.front();
+    http_call_queue.pop_front();
+    HTTPCall userDetails = http_call_queue.front();
+    http_call_queue.pop_front();
+    HTTPCall eventsReq2 = http_call_queue.front();
+    http_call_queue.pop_front();
+    HTTPCall customUserDetails = http_call_queue.front();
+    http_call_queue.pop_front();
+    CHECK(http_call_queue.size() == 0);
+
+    // last call should have 4 events
+    nlohmann::json events1 = nlohmann::json::parse(eventsReq1.data["events"]);
+    CHECK(events1.size() == 4);
+    nlohmann::json userDetailsJson = nlohmann::json::parse(userDetails.data["user_details"]);
+    CHECK(userDetailsJson["name"] == "Full name");
+
+    nlohmann::json events2 = nlohmann::json::parse(eventsReq2.data["events"]);
+    CHECK(events2.size() == 4);
+    nlohmann::json customUserDetailsJson = nlohmann::json::parse(customUserDetails.data["user_details"]);
+    CHECK(customUserDetailsJson["custom"]["custom_key"] == "custom_value");
+  }
+
+   // Automatic saving of events before user props calls
+  SUBCASE("Saving user properties should not flush EQ when behavior is disabled") {
+    countly.enableManualSessionControl();
+    countly.disableAutoEventsOnUserProperties();
+    test_utils::initCountlyWithFakeNetworking(true, countly);
+
+    test_utils::generateEvents(4, countly);
+    CHECK(countly.checkEQSize() == 4);
+
+    // set user properties, this should flush the EQ
+    countly.setUserDetails({{"name", "Full name"}});
+    CHECK(countly.checkEQSize() == 4);
+
+    test_utils::generateEvents(4, countly);
+    CHECK(countly.checkEQSize() == 8);
+
+    // set custom user properties, this should flush the EQ
+    countly.setCustomUserDetails({{"custom_key", "custom_value"}});
+    CHECK(countly.checkEQSize() == 8);
+    // RQ should have 4 events and user details
+    // trigger RQ to send requests to http_call_queue
+    countly.processRQDebug();
+    // queue should have 2 requests
+    CHECK(!http_call_queue.empty());
+    CHECK(http_call_queue.size() == 2);
+    HTTPCall userDetails = http_call_queue.front();
+    http_call_queue.pop_front();
+    HTTPCall customUserDetails = http_call_queue.front();
+    http_call_queue.pop_front();
+    CHECK(http_call_queue.size() == 0);
+
+    nlohmann::json userDetailsJson = nlohmann::json::parse(userDetails.data["user_details"]);
+    CHECK(userDetailsJson["name"] == "Full name");
+    nlohmann::json customUserDetailsJson = nlohmann::json::parse(customUserDetails.data["user_details"]);
+    CHECK(customUserDetailsJson["custom"]["custom_key"] == "custom_value");
+  }
+}

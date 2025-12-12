@@ -142,6 +142,20 @@ void Countly::enableManualSessionControl() {
   mutex->unlock();
 }
 
+/**
+ * Disable automatic events on user properties changes.
+ */
+void Countly::disableAutoEventsOnUserProperties() {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][disableAutoEventsOnUserProperties] You can not disable automatic events on user properties after SDK initialization.");
+    return;
+  }
+
+  mutex->lock();
+  configuration->autoEventsOnUserProperties = false;
+  mutex->unlock();
+}
+
 void Countly::setMetrics(const std::string &os, const std::string &os_version, const std::string &device, const std::string &resolution, const std::string &carrier, const std::string &app_version) {
   if (is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly][setMetrics] You can not set metrics after SDK initialization.");
@@ -182,6 +196,12 @@ void Countly::setUserDetails(const std::map<std::string, std::string> &value) {
     return;
   }
 
+  if (configuration->autoEventsOnUserProperties == true) {
+    mutex->unlock();
+    flushEvents();
+    mutex->lock();
+  }
+
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"user_details", session_params["user_details"].dump()}};
 
   requestModule->addRequestToQueue(data);
@@ -196,6 +216,12 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string> &val
     log(LogLevel::ERROR, "[Countly][setCustomUserDetails] Can not send user detail if the SDK has not been initialized.");
     mutex->unlock();
     return;
+  }
+
+  if (configuration->autoEventsOnUserProperties == true) {
+    mutex->unlock();
+    flushEvents();
+    mutex->lock();
   }
 
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"user_details", session_params["user_details"].dump()}};
@@ -345,7 +371,7 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
 
   // send all event to server and end current session of old user
   flushEvents();
-  if(configuration->manualSessionControl == false){
+  if (configuration->manualSessionControl == false) {
     endSession();
   }
 
@@ -355,10 +381,9 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
   mutex->unlock();
 
   // start a new session for new user
-  if(configuration->manualSessionControl == false){
+  if (configuration->manualSessionControl == false) {
     beginSession();
   }
-  
 }
 #pragma endregion Device Id
 
@@ -439,7 +464,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 
   if (!running) {
 
-    if(configuration->manualSessionControl == false){
+    if (configuration->manualSessionControl == false) {
       mutex->unlock();
       beginSession();
       mutex->lock();
@@ -612,7 +637,7 @@ bool Countly::attemptSessionUpdateEQ() {
     return false;
   }
 #endif
-  if(configuration->manualSessionControl == false){
+  if (configuration->manualSessionControl == false) {
     return !updateSession();
   } else {
     packEvents();
@@ -735,7 +760,7 @@ bool Countly::updateSession() {
     mutex->lock();
     if (began_session == false) {
       mutex->unlock();
-      if(configuration->manualSessionControl == true){
+      if (configuration->manualSessionControl == true) {
         log(LogLevel::WARNING, "[Countly][updateSession] SDK is in manual session control mode and there is no active session. Please start a session first.");
         return false;
       }
@@ -829,7 +854,7 @@ void Countly::packEvents() {
     } else {
       log(LogLevel::DEBUG, "[Countly][packEvents] EQ empty.");
     }
- // report events if there are any to request queue
+    // report events if there are any to request queue
     if (!no_events) {
       sendEventsToRQ(events);
     }
@@ -852,7 +877,6 @@ void Countly::packEvents() {
   mutex->unlock();
 }
 
-
 void Countly::sendEventsToRQ(const nlohmann::json &events) {
   log(LogLevel::DEBUG, "[Countly][sendEventsToRQ] Sending events to RQ.");
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"events", events.dump()}};
@@ -861,7 +885,7 @@ void Countly::sendEventsToRQ(const nlohmann::json &events) {
 
 bool Countly::endSession() {
   log(LogLevel::INFO, "[Countly][endSession]");
-  if(began_session == false) {
+  if (began_session == false) {
     log(LogLevel::DEBUG, "[Countly][endSession] There is no active session to end.");
     return true;
   }
