@@ -1,3 +1,6 @@
+## XX.XX.XX
+- ! Minor breaking change ! SDK Behavior Settings is now enabled by default. Changes made on SDK Manager > SDK Behavior Settings on your server will affect SDK behavior directly.
+
 ## 23.2.4
 - Mitigated an issue where cached events were not queued when a user property was recorded.
 
