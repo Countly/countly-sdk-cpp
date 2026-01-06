@@ -48,7 +48,8 @@ add_library(countly
   ${CMAKE_CURRENT_SOURCE_DIR}/src/request_builder.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/storage_module_db.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/storage_module_memory.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/event.cpp)
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/event.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/configuration_module.cpp)
 
 target_include_directories(countly
   PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
