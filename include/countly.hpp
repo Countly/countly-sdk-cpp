@@ -27,6 +27,7 @@
 #include <countly/crash_module.hpp>
 #include <countly/request_builder.hpp>
 #include <countly/request_module.hpp>
+#include <countly/configuration_module.hpp>
 
 namespace cly {
 class Countly : public cly::CountlyDelegates {
@@ -345,6 +346,7 @@ private:
   std::shared_ptr<cly::RequestBuilder> requestBuilder;
   std::shared_ptr<cly::RequestModule> requestModule;
   std::shared_ptr<cly::StorageModuleBase> storageModule;
+  std::shared_ptr<cly::ConfigurationModule> configurationModule;
   std::shared_ptr<std::mutex> mutex = std::make_shared<std::mutex>();
 
   bool is_queue_being_processed = false;
