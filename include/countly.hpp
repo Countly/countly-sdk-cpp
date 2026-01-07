@@ -28,6 +28,7 @@
 #include <countly/request_builder.hpp>
 #include <countly/request_module.hpp>
 #include <countly/configuration_module.hpp>
+#include <countly/configuration_provider.hpp>
 
 namespace cly {
 class Countly : public cly::CountlyDelegates {
