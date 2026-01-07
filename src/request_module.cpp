@@ -12,7 +12,6 @@
 #ifndef COUNTLY_USE_CUSTOM_HTTP
 #ifdef _WIN32
 #include "Windows.h"
-#include "WinHTTP.h"
 #undef ERROR
 #pragma comment(lib, "winhttp.lib")
 #else
@@ -105,15 +104,15 @@ void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &
       impl->_logger->log(LogLevel::DEBUG, "[RequestModule] addRequestToQueue: Tracking is disabled. Not adding request to queue.");
       return;
     }
-  }
 
-  if (impl->_configuration->requestQueueThreshold <= impl->_storageModule->RQCount()) {
-    impl->_logger->log(LogLevel::WARNING, cly::utils::format_string("[RequestModule] addRequestToQueue: Request Queue is full. Dropping the oldest request."));
-    impl->_storageModule->RQRemoveFront();
-  }
+    if (config->getRequestQueueSizeLimit() <= impl->_storageModule->RQCount()) {
+      impl->_logger->log(LogLevel::WARNING, cly::utils::format_string("[RequestModule] addRequestToQueue: Request Queue is full. Dropping the oldest request."));
+      impl->_storageModule->RQRemoveFront();
+    }
 
-  const std::string request = impl->_requestBuilder->buildRequest(data);
-  impl->_storageModule->RQInsertAtEnd(request);
+    const std::string request = impl->_requestBuilder->buildRequest(data);
+    impl->_storageModule->RQInsertAtEnd(request);
+  }
 }
 
 void RequestModule::clearRequestQueue() { impl->_storageModule->RQClearAll(); }
