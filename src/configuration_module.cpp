@@ -12,7 +12,6 @@ static constexpr const char *KEY_NETWORKING = "networking";
 
 static constexpr const char *KEY_REQ_QUEUE_SIZE = "rqs";
 static constexpr const char *KEY_EVENT_QUEUE_SIZE = "eqs";
-static constexpr const char *KEY_LOGGING = "log";
 static constexpr const char *KEY_SESSION_UPDATE_INTERVAL = "sui";
 static constexpr const char *KEY_SESSION_TRACKING = "st";
 static constexpr const char *KEY_VIEW_TRACKING = "vt";
@@ -20,6 +19,7 @@ static constexpr const char *KEY_LOCATION_TRACKING = "lt";
 static constexpr const char *KEY_CUSTOM_EVENT_TRACKING = "cet";
 static constexpr const char *KEY_CRASH_REPORTING = "crt";
 static constexpr const char *KEY_SERVER_CONFIG_UPDATE_INTERVAL = "scui";
+static constexpr const char *KEY_LOGGING = "log"; // not used yet
 
 // whitelist / blacklist - not implemented yet
 static constexpr const char *KEY_EVENT_BLACKLIST = "eb";
@@ -61,8 +61,19 @@ public:
   std::shared_ptr<StorageModuleBase> _storageModule;
   std::shared_ptr<RequestModule> _requestModule;
   std::shared_ptr<std::mutex> _mutex;
-  std::shared_ptr<std::mutex> sdk_behavior_settings_mutex = std::make_shared<std::mutex>();
   nlohmann::json sdk_behavior_settings;
+
+  // current settings cached for quick access
+  std::atomic<bool> networkingEnabled{true};
+  std::atomic<bool> trackingEnabled{true};
+  std::atomic<bool> sessionTrackingEnabled{true};
+  std::atomic<bool> viewTrackingEnabled{true};
+  std::atomic<bool> locationTrackingEnabled{true};
+  std::atomic<bool> customEventTrackingEnabled{true};
+  std::atomic<bool> crashReportingEnabled{true};
+  std::atomic<unsigned int> eventQueueThreshold{0};
+  std::atomic<unsigned int> requestQueueSizeLimit{0};
+  std::atomic<unsigned int> sessionUpdateInterval{0};
   ConfigurationModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule, std::shared_ptr<RequestModule> requestModule, std::shared_ptr<std::mutex> mutex)
       : _configuration(config), _logger(logger), _requestBuilder(requestBuilder), _storageModule(storageModule), _requestModule(requestModule), _mutex(mutex) {}
 
@@ -71,50 +82,54 @@ public:
   void _fetchConfigFromServerHTTP(const std::map<std::string, std::string> &data) {
     HTTPResponse response = _requestModule->sendHTTP("/o/sdk", _requestBuilder->serializeData(data));
     if (response.success && response.data.is_object() && response.data.contains(KEY_CONFIG)) {
-      sdk_behavior_settings_mutex->lock(); // why lock here? we already got the new one so lets await other accessors to get the new one
       sanitizeConfig(response.data[KEY_CONFIG]);
       sdk_behavior_settings = response.data[KEY_CONFIG];
       _logger->log(LogLevel::INFO, "[ConfigurationModule] _fetchConfigFromServerHTTP, SDK config:\n" + sdk_behavior_settings.dump(2));
-      sdk_behavior_settings_mutex->unlock();
+      populateConfigValues();
     } else {
       _logger->log(LogLevel::WARNING, cly::utils::format_string("[ConfigurationModule] _fetchConfigFromServerHTTP, failed to fetch response_success: [%s]", response.success ? "true" : "false"));
     }
   }
 
   bool getBool(const char *key, bool defaultValue) const {
-    sdk_behavior_settings_mutex->lock();
     if (!sdk_behavior_settings.is_object()) {
-      sdk_behavior_settings_mutex->unlock();
       return defaultValue;
     }
 
     auto it = sdk_behavior_settings.find(key);
     if (it == sdk_behavior_settings.end() || !it->is_boolean()) {
-      sdk_behavior_settings_mutex->unlock();
       return defaultValue;
     }
 
     bool value = it->get<bool>();
-    sdk_behavior_settings_mutex->unlock();
     return value;
   }
 
   unsigned int getUInt(const char *key, unsigned int defaultValue) const {
-    sdk_behavior_settings_mutex->lock();
     if (!sdk_behavior_settings.is_object()) {
-      sdk_behavior_settings_mutex->unlock();
       return defaultValue;
     }
 
     auto it = sdk_behavior_settings.find(key);
     if (it == sdk_behavior_settings.end() || !it->is_number_unsigned()) {
-      sdk_behavior_settings_mutex->unlock();
       return defaultValue;
     }
 
     unsigned int value = it->get<unsigned int>();
-    sdk_behavior_settings_mutex->unlock();
     return value;
+  }
+
+  void populateConfigValues() {
+    trackingEnabled.store(getBool(KEY_TRACKING, true), std::memory_order_release);
+    networkingEnabled.store(getBool(KEY_NETWORKING, true), std::memory_order_release);
+    sessionTrackingEnabled.store(getBool(KEY_SESSION_TRACKING, true), std::memory_order_release);
+    viewTrackingEnabled.store(getBool(KEY_VIEW_TRACKING, true), std::memory_order_release);
+    locationTrackingEnabled.store(getBool(KEY_LOCATION_TRACKING, true), std::memory_order_release);
+    customEventTrackingEnabled.store(getBool(KEY_CUSTOM_EVENT_TRACKING, true), std::memory_order_release);
+    crashReportingEnabled.store(getBool(KEY_CRASH_REPORTING, true), std::memory_order_release);
+    eventQueueThreshold.store(getUInt(KEY_EVENT_QUEUE_SIZE, _configuration->eventQueueThreshold), std::memory_order_release);
+    requestQueueSizeLimit.store(getUInt(KEY_REQ_QUEUE_SIZE, _configuration->requestQueueThreshold), std::memory_order_release);
+    sessionUpdateInterval.store(getUInt(KEY_SESSION_UPDATE_INTERVAL, _configuration->sessionDuration), std::memory_order_release);
   }
 
   void sanitizeConfig(nlohmann::json &c) {
@@ -170,26 +185,26 @@ void ConfigurationModule::fetchConfigFromServer(nlohmann::json session_params) {
   _thread.detach();
 }
 
-bool ConfigurationModule::isTrackingEnabled() const { return impl->getBool(KEY_TRACKING, true); }
+bool ConfigurationModule::isTrackingEnabled() const { return impl->trackingEnabled.load(std::memory_order_acquire); }
 
-bool ConfigurationModule::isNetworkingEnabled() const { return impl->getBool(KEY_NETWORKING, true); }
+bool ConfigurationModule::isNetworkingEnabled() const { return impl->networkingEnabled.load(std::memory_order_acquire); }
 
-bool ConfigurationModule::isLoggingEnabled() const { return impl->getBool(KEY_LOGGING, false); }
+bool ConfigurationModule::isLoggingEnabled() const { return false; } // false for now
 
-bool ConfigurationModule::isLocationTrackingEnabled() { return impl->getBool(KEY_LOCATION_TRACKING, true); }
+bool ConfigurationModule::isLocationTrackingEnabled() { return impl->locationTrackingEnabled.load(std::memory_order_acquire); }
 
-bool ConfigurationModule::isViewTrackingEnabled() { return impl->getBool(KEY_VIEW_TRACKING, true); }
+bool ConfigurationModule::isViewTrackingEnabled() { return impl->viewTrackingEnabled.load(std::memory_order_acquire); }
 
-bool ConfigurationModule::isSessionTrackingEnabled() { return impl->getBool(KEY_SESSION_TRACKING, true); }
+bool ConfigurationModule::isSessionTrackingEnabled() { return impl->sessionTrackingEnabled.load(std::memory_order_acquire); }
 
-bool ConfigurationModule::isCustomEventTrackingEnabled() { return impl->getBool(KEY_CUSTOM_EVENT_TRACKING, true); }
+bool ConfigurationModule::isCustomEventTrackingEnabled() { return impl->customEventTrackingEnabled.load(std::memory_order_acquire); }
 
-bool ConfigurationModule::isCrashReportingEnabled() { return impl->getBool(KEY_CRASH_REPORTING, true); }
+bool ConfigurationModule::isCrashReportingEnabled() { return impl->crashReportingEnabled.load(std::memory_order_acquire); }
 
-unsigned int ConfigurationModule::getRequestQueueSizeLimit() const { return impl->getUInt(KEY_REQ_QUEUE_SIZE, impl->_configuration->requestQueueThreshold); }
+unsigned int ConfigurationModule::getRequestQueueSizeLimit() const { return impl->requestQueueSizeLimit.load(std::memory_order_acquire); }
 
-unsigned int ConfigurationModule::getEventQueueSizeLimit() { return impl->getUInt(KEY_EVENT_QUEUE_SIZE, impl->_configuration->eventQueueThreshold); }
+unsigned int ConfigurationModule::getEventQueueSizeLimit() { return impl->eventQueueThreshold.load(std::memory_order_acquire); }
 
-unsigned int ConfigurationModule::getSessionUpdateInterval() { return impl->getUInt(KEY_SESSION_UPDATE_INTERVAL, impl->_configuration->sessionDuration); }
+unsigned int ConfigurationModule::getSessionUpdateInterval() { return impl->sessionUpdateInterval.load(std::memory_order_acquire); }
 // namespace cly
 } // namespace cly
