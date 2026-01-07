@@ -99,6 +99,14 @@ static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n
 }
 
 void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &data) {
+
+  if (std::shared_ptr<ConfigurationProvider> config = _configProvider.lock()) {
+    if (!config->isTrackingEnabled()) {
+      impl->_logger->log(LogLevel::DEBUG, "[RequestModule] addRequestToQueue: Tracking is disabled. Not adding request to queue.");
+      return;
+    }
+  }
+
   if (impl->_configuration->requestQueueThreshold <= impl->_storageModule->RQCount()) {
     impl->_logger->log(LogLevel::WARNING, cly::utils::format_string("[RequestModule] addRequestToQueue: Request Queue is full. Dropping the oldest request."));
     impl->_storageModule->RQRemoveFront();
@@ -112,6 +120,14 @@ void RequestModule::clearRequestQueue() { impl->_storageModule->RQClearAll(); }
 
 void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
   mutex->lock();
+
+  if (std::shared_ptr<ConfigurationProvider> config = _configProvider.lock()) {
+    if (!config->isNetworkingEnabled()) {
+      impl->_logger->log(LogLevel::DEBUG, "[RequestModule] processQueue: Networking is disabled. Not processing request queue.");
+      return;
+    }
+  }
+
   // making sure that no other thread is processing the queue
   if (impl->is_queue_being_processed) {
     mutex->unlock();
@@ -342,4 +358,7 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
 #endif
 }
 long long RequestModule::RQSize() { return impl->_storageModule->RQCount(); }
+
+void RequestModule::setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider) { _configProvider = std::move(provider); }
+
 } // namespace cly
