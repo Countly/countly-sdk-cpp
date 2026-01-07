@@ -453,9 +453,10 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   requestBuilder.reset(new RequestBuilder(configuration, logger));
   requestModule.reset(new RequestModule(configuration, logger, requestBuilder, storageModule));
   configurationModule.reset(new cly::ConfigurationModule(configuration, logger, requestBuilder, storageModule, requestModule, mutex));
-  requestModule->setConfigurationProvider(configurationModule);
   crash_module.reset(new cly::CrashModule(configuration, logger, requestModule, mutex));
   views_module.reset(new cly::ViewsModule(this, logger));
+
+  requestModule->setConfigurationProvider(configurationModule);
 
   bool result = true;
 #ifdef COUNTLY_USE_SQLITE
