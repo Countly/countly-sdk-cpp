@@ -545,7 +545,7 @@ void Countly::checkAndSendEventToRQ() {
   int queueSize = checkEQSize();
   mutex->lock();
 #ifdef COUNTLY_USE_SQLITE
-  if (queueSize >= configuration->eventQueueThreshold) {
+  if (queueSize >= configurationModule->getEventQueueSizeLimit()) {
     log(LogLevel::DEBUG, "Event queue threshold is reached");
     std::string event_ids;
 
@@ -559,7 +559,7 @@ void Countly::checkAndSendEventToRQ() {
     removeEventWithId(event_ids);
   }
 #else
-  if (queueSize >= configuration->eventQueueThreshold) {
+  if (queueSize >= configurationModule->getEventQueueSizeLimit()) {
     log(LogLevel::WARNING, "Event queue is full, dropping the oldest event to insert a new one");
     for (const auto &event_json : event_queue) {
       events.push_back(nlohmann::json::parse(event_json));
