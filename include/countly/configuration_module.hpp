@@ -18,7 +18,6 @@ public:
   void fetchConfigFromServer(nlohmann::json session_params);
   bool isTrackingEnabled() const override;
   bool isNetworkingEnabled() const override;
-  bool isLoggingEnabled() const override;
 
   bool isLocationTrackingEnabled();
   bool isViewTrackingEnabled();

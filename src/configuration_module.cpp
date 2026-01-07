@@ -19,7 +19,7 @@ static constexpr const char *KEY_LOCATION_TRACKING = "lt";
 static constexpr const char *KEY_CUSTOM_EVENT_TRACKING = "cet";
 static constexpr const char *KEY_CRASH_REPORTING = "crt";
 static constexpr const char *KEY_SERVER_CONFIG_UPDATE_INTERVAL = "scui";
-static constexpr const char *KEY_LOGGING = "log"; // not used yet
+static constexpr const char *KEY_LOGGING = "log"; // not used and implemented yet
 
 // whitelist / blacklist - not implemented yet
 static constexpr const char *KEY_EVENT_BLACKLIST = "eb";
@@ -188,8 +188,6 @@ void ConfigurationModule::fetchConfigFromServer(nlohmann::json session_params) {
 bool ConfigurationModule::isTrackingEnabled() const { return impl->trackingEnabled.load(std::memory_order_acquire); }
 
 bool ConfigurationModule::isNetworkingEnabled() const { return impl->networkingEnabled.load(std::memory_order_acquire); }
-
-bool ConfigurationModule::isLoggingEnabled() const { return false; } // false for now
 
 bool ConfigurationModule::isLocationTrackingEnabled() { return impl->locationTrackingEnabled.load(std::memory_order_acquire); }
 

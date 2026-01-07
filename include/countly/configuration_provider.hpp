@@ -8,7 +8,6 @@ public:
 
     virtual bool isNetworkingEnabled() const = 0;
     virtual bool isTrackingEnabled() const = 0;
-    virtual bool isLoggingEnabled() const = 0;
     virtual unsigned int getRequestQueueSizeLimit() const = 0;
 };
 } // namespace cly
