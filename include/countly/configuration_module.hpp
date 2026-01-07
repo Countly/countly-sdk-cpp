@@ -4,20 +4,21 @@
 #include "countly/countly_configuration.hpp"
 #include "countly/logger_module.hpp"
 #include "countly/request_builder.hpp"
-#include "countly/request_module.hpp"
 #include "countly/storage_module_base.hpp"
+#include "countly/configuration_provider.hpp"
+#include "countly/request_module.hpp"
 
 namespace cly {
-class ConfigurationModule {
+class ConfigurationModule : public ConfigurationProvider{
 
 public:
   ~ConfigurationModule();
   ConfigurationModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule, std::shared_ptr<RequestModule> requestModule, std::shared_ptr<std::mutex> mutex);
 
   void fetchConfigFromServer(nlohmann::json session_params);
-  bool isTrackingEnabled();
-  bool isNetworkingEnabled();
-  bool isLoggingEnabled();
+  bool isTrackingEnabled() const override;
+  bool isNetworkingEnabled() const override;
+  bool isLoggingEnabled() const override;
 
   bool isLocationTrackingEnabled();
   bool isViewTrackingEnabled();
@@ -25,7 +26,7 @@ public:
   bool isCustomEventTrackingEnabled();
   bool isCrashReportingEnabled();
 
-  unsigned int getRequestQueueSizeLimit();
+  unsigned int getRequestQueueSizeLimit() const override;
   unsigned int getEventQueueSizeLimit();
   unsigned int getSessionUpdateInterval();
 

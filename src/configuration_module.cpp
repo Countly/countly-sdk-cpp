@@ -170,11 +170,11 @@ void ConfigurationModule::fetchConfigFromServer(nlohmann::json session_params) {
   _thread.detach();
 }
 
-bool ConfigurationModule::isTrackingEnabled() { return impl->getBool(KEY_TRACKING, true); }
+bool ConfigurationModule::isTrackingEnabled() const { return impl->getBool(KEY_TRACKING, true); }
 
-bool ConfigurationModule::isNetworkingEnabled() { return impl->getBool(KEY_NETWORKING, true); }
+bool ConfigurationModule::isNetworkingEnabled() const { return impl->getBool(KEY_NETWORKING, true); }
 
-bool ConfigurationModule::isLoggingEnabled() { return impl->getBool(KEY_LOGGING, false); }
+bool ConfigurationModule::isLoggingEnabled() const { return impl->getBool(KEY_LOGGING, false); }
 
 bool ConfigurationModule::isLocationTrackingEnabled() { return impl->getBool(KEY_LOCATION_TRACKING, true); }
 
@@ -186,10 +186,10 @@ bool ConfigurationModule::isCustomEventTrackingEnabled() { return impl->getBool(
 
 bool ConfigurationModule::isCrashReportingEnabled() { return impl->getBool(KEY_CRASH_REPORTING, true); }
 
-unsigned int ConfigurationModule::getRequestQueueSizeLimit() { return impl->getUInt(KEY_REQ_QUEUE_SIZE, 1000); }
+unsigned int ConfigurationModule::getRequestQueueSizeLimit() const { return impl->getUInt(KEY_REQ_QUEUE_SIZE, impl->_configuration->requestQueueThreshold); }
 
-unsigned int ConfigurationModule::getEventQueueSizeLimit() { return impl->getUInt(KEY_EVENT_QUEUE_SIZE, 1000); }
+unsigned int ConfigurationModule::getEventQueueSizeLimit() { return impl->getUInt(KEY_EVENT_QUEUE_SIZE, impl->_configuration->eventQueueThreshold); }
 
-unsigned int ConfigurationModule::getSessionUpdateInterval() { return impl->getUInt(KEY_SESSION_UPDATE_INTERVAL, 60); }
+unsigned int ConfigurationModule::getSessionUpdateInterval() { return impl->getUInt(KEY_SESSION_UPDATE_INTERVAL, impl->_configuration->sessionDuration); }
 // namespace cly
 } // namespace cly
