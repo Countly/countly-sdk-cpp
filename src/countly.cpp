@@ -530,6 +530,13 @@ void Countly::setUpdateInterval(size_t milliseconds) {
 }
 
 void Countly::addEvent(const cly::Event &event) {
+  if (configurationModule->isCustomEventTrackingEnabled() == false) {
+    std::string eventStr = event.serialize();
+    if(eventStr.find("[CLY]_") == std::string::npos){
+        log(LogLevel::DEBUG, "[Countly] addEvent, custom event tracking is disabled in server configuration, can not add event with key: " + eventStr);
+        return;
+    }
+  }
   mutex->lock();
 #ifndef COUNTLY_USE_SQLITE
   event_queue.push_back(event.serialize());

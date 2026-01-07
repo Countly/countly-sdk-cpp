@@ -100,7 +100,7 @@ static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n
 void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &data) {
 
   if (std::shared_ptr<ConfigurationProvider> config = _configProvider.lock()) {
-    if (!config->isTrackingEnabled()) {
+    if (config->isTrackingEnabled() == false) {
       impl->_logger->log(LogLevel::DEBUG, "[RequestModule] addRequestToQueue: Tracking is disabled. Not adding request to queue.");
       return;
     }
@@ -121,7 +121,7 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
   mutex->lock();
 
   if (std::shared_ptr<ConfigurationProvider> config = _configProvider.lock()) {
-    if (!config->isNetworkingEnabled()) {
+    if (config->isNetworkingEnabled() == false) {
       impl->_logger->log(LogLevel::DEBUG, "[RequestModule] processQueue: Networking is disabled. Not processing request queue.");
       return;
     }
