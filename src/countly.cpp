@@ -475,6 +475,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   if (is_sdk_initialized) {
     mutex->unlock();
     configurationModule->fetchConfigFromServer(session_params);
+    configurationModule->startServerConfigUpdateTimer(session_params);
     mutex->lock();
   }
 
@@ -510,6 +511,7 @@ void Countly::startOnCloud(const std::string &app_key) {
 }
 
 void Countly::stop() {
+  configurationModule->stopTimer();
   _deleteThread();
   if (configuration->manualSessionControl == false) {
     endSession();

@@ -65,6 +65,11 @@ public:
   std::shared_ptr<LoggerModule> _logger;
   std::shared_ptr<std::mutex> _mutex;
 
+  std::atomic<bool> stopConfigThread{false};
+  std::thread configUpdateThread;
+  std::mutex configUpdateMutex;
+  std::condition_variable configUpdateCv;
+
   // current settings cached for quick access
   std::atomic<bool> networkingEnabled{true};
   std::atomic<bool> trackingEnabled{true};
@@ -80,7 +85,27 @@ public:
                           std::shared_ptr<std::mutex> mutex)
       : _configuration(config), _logger(logger), _requestBuilder(requestBuilder), _storageModule(storageModule), _requestModule(requestModule), _mutex(mutex), _cly(cly) {}
 
-  ~ConfigurationModuleImpl() { _logger.reset(); }
+  ~ConfigurationModuleImpl() {
+    std::lock_guard<std::mutex> lock(configUpdateMutex);
+    stopConfigThread.store(true, std::memory_order_release);
+    configUpdateCv.notify_all();
+    if (configUpdateThread.joinable()) {
+      configUpdateThread.join();
+    }
+    sdk_behavior_settings.clear();
+
+    networkingEnabled.store(true, std::memory_order_relaxed);
+    trackingEnabled.store(true, std::memory_order_relaxed);
+    sessionTrackingEnabled.store(true, std::memory_order_relaxed);
+    viewTrackingEnabled.store(true, std::memory_order_relaxed);
+    locationTrackingEnabled.store(true, std::memory_order_relaxed);
+    customEventTrackingEnabled.store(true, std::memory_order_relaxed);
+    crashReportingEnabled.store(true, std::memory_order_relaxed);
+    eventQueueThreshold.store(0, std::memory_order_relaxed);
+    requestQueueSizeLimit.store(0, std::memory_order_relaxed);
+    sessionUpdateInterval.store(0, std::memory_order_relaxed);
+    _logger.reset();
+  }
 
   void _fetchConfigFromServerHTTP(const std::map<std::string, std::string> &data) {
     HTTPResponse response = _requestModule->sendHTTP("/o/sdk", _requestBuilder->serializeData(data));
@@ -91,6 +116,33 @@ public:
       populateConfigValues();
     } else {
       _logger->log(LogLevel::WARNING, cly::utils::format_string("[ConfigurationModule] _fetchConfigFromServerHTTP, failed to fetch response_success: [%s]", response.success ? "true" : "false"));
+    }
+  }
+
+  void _updateConfigPeriodically(const nlohmann::json &session_params) {
+    std::unique_lock<std::mutex> lock(configUpdateMutex);
+
+    while (!stopConfigThread.load(std::memory_order_acquire)) {
+
+      unsigned int interval = getUInt(KEY_SERVER_CONFIG_UPDATE_INTERVAL, 4);
+
+      if (interval < 1) {
+        interval = 4;
+      }
+
+      bool stopped = configUpdateCv.wait_for(lock, std::chrono::hours(interval), [&] { return stopConfigThread.load(std::memory_order_acquire); });
+      if (stopped) {
+        return;
+      }
+
+      lock.unlock();
+
+      _mutex->lock();
+      std::map<std::string, std::string> data = {{"method", "sc"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
+      _mutex->unlock();
+      _fetchConfigFromServerHTTP(data);
+
+      lock.lock();
     }
   }
 
@@ -202,6 +254,25 @@ void ConfigurationModule::fetchConfigFromServer(nlohmann::json session_params) {
   // Fetch SBS asynchronously
   std::thread _thread(&ConfigurationModule::ConfigurationModuleImpl::_fetchConfigFromServerHTTP, impl.get(), data);
   _thread.detach();
+}
+
+void ConfigurationModule::startServerConfigUpdateTimer(nlohmann::json session_params) {
+  if (impl->configUpdateThread.joinable()) {
+    return;
+  }
+
+  impl->stopConfigThread.store(false, std::memory_order_release);
+  impl->configUpdateThread = std::thread(&ConfigurationModule::ConfigurationModuleImpl::_updateConfigPeriodically, impl.get(), session_params);
+}
+
+void ConfigurationModule::stopTimer() {
+  impl->_logger->log(LogLevel::WARNING, "[ConfigurationModule] stopTimer, stopping server config update timer thread.");
+  impl->stopConfigThread.store(true, std::memory_order_release);
+  impl->configUpdateCv.notify_all();
+
+  if (impl->configUpdateThread.joinable()) {
+    impl->configUpdateThread.join();
+  }
 }
 
 bool ConfigurationModule::isTrackingEnabled() const { return impl->trackingEnabled.load(std::memory_order_acquire); }
