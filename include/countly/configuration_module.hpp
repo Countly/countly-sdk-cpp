@@ -18,6 +18,7 @@ public:
                       std::shared_ptr<std::mutex> mutex);
 
   void fetchConfigFromServer(nlohmann::json session_params);
+  void fetchConfigFromStorage();
   void startServerConfigUpdateTimer(nlohmann::json session_params);
   void stopTimer();
   bool isTrackingEnabled() const override;

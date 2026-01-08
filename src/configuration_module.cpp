@@ -90,10 +90,28 @@ public:
     if (response.success && response.data.is_object() && response.data.contains(KEY_CONFIG)) {
       sanitizeConfig(response.data[KEY_CONFIG]);
       sdk_behavior_settings = response.data[KEY_CONFIG];
+      _storageModule->storeSDKBehaviorSettings(sdk_behavior_settings.dump());
       _logger->log(LogLevel::INFO, "[ConfigurationModule] _fetchConfigFromServerHTTP, SDK config:\n" + sdk_behavior_settings.dump(2));
       populateConfigValues();
     } else {
       _logger->log(LogLevel::WARNING, cly::utils::format_string("[ConfigurationModule] _fetchConfigFromServerHTTP, failed to fetch response_success: [%s]", response.success ? "true" : "false"));
+    }
+  }
+
+  void _initializeSBSFromStorage() {
+    std::string sbs_string = _storageModule->getSDKBehaviorSettings();
+    if (!sbs_string.empty()) {
+      try {
+        nlohmann::json sbs_json = nlohmann::json::parse(sbs_string);
+        sanitizeConfig(sbs_json);
+        sdk_behavior_settings = sbs_json;
+        _logger->log(LogLevel::INFO, "[ConfigurationModule] _initializeSBSFromStorage, SDK config from storage:\n" + sdk_behavior_settings.dump(2));
+        populateConfigValues(true);
+      } catch (const nlohmann::json::parse_error &e) {
+        _logger->log(LogLevel::ERROR, "[ConfigurationModule] _initializeSBSFromStorage, Failed to parse SDK behavior settings from storage: " + std::string(e.what()));
+      }
+    } else { // use provided config _configuration->providedSBS
+      _logger->log(LogLevel::INFO, "[ConfigurationModule] _initializeSBSFromStorage, No SDK behavior settings found in storage.");
     }
   }
 
@@ -259,6 +277,12 @@ void ConfigurationModule::fetchConfigFromServer(nlohmann::json session_params) {
   // Fetch SBS asynchronously
   std::thread _thread(&ConfigurationModule::ConfigurationModuleImpl::_fetchConfigFromServerHTTP, impl.get(), data);
   _thread.detach();
+}
+
+void ConfigurationModule::fetchConfigFromStorage() {
+  impl->_mutex->lock();
+  impl->_initializeSBSFromStorage();
+  impl->_mutex->unlock();
 }
 
 void ConfigurationModule::startServerConfigUpdateTimer(nlohmann::json session_params) {
