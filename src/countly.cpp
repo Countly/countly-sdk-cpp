@@ -458,7 +458,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 
   requestModule->setConfigurationProvider(configurationModule);
   views_module->setConfigurationProvider(configurationModule);
-  //crash_module->setConfigurationProvider(configurationModule);
+  crash_module->setConfigurationProvider(configurationModule);
 
   bool result = true;
 #ifdef COUNTLY_USE_SQLITE
@@ -467,7 +467,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 
   is_sdk_initialized = result; // after this point SDK is initialized.
 
-  if(is_sdk_initialized){
+  if (is_sdk_initialized) {
     mutex->unlock();
     configurationModule->fetchConfigFromServer(session_params);
     mutex->lock();
@@ -534,9 +534,9 @@ void Countly::setUpdateInterval(size_t milliseconds) {
 void Countly::addEvent(const cly::Event &event) {
   if (configurationModule->isCustomEventTrackingEnabled() == false) {
     std::string eventStr = event.serialize();
-    if(eventStr.find("[CLY]_") == std::string::npos){
-        log(LogLevel::DEBUG, "[Countly] addEvent, custom event tracking is disabled in server configuration, can not add event with key: " + eventStr);
-        return;
+    if (eventStr.find("[CLY]_") == std::string::npos) {
+      log(LogLevel::DEBUG, "[Countly] addEvent, custom event tracking is disabled in server configuration, can not add event with key: " + eventStr);
+      return;
     }
   }
   mutex->lock();
@@ -720,6 +720,11 @@ std::vector<std::string> Countly::debugReturnStateOfEQ() {
 bool Countly::beginSession() {
   mutex->lock();
   log(LogLevel::INFO, "[Countly][beginSession]");
+  if (configurationModule->isSessionTrackingEnabled() == false) {
+    log(LogLevel::ERROR, "[Countly][beginSession] Session tracking is disabled in server configuration, can not begin session.");
+    mutex->unlock();
+    return false;
+  }
   if (began_session == true) {
     mutex->unlock();
     log(LogLevel::DEBUG, "[Countly][beginSession] Session is already active.");
@@ -776,6 +781,11 @@ bool Countly::updateSession() {
   try {
     // Check if there was a session, if not try to start one
     mutex->lock();
+    if (configurationModule->isSessionTrackingEnabled() == false) {
+      log(LogLevel::ERROR, "[Countly][updateSession] Session tracking is disabled in server configuration, can not update session.");
+      mutex->unlock();
+      return false;
+    }
     if (began_session == false) {
       mutex->unlock();
       if (configuration->manualSessionControl == true) {
@@ -903,6 +913,11 @@ void Countly::sendEventsToRQ(const nlohmann::json &events) {
 
 bool Countly::endSession() {
   log(LogLevel::INFO, "[Countly][endSession]");
+  if (configurationModule->isSessionTrackingEnabled() == false) {
+    log(LogLevel::ERROR, "[Countly][endSession] Session tracking is disabled in server configuration, can not end session.");
+    mutex->unlock();
+    return false;
+  }
   if (began_session == false) {
     log(LogLevel::DEBUG, "[Countly][endSession] There is no active session to end.");
     return true;
