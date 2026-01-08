@@ -51,6 +51,13 @@ void CrashModule::recordException(const std::string &title, const std::string &s
 
   impl->_logger->log(LogLevel::INFO, cly::utils::format_string("[CrashModule] recordException: title = %s, stackTrace = %s", title.c_str(), stackTrace.c_str()));
 
+  if (std::shared_ptr<ConfigurationProvider> config = impl->_configProvider.lock()) {
+    if (config->isCrashReportingEnabled() == false) {
+      impl->_logger->log(LogLevel::DEBUG, "[CrashModule] recordException: Crash reporting is disabled. Not recording exception.");
+      return;
+    }
+  }
+
   if (title.empty()) {
     impl->_logger->log(LogLevel::WARNING, "[CrashModule] recordException : The parameter 'title' can't be empty");
   }
