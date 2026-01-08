@@ -54,14 +54,16 @@ static constexpr const char *KEY_BOM_DURATION = "bom_d";
 
 class ConfigurationModule::ConfigurationModuleImpl {
 private:
-public:
   std::shared_ptr<CountlyConfiguration> _configuration;
-  std::shared_ptr<LoggerModule> _logger;
   std::shared_ptr<RequestBuilder> _requestBuilder;
   std::shared_ptr<StorageModuleBase> _storageModule;
   std::shared_ptr<RequestModule> _requestModule;
-  std::shared_ptr<std::mutex> _mutex;
+  cly::CountlyDelegates *_cly;
   nlohmann::json sdk_behavior_settings;
+
+public:
+  std::shared_ptr<LoggerModule> _logger;
+  std::shared_ptr<std::mutex> _mutex;
 
   // current settings cached for quick access
   std::atomic<bool> networkingEnabled{true};
@@ -74,8 +76,9 @@ public:
   std::atomic<unsigned int> eventQueueThreshold{0};
   std::atomic<unsigned int> requestQueueSizeLimit{0};
   std::atomic<unsigned int> sessionUpdateInterval{0};
-  ConfigurationModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule, std::shared_ptr<RequestModule> requestModule, std::shared_ptr<std::mutex> mutex)
-      : _configuration(config), _logger(logger), _requestBuilder(requestBuilder), _storageModule(storageModule), _requestModule(requestModule), _mutex(mutex) {}
+  ConfigurationModuleImpl(cly::CountlyDelegates *cly, std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule, std::shared_ptr<RequestModule> requestModule,
+                          std::shared_ptr<std::mutex> mutex)
+      : _configuration(config), _logger(logger), _requestBuilder(requestBuilder), _storageModule(storageModule), _requestModule(requestModule), _mutex(mutex), _cly(cly) {}
 
   ~ConfigurationModuleImpl() { _logger.reset(); }
 
@@ -119,14 +122,30 @@ public:
     return value;
   }
 
-  void populateConfigValues() {
-    trackingEnabled.store(getBool(KEY_TRACKING, true), std::memory_order_release);
-    networkingEnabled.store(getBool(KEY_NETWORKING, true), std::memory_order_release);
-    sessionTrackingEnabled.store(getBool(KEY_SESSION_TRACKING, true), std::memory_order_release);
-    viewTrackingEnabled.store(getBool(KEY_VIEW_TRACKING, true), std::memory_order_release);
-    locationTrackingEnabled.store(getBool(KEY_LOCATION_TRACKING, true), std::memory_order_release);
-    customEventTrackingEnabled.store(getBool(KEY_CUSTOM_EVENT_TRACKING, true), std::memory_order_release);
-    crashReportingEnabled.store(getBool(KEY_CRASH_REPORTING, true), std::memory_order_release);
+  void populateConfigValues(bool fromStorage = false) {
+    // get values here
+    bool trackingEnabledVal = trackingEnabled.load(std::memory_order_acquire);
+    bool networkingEnabledVal = networkingEnabled.load(std::memory_order_acquire);
+    bool sessionTrackingEnabledVal = sessionTrackingEnabled.load(std::memory_order_acquire);
+    bool viewTrackingEnabledVal = viewTrackingEnabled.load(std::memory_order_acquire);
+    bool locationTrackingEnabledVal = locationTrackingEnabled.load(std::memory_order_acquire);
+    bool customEventTrackingEnabledVal = customEventTrackingEnabled.load(std::memory_order_acquire);
+    bool crashReportingEnabledVal = crashReportingEnabled.load(std::memory_order_acquire);
+    bool locationTrackingCurrent = getBool(KEY_LOCATION_TRACKING, locationTrackingEnabledVal);
+
+    // area under is for behavior changes, did not creata new function for them cuz we have only on feature that should behave after
+    if (fromStorage == false && locationTrackingEnabledVal == true && locationTrackingCurrent == false) {
+      // disable location
+      _cly->RecordLocation("", "", "", "");
+    }
+
+    trackingEnabled.store(getBool(KEY_TRACKING, trackingEnabledVal), std::memory_order_release);
+    networkingEnabled.store(getBool(KEY_NETWORKING, networkingEnabledVal), std::memory_order_release);
+    sessionTrackingEnabled.store(getBool(KEY_SESSION_TRACKING, sessionTrackingEnabledVal), std::memory_order_release);
+    viewTrackingEnabled.store(getBool(KEY_VIEW_TRACKING, viewTrackingEnabledVal), std::memory_order_release);
+    locationTrackingEnabled.store(locationTrackingCurrent, std::memory_order_release);
+    customEventTrackingEnabled.store(getBool(KEY_CUSTOM_EVENT_TRACKING, customEventTrackingEnabledVal), std::memory_order_release);
+    crashReportingEnabled.store(getBool(KEY_CRASH_REPORTING, crashReportingEnabledVal), std::memory_order_release);
     eventQueueThreshold.store(getUInt(KEY_EVENT_QUEUE_SIZE, _configuration->eventQueueThreshold), std::memory_order_release);
     requestQueueSizeLimit.store(getUInt(KEY_REQ_QUEUE_SIZE, _configuration->requestQueueThreshold), std::memory_order_release);
     sessionUpdateInterval.store(getUInt(KEY_SESSION_UPDATE_INTERVAL, _configuration->sessionDuration), std::memory_order_release);
@@ -168,9 +187,9 @@ public:
   }
 };
 
-ConfigurationModule::ConfigurationModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule, std::shared_ptr<RequestModule> requestModule,
+ConfigurationModule::ConfigurationModule(cly::CountlyDelegates *cly, std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule, std::shared_ptr<RequestModule> requestModule,
                                          std::shared_ptr<std::mutex> mutex) {
-  impl.reset(new ConfigurationModuleImpl(config, logger, requestBuilder, storageModule, requestModule, mutex));
+  impl.reset(new ConfigurationModuleImpl(cly, config, logger, requestBuilder, storageModule, requestModule, mutex));
   impl->_logger->log(LogLevel::DEBUG, "[ConfigurationModule] Initialized");
 }
 
