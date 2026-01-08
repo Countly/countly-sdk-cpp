@@ -457,6 +457,8 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   views_module.reset(new cly::ViewsModule(this, logger));
 
   requestModule->setConfigurationProvider(configurationModule);
+  views_module->setConfigurationProvider(configurationModule);
+  //crash_module->setConfigurationProvider(configurationModule);
 
   bool result = true;
 #ifdef COUNTLY_USE_SQLITE

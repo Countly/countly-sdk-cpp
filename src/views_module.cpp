@@ -68,6 +68,7 @@ private:
 
 public:
   std::shared_ptr<cly::LoggerModule> _logger;
+  std::weak_ptr<ConfigurationProvider> _configProvider;
   ViewModuleImpl(cly::CountlyDelegates *cly, std::shared_ptr<cly::LoggerModule> logger) : _cly(cly), _logger(logger) {}
 
   ~ViewModuleImpl() { _logger.reset(); }
@@ -150,4 +151,7 @@ void ViewsModule::closeViewWithID(const std::string &viewId) {
 
   impl->_closeViewWithID(viewId);
 }
+
+void ViewsModule::setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider) { impl->_configProvider = std::move(provider); }
+
 } // namespace cly

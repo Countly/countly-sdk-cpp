@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 
+#include "countly/configuration_provider.hpp"
 #include "countly/constants.hpp"
 #include "countly/logger_module.hpp"
 
@@ -36,10 +37,13 @@ public:
    */
   std::string openView(const std::string &name, const std::map<std::string, std::string> &segmentation = {});
 
+
 private:
+  friend class Countly;
   void _recordView(std::string eventID);
   class ViewModuleImpl;
   std::unique_ptr<ViewModuleImpl> impl;
+  void setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider); // try injecting
 };
 } // namespace cly
 #endif
