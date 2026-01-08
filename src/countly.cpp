@@ -814,7 +814,7 @@ bool Countly::updateSession() {
     mutex->lock();
 
     // report session duration if it is greater than the configured session duration value
-    if (duration.count() >= configuration->sessionDuration) {
+    if (duration.count() >= configurationModule->getSessionUpdateInterval()) {
       log(LogLevel::DEBUG, "[Countly][updateSession] sending session update.");
       std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"session_duration", std::to_string(duration.count())}};
       requestModule->addRequestToQueue(data);
