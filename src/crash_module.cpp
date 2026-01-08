@@ -16,6 +16,7 @@ public:
   std::shared_ptr<LoggerModule> _logger;
   std::shared_ptr<RequestModule> _requestModule;
   std::shared_ptr<std::mutex> _mutex;
+  std::weak_ptr<ConfigurationProvider> _configProvider;
   CrashModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestModule> requestModule, std::shared_ptr<std::mutex> mutex) : _configuration(config), _logger(logger), _requestModule(requestModule), _mutex(mutex) {}
 
   // destructor to reset logger
@@ -93,5 +94,7 @@ void CrashModule::recordException(const std::string &title, const std::string &s
   // unlock mutex
   impl->_mutex->unlock();
 }
+
+void CrashModule::setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider) { impl->_configProvider = std::move(provider); }
 
 } // namespace cly
