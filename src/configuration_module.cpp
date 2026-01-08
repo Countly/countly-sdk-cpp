@@ -85,28 +85,6 @@ public:
                           std::shared_ptr<std::mutex> mutex)
       : _configuration(config), _logger(logger), _requestBuilder(requestBuilder), _storageModule(storageModule), _requestModule(requestModule), _mutex(mutex), _cly(cly) {}
 
-  ~ConfigurationModuleImpl() {
-    std::lock_guard<std::mutex> lock(configUpdateMutex);
-    stopConfigThread.store(true, std::memory_order_release);
-    configUpdateCv.notify_all();
-    if (configUpdateThread.joinable()) {
-      configUpdateThread.join();
-    }
-    sdk_behavior_settings.clear();
-
-    networkingEnabled.store(true, std::memory_order_relaxed);
-    trackingEnabled.store(true, std::memory_order_relaxed);
-    sessionTrackingEnabled.store(true, std::memory_order_relaxed);
-    viewTrackingEnabled.store(true, std::memory_order_relaxed);
-    locationTrackingEnabled.store(true, std::memory_order_relaxed);
-    customEventTrackingEnabled.store(true, std::memory_order_relaxed);
-    crashReportingEnabled.store(true, std::memory_order_relaxed);
-    eventQueueThreshold.store(0, std::memory_order_relaxed);
-    requestQueueSizeLimit.store(0, std::memory_order_relaxed);
-    sessionUpdateInterval.store(0, std::memory_order_relaxed);
-    _logger.reset();
-  }
-
   void _fetchConfigFromServerHTTP(const std::map<std::string, std::string> &data) {
     HTTPResponse response = _requestModule->sendHTTP("/o/sdk", _requestBuilder->serializeData(data));
     if (response.success && response.data.is_object() && response.data.contains(KEY_CONFIG)) {
@@ -117,61 +95,6 @@ public:
     } else {
       _logger->log(LogLevel::WARNING, cly::utils::format_string("[ConfigurationModule] _fetchConfigFromServerHTTP, failed to fetch response_success: [%s]", response.success ? "true" : "false"));
     }
-  }
-
-  void _updateConfigPeriodically(const nlohmann::json &session_params) {
-    std::unique_lock<std::mutex> lock(configUpdateMutex);
-
-    while (!stopConfigThread.load(std::memory_order_acquire)) {
-
-      unsigned int interval = getUInt(KEY_SERVER_CONFIG_UPDATE_INTERVAL, 4);
-
-      if (interval < 1) {
-        interval = 4;
-      }
-
-      bool stopped = configUpdateCv.wait_for(lock, std::chrono::hours(interval), [&] { return stopConfigThread.load(std::memory_order_acquire); });
-      if (stopped) {
-        return;
-      }
-
-      lock.unlock();
-
-      _mutex->lock();
-      std::map<std::string, std::string> data = {{"method", "sc"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
-      _mutex->unlock();
-      _fetchConfigFromServerHTTP(data);
-
-      lock.lock();
-    }
-  }
-
-  bool getBool(const char *key, bool defaultValue) const {
-    if (!sdk_behavior_settings.is_object()) {
-      return defaultValue;
-    }
-
-    auto it = sdk_behavior_settings.find(key);
-    if (it == sdk_behavior_settings.end() || !it->is_boolean()) {
-      return defaultValue;
-    }
-
-    bool value = it->get<bool>();
-    return value;
-  }
-
-  unsigned int getUInt(const char *key, unsigned int defaultValue) const {
-    if (!sdk_behavior_settings.is_object()) {
-      return defaultValue;
-    }
-
-    auto it = sdk_behavior_settings.find(key);
-    if (it == sdk_behavior_settings.end() || !it->is_number_unsigned()) {
-      return defaultValue;
-    }
-
-    unsigned int value = it->get<unsigned int>();
-    return value;
   }
 
   void populateConfigValues(bool fromStorage = false) {
@@ -237,6 +160,88 @@ public:
       ++it;
     }
   }
+
+  void _updateConfigPeriodically(const nlohmann::json &session_params) {
+    std::unique_lock<std::mutex> lock(configUpdateMutex);
+
+    while (!stopConfigThread.load(std::memory_order_acquire)) {
+
+      unsigned int interval = getUInt(KEY_SERVER_CONFIG_UPDATE_INTERVAL, 4);
+
+      if (interval < 1) {
+        interval = 4;
+      }
+
+      bool stopped = configUpdateCv.wait_for(lock, std::chrono::hours(interval), [&] { return stopConfigThread.load(std::memory_order_acquire); });
+      if (stopped) {
+        return;
+      }
+
+      lock.unlock();
+
+      _mutex->lock();
+      std::map<std::string, std::string> data = {{"method", "sc"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
+      _mutex->unlock();
+      _fetchConfigFromServerHTTP(data);
+
+      lock.lock();
+    }
+  }
+
+  void _stopTimer() {
+    _logger->log(LogLevel::WARNING, "[ConfigurationModule] stopTimer, stopping server config update timer thread.");
+    stopConfigThread.store(true, std::memory_order_release);
+    configUpdateCv.notify_all();
+
+    if (configUpdateThread.joinable()) {
+      configUpdateThread.join();
+    }
+  }
+
+  ~ConfigurationModuleImpl() {
+    _stopTimer();
+    sdk_behavior_settings.clear();
+
+    networkingEnabled.store(true, std::memory_order_relaxed);
+    trackingEnabled.store(true, std::memory_order_relaxed);
+    sessionTrackingEnabled.store(true, std::memory_order_relaxed);
+    viewTrackingEnabled.store(true, std::memory_order_relaxed);
+    locationTrackingEnabled.store(true, std::memory_order_relaxed);
+    customEventTrackingEnabled.store(true, std::memory_order_relaxed);
+    crashReportingEnabled.store(true, std::memory_order_relaxed);
+    eventQueueThreshold.store(0, std::memory_order_relaxed);
+    requestQueueSizeLimit.store(0, std::memory_order_relaxed);
+    sessionUpdateInterval.store(0, std::memory_order_relaxed);
+    _logger.reset();
+  }
+
+  bool getBool(const char *key, bool defaultValue) const {
+    if (!sdk_behavior_settings.is_object()) {
+      return defaultValue;
+    }
+
+    auto it = sdk_behavior_settings.find(key);
+    if (it == sdk_behavior_settings.end() || !it->is_boolean()) {
+      return defaultValue;
+    }
+
+    bool value = it->get<bool>();
+    return value;
+  }
+
+  unsigned int getUInt(const char *key, unsigned int defaultValue) const {
+    if (!sdk_behavior_settings.is_object()) {
+      return defaultValue;
+    }
+
+    auto it = sdk_behavior_settings.find(key);
+    if (it == sdk_behavior_settings.end() || !it->is_number_unsigned()) {
+      return defaultValue;
+    }
+
+    unsigned int value = it->get<unsigned int>();
+    return value;
+  }
 };
 
 ConfigurationModule::ConfigurationModule(cly::CountlyDelegates *cly, std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule, std::shared_ptr<RequestModule> requestModule,
@@ -265,15 +270,7 @@ void ConfigurationModule::startServerConfigUpdateTimer(nlohmann::json session_pa
   impl->configUpdateThread = std::thread(&ConfigurationModule::ConfigurationModuleImpl::_updateConfigPeriodically, impl.get(), session_params);
 }
 
-void ConfigurationModule::stopTimer() {
-  impl->_logger->log(LogLevel::WARNING, "[ConfigurationModule] stopTimer, stopping server config update timer thread.");
-  impl->stopConfigThread.store(true, std::memory_order_release);
-  impl->configUpdateCv.notify_all();
-
-  if (impl->configUpdateThread.joinable()) {
-    impl->configUpdateThread.join();
-  }
-}
+void ConfigurationModule::stopTimer() { impl->_stopTimer(); }
 
 bool ConfigurationModule::isTrackingEnabled() const { return impl->trackingEnabled.load(std::memory_order_acquire); }
 
