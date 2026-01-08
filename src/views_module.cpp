@@ -74,6 +74,12 @@ public:
   ~ViewModuleImpl() { _logger.reset(); }
 
   std::string _openView(const std::string &name, const std::map<std::string, std::string> &segmentation) {
+    if (std::shared_ptr<ConfigurationProvider> config = _configProvider.lock()) {
+      if (config->isViewTrackingEnabled() == false) {
+        _logger->log(LogLevel::DEBUG, "[ViewsModule] _openView: View tracking is disabled. Not opening view.");
+        return "";
+      }
+    }
     ViewModuleImpl::ViewInfo *v = new ViewModuleImpl::ViewInfo();
     v->name = name;
     v->viewId = cly::utils::generateEventID();
@@ -88,6 +94,12 @@ public:
   }
 
   void _closeViewWithName(const std::string &name) {
+    if (std::shared_ptr<ConfigurationProvider> config = _configProvider.lock()) {
+      if (config->isViewTrackingEnabled() == false) {
+        _logger->log(LogLevel::DEBUG, "[ViewsModule] _closeViewWithName: View tracking is disabled. Not closing view.");
+        return;
+      }
+    }
     std::shared_ptr<ViewModuleImpl::ViewInfo> v = findViewByName(name);
     if (v == nullptr) {
       _logger->log(cly::LogLevel::WARNING, cly::utils::format_string("[ViewModuleImpl] _closeViewWithName:  Couldn't found "
@@ -99,6 +111,12 @@ public:
   }
 
   void _closeViewWithID(const std::string &viewId) {
+    if (std::shared_ptr<ConfigurationProvider> config = _configProvider.lock()) {
+      if (config->isViewTrackingEnabled() == false) {
+        _logger->log(LogLevel::DEBUG, "[ViewsModule] _closeViewWithID: View tracking is disabled. Not closing view.");
+        return;
+      }
+    }
 
     if (_viewsStartTime.find(viewId) == _viewsStartTime.end()) {
       _logger->log(cly::LogLevel::WARNING, cly::utils::format_string("[ViewModuleImpl] _closeViewWithID:  Couldn't found "
