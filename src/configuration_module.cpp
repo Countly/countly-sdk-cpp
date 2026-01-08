@@ -191,7 +191,7 @@ bool ConfigurationModule::isNetworkingEnabled() const { return impl->networkingE
 
 bool ConfigurationModule::isLocationTrackingEnabled() { return impl->locationTrackingEnabled.load(std::memory_order_acquire); }
 
-bool ConfigurationModule::isViewTrackingEnabled() { return impl->viewTrackingEnabled.load(std::memory_order_acquire); }
+bool ConfigurationModule::isViewTrackingEnabled() const { return impl->viewTrackingEnabled.load(std::memory_order_acquire); }
 
 bool ConfigurationModule::isSessionTrackingEnabled() { return impl->sessionTrackingEnabled.load(std::memory_order_acquire); }
 

@@ -20,7 +20,7 @@ public:
   bool isNetworkingEnabled() const override;
 
   bool isLocationTrackingEnabled();
-  bool isViewTrackingEnabled();
+  bool isViewTrackingEnabled() const override;
   bool isSessionTrackingEnabled();
   bool isCustomEventTrackingEnabled();
   bool isCrashReportingEnabled() const override;
