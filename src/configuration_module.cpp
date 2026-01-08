@@ -197,7 +197,7 @@ bool ConfigurationModule::isSessionTrackingEnabled() { return impl->sessionTrack
 
 bool ConfigurationModule::isCustomEventTrackingEnabled() { return impl->customEventTrackingEnabled.load(std::memory_order_acquire); }
 
-bool ConfigurationModule::isCrashReportingEnabled() { return impl->crashReportingEnabled.load(std::memory_order_acquire); }
+bool ConfigurationModule::isCrashReportingEnabled() const { return impl->crashReportingEnabled.load(std::memory_order_acquire); }
 
 unsigned int ConfigurationModule::getRequestQueueSizeLimit() const { return impl->requestQueueSizeLimit.load(std::memory_order_acquire); }
 

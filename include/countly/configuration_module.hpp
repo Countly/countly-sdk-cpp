@@ -1,15 +1,15 @@
 #ifndef CONFIGURATION_MODULE_HPP_
 #define CONFIGURATION_MODULE_HPP_
 
+#include "countly/configuration_provider.hpp"
 #include "countly/countly_configuration.hpp"
 #include "countly/logger_module.hpp"
 #include "countly/request_builder.hpp"
-#include "countly/storage_module_base.hpp"
-#include "countly/configuration_provider.hpp"
 #include "countly/request_module.hpp"
+#include "countly/storage_module_base.hpp"
 
 namespace cly {
-class ConfigurationModule : public ConfigurationProvider{
+class ConfigurationModule : public ConfigurationProvider {
 
 public:
   ~ConfigurationModule();
@@ -23,7 +23,7 @@ public:
   bool isViewTrackingEnabled();
   bool isSessionTrackingEnabled();
   bool isCustomEventTrackingEnabled();
-  bool isCrashReportingEnabled();
+  bool isCrashReportingEnabled() const override;
 
   unsigned int getRequestQueueSizeLimit() const override;
   unsigned int getEventQueueSizeLimit();
