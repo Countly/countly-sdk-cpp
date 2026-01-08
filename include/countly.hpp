@@ -259,6 +259,11 @@ public:
     addEvent(event);
   }
 
+  void RecordLocation(const std::string &countryCode, const std::string &city, const std::string &gpsCoordinates, const std::string &ipAddress) override {
+    setLocation(countryCode, city, gpsCoordinates, ipAddress);
+  };
+
+
   /* Provide 'updateInterval' in seconds. */
   inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) {
     if (is_sdk_initialized) {
