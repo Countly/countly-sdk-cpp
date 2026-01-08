@@ -252,6 +252,11 @@ void Countly::setLocation(double lattitude, double longitude) {
 
 void Countly::setLocation(const std::string &countryCode, const std::string &city, const std::string &gpsCoordinates, const std::string &ipAddress) {
   mutex->lock();
+  if (configurationModule->isLocationTrackingEnabled() == false) {
+    log(LogLevel::ERROR, "[Countly][setLocation] Location tracking is disabled in server configuration, can not set location.");
+    mutex->unlock();
+    return;
+  }
   log(LogLevel::INFO, "[Countly][setLocation] SetLocation : countryCode = " + countryCode + ", city = " + city + ", gpsCoordinates = " + gpsCoordinates + ", ipAddress = " + ipAddress);
 
   if ((!countryCode.empty() && city.empty()) || (!city.empty() && countryCode.empty())) {
@@ -452,7 +457,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 
   requestBuilder.reset(new RequestBuilder(configuration, logger));
   requestModule.reset(new RequestModule(configuration, logger, requestBuilder, storageModule));
-  configurationModule.reset(new cly::ConfigurationModule(configuration, logger, requestBuilder, storageModule, requestModule, mutex));
+  configurationModule.reset(new cly::ConfigurationModule(this, configuration, logger, requestBuilder, storageModule, requestModule, mutex));
   crash_module.reset(new cly::CrashModule(configuration, logger, requestModule, mutex));
   views_module.reset(new cly::ViewsModule(this, logger));
 
