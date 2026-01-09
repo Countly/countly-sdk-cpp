@@ -24,11 +24,11 @@
 #include "countly/logger_module.hpp"
 #include "countly/storage_module_base.hpp"
 #include "countly/views_module.hpp"
+#include <countly/configuration_module.hpp>
+#include <countly/configuration_provider.hpp>
 #include <countly/crash_module.hpp>
 #include <countly/request_builder.hpp>
 #include <countly/request_module.hpp>
-#include <countly/configuration_module.hpp>
-#include <countly/configuration_provider.hpp>
 
 namespace cly {
 class Countly : public cly::CountlyDelegates {
@@ -259,10 +259,7 @@ public:
     addEvent(event);
   }
 
-  void RecordLocation(const std::string &countryCode, const std::string &city, const std::string &gpsCoordinates, const std::string &ipAddress) override {
-    setLocation(countryCode, city, gpsCoordinates, ipAddress);
-  };
-
+  void RecordLocation(const std::string &countryCode, const std::string &city, const std::string &gpsCoordinates, const std::string &ipAddress) override { setLocation(countryCode, city, gpsCoordinates, ipAddress); };
 
   /* Provide 'updateInterval' in seconds. */
   inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) {
@@ -272,6 +269,35 @@ public:
     }
 
     configuration->sessionDuration = updateInterval;
+  }
+
+  /**
+   * Disable SDK behavior settings updates that SDK performs periodically from the server.
+   */
+  void disableSDKBehaviorSettingsUpdates() {
+    if (is_sdk_initialized) {
+      log(LogLevel::WARNING, "[Countly] disableSDKBehaviorSettingsUpdates, You can not disable SDK behavior settings updates after SDK initialization.");
+      return;
+    }
+
+    configuration->sdkBehaviorSettingsUpdatesDisabled = true;
+  }
+
+  /**
+   * Provide SDK behavior settings in JSON format string.
+   */
+  void setSDKBehaviorSettings(std::string &settings_json) {
+    if (is_sdk_initialized) {
+      log(LogLevel::WARNING, "[Countly] setSDKBehaviorSettings, You can not provide SDK behavior settings after SDK initialization.");
+      return;
+    }
+
+    if(settings_json.empty()) {
+      log(LogLevel::WARNING, "[Countly] setSDKBehaviorSettings, Provided SDK behavior settings is empty.");
+      return;
+    }
+
+    configuration->sdkBehaviorSettings = settings_json;
   }
 
 #ifdef COUNTLY_BUILD_TESTS
