@@ -207,6 +207,11 @@ public:
   }
 
   void _stopTimer() {
+    if (_configuration->sdkBehaviorSettingsUpdatesDisabled) {
+      _logger->log(LogLevel::INFO, "[ConfigurationModule] _stopTimer, SDK behavior settings updates are disabled.");
+      return;
+    }
+
     _logger->log(LogLevel::WARNING, "[ConfigurationModule] stopTimer, stopping server config update timer thread.");
     stopConfigThread.store(true, std::memory_order_release);
     configUpdateCv.notify_all();
@@ -214,6 +219,20 @@ public:
     if (configUpdateThread.joinable()) {
       configUpdateThread.join();
     }
+  }
+
+  void _startTimer(nlohmann::json session_params) {
+    if (_configuration->sdkBehaviorSettingsUpdatesDisabled) {
+      _logger->log(LogLevel::INFO, "[ConfigurationModule] _startTimer, SDK behavior settings updates are disabled.");
+      return;
+    }
+
+    if (configUpdateThread.joinable()) {
+      return;
+    }
+
+    stopConfigThread.store(false, std::memory_order_release);
+    configUpdateThread = std::thread(&ConfigurationModule::ConfigurationModuleImpl::_updateConfigPeriodically, this, session_params);
   }
 
   ~ConfigurationModuleImpl() {
@@ -285,14 +304,7 @@ void ConfigurationModule::fetchConfigFromStorage() {
   impl->_mutex->unlock();
 }
 
-void ConfigurationModule::startServerConfigUpdateTimer(nlohmann::json session_params) {
-  if (impl->configUpdateThread.joinable()) {
-    return;
-  }
-
-  impl->stopConfigThread.store(false, std::memory_order_release);
-  impl->configUpdateThread = std::thread(&ConfigurationModule::ConfigurationModuleImpl::_updateConfigPeriodically, impl.get(), session_params);
-}
+void ConfigurationModule::startServerConfigUpdateTimer(nlohmann::json session_params) { impl->_startTimer(session_params); }
 
 void ConfigurationModule::stopTimer() { impl->_stopTimer(); }
 
