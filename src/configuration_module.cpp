@@ -81,6 +81,7 @@ public:
   std::atomic<unsigned int> eventQueueThreshold{0};
   std::atomic<unsigned int> requestQueueSizeLimit{0};
   std::atomic<unsigned int> sessionUpdateInterval{0};
+  std::atomic<unsigned int> serverConfigUpdateInterval{4};
   ConfigurationModuleImpl(cly::CountlyDelegates *cly, std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule, std::shared_ptr<RequestModule> requestModule,
                           std::shared_ptr<std::mutex> mutex)
       : _configuration(config), _logger(logger), _requestBuilder(requestBuilder), _storageModule(storageModule), _requestModule(requestModule), _mutex(mutex), _cly(cly) {}
@@ -92,7 +93,7 @@ public:
       sdk_behavior_settings = response.data[KEY_CONFIG];
       _storageModule->storeSDKBehaviorSettings(sdk_behavior_settings.dump());
       _logger->log(LogLevel::INFO, "[ConfigurationModule] _fetchConfigFromServerHTTP, SDK config:\n" + sdk_behavior_settings.dump(2));
-      populateConfigValues();
+      _onSBSChanged(_populateConfigValues());
     } else {
       _logger->log(LogLevel::WARNING, cly::utils::format_string("[ConfigurationModule] _fetchConfigFromServerHTTP, failed to fetch response_success: [%s]", response.success ? "true" : "false"));
     }
@@ -102,25 +103,40 @@ public:
     std::string sbs_string = _storageModule->getSDKBehaviorSettings();
     if (!sbs_string.empty()) {
       _processSDKBehaviorSettings(sbs_string);
+      _logger->log(LogLevel::INFO, "[ConfigurationModule] _initializeSBSFromStorage, initialized SDK behavior settings from storage.");
     } else if (!_configuration->sdkBehaviorSettings.empty()) {
-      _processSDKBehaviorSettings(_configuration->sdkBehaviorSettings);
+      _onSBSChanged(_processSDKBehaviorSettings(_configuration->sdkBehaviorSettings));
+      _logger->log(LogLevel::INFO, "[ConfigurationModule] _initializeSBSFromStorage, initialized SDK behavior settings from configuration.");
     }
   }
 
-  void _processSDKBehaviorSettings(const std::string &settings) {
+  nlohmann::json _processSDKBehaviorSettings(const std::string &settings) {
     try {
       nlohmann::json sbs_json = nlohmann::json::parse(settings);
       sanitizeConfig(sbs_json);
       sdk_behavior_settings = sbs_json;
       _logger->log(LogLevel::INFO, "[ConfigurationModule] _processSDKBehaviorSettings, SDK config:\n" + sdk_behavior_settings.dump(2));
-      populateConfigValues();
+      return _populateConfigValues();
     } catch (const nlohmann::json::parse_error &e) {
       _logger->log(LogLevel::ERROR, "[ConfigurationModule] _processSDKBehaviorSettings, Failed to parse SDK behavior settings: " + std::string(e.what()));
+      return nlohmann::json{};
     }
   }
 
-  void populateConfigValues(bool fromStorage = false) { // from storage means, we do not send disable location request, send it after fetching from server
-    // get values here
+  void _onSBSChanged(const nlohmann::json &changedSettings, const nlohmann::json &session_params = nullptr) {
+    if (_configuration->sdkBehaviorSettingsUpdatesDisabled != true && changedSettings.contains(KEY_SERVER_CONFIG_UPDATE_INTERVAL)) {
+      // restart timer with new interval
+      _stopTimer();
+      _startTimer(session_params);
+    }
+
+    if (changedSettings.contains(KEY_LOCATION_TRACKING) && changedSettings[KEY_LOCATION_TRACKING] == false) {
+      // disable location
+      _cly->RecordLocation("", "", "", "");
+    }
+  }
+
+  nlohmann::json _populateConfigValues() {
     bool trackingEnabledVal = trackingEnabled.load(std::memory_order_acquire);
     bool networkingEnabledVal = networkingEnabled.load(std::memory_order_acquire);
     bool sessionTrackingEnabledVal = sessionTrackingEnabled.load(std::memory_order_acquire);
@@ -128,13 +144,10 @@ public:
     bool locationTrackingEnabledVal = locationTrackingEnabled.load(std::memory_order_acquire);
     bool customEventTrackingEnabledVal = customEventTrackingEnabled.load(std::memory_order_acquire);
     bool crashReportingEnabledVal = crashReportingEnabled.load(std::memory_order_acquire);
-    bool locationTrackingCurrent = getBool(KEY_LOCATION_TRACKING, locationTrackingEnabledVal);
+    int unsigned serverConfigUpdateIntervalVal = serverConfigUpdateInterval.load(std::memory_order_acquire);
 
-    // area under is for behavior changes, did not creata new function for them cuz we have only on feature that should behave after
-    if (fromStorage == false && locationTrackingEnabledVal == true && locationTrackingCurrent == false) {
-      // disable location
-      _cly->RecordLocation("", "", "", "");
-    }
+    bool locationTrackingCurrent = getBool(KEY_LOCATION_TRACKING, locationTrackingEnabledVal);
+    int unsigned serverConfigUpdateIntervalCurrent = getUInt(KEY_SERVER_CONFIG_UPDATE_INTERVAL, serverConfigUpdateIntervalVal);
 
     trackingEnabled.store(getBool(KEY_TRACKING, trackingEnabledVal), std::memory_order_release);
     networkingEnabled.store(getBool(KEY_NETWORKING, networkingEnabledVal), std::memory_order_release);
@@ -146,6 +159,16 @@ public:
     eventQueueThreshold.store(getUInt(KEY_EVENT_QUEUE_SIZE, _configuration->eventQueueThreshold), std::memory_order_release);
     requestQueueSizeLimit.store(getUInt(KEY_REQ_QUEUE_SIZE, _configuration->requestQueueThreshold), std::memory_order_release);
     sessionUpdateInterval.store(getUInt(KEY_SESSION_UPDATE_INTERVAL, _configuration->sessionDuration), std::memory_order_release);
+    serverConfigUpdateInterval.store(getUInt(KEY_SERVER_CONFIG_UPDATE_INTERVAL, 4), std::memory_order_release);
+
+    nlohmann::json changedSettings;
+    if (locationTrackingCurrent != locationTrackingEnabledVal) {
+      changedSettings[KEY_LOCATION_TRACKING] = locationTrackingCurrent;
+    }
+    if (serverConfigUpdateIntervalCurrent != serverConfigUpdateIntervalVal) {
+      changedSettings[KEY_SERVER_CONFIG_UPDATE_INTERVAL] = serverConfigUpdateIntervalCurrent;
+    }
+    return changedSettings;
   }
 
   void sanitizeConfig(nlohmann::json &c) {
