@@ -86,14 +86,14 @@ public:
                           std::shared_ptr<std::mutex> mutex)
       : _configuration(config), _logger(logger), _requestBuilder(requestBuilder), _storageModule(storageModule), _requestModule(requestModule), _mutex(mutex), _cly(cly) {}
 
-  void _fetchConfigFromServerHTTP(const std::map<std::string, std::string> &data) {
+  void _fetchConfigFromServerHTTP(const std::map<std::string, std::string> &data, const nlohmann::json &session_params) {
     HTTPResponse response = _requestModule->sendHTTP("/o/sdk", _requestBuilder->serializeData(data));
     if (response.success && response.data.is_object() && response.data.contains(KEY_CONFIG)) {
       sanitizeConfig(response.data[KEY_CONFIG]);
       sdk_behavior_settings = response.data[KEY_CONFIG];
       _storageModule->storeSDKBehaviorSettings(sdk_behavior_settings.dump());
       _logger->log(LogLevel::INFO, "[ConfigurationModule] _fetchConfigFromServerHTTP, SDK config:\n" + sdk_behavior_settings.dump(2));
-      _onSBSChanged(_populateConfigValues());
+      _onSBSChanged(_populateConfigValues(), session_params);
     } else {
       _logger->log(LogLevel::WARNING, cly::utils::format_string("[ConfigurationModule] _fetchConfigFromServerHTTP, failed to fetch response_success: [%s]", response.success ? "true" : "false"));
     }
@@ -227,7 +227,7 @@ public:
       _mutex->lock();
       std::map<std::string, std::string> data = {{"method", "sc"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
       _mutex->unlock();
-      _fetchConfigFromServerHTTP(data);
+      _fetchConfigFromServerHTTP(data, session_params);
 
       lock.lock();
     }
@@ -321,7 +321,7 @@ void ConfigurationModule::fetchConfigFromServer(nlohmann::json session_params) {
   std::map<std::string, std::string> data = {{"method", "sc"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
   impl->_mutex->unlock();
   // Fetch SBS asynchronously
-  std::thread _thread(&ConfigurationModule::ConfigurationModuleImpl::_fetchConfigFromServerHTTP, impl.get(), data);
+  std::thread _thread(&ConfigurationModule::ConfigurationModuleImpl::_fetchConfigFromServerHTTP, impl.get(), data, session_params);
   _thread.detach();
 }
 
