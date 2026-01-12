@@ -101,21 +101,25 @@ public:
   void _initializeSBSFromStorage() {
     std::string sbs_string = _storageModule->getSDKBehaviorSettings();
     if (!sbs_string.empty()) {
-      try {
-        nlohmann::json sbs_json = nlohmann::json::parse(sbs_string);
-        sanitizeConfig(sbs_json);
-        sdk_behavior_settings = sbs_json;
-        _logger->log(LogLevel::INFO, "[ConfigurationModule] _initializeSBSFromStorage, SDK config from storage:\n" + sdk_behavior_settings.dump(2));
-        populateConfigValues(true);
-      } catch (const nlohmann::json::parse_error &e) {
-        _logger->log(LogLevel::ERROR, "[ConfigurationModule] _initializeSBSFromStorage, Failed to parse SDK behavior settings from storage: " + std::string(e.what()));
-      }
-    } else { // use provided config _configuration->providedSBS
-      _logger->log(LogLevel::INFO, "[ConfigurationModule] _initializeSBSFromStorage, No SDK behavior settings found in storage.");
+      _processSDKBehaviorSettings(sbs_string);
+    } else if (!_configuration->sdkBehaviorSettings.empty()) {
+      _processSDKBehaviorSettings(_configuration->sdkBehaviorSettings);
     }
   }
 
-  void populateConfigValues(bool fromStorage = false) {
+  void _processSDKBehaviorSettings(const std::string &settings) {
+    try {
+      nlohmann::json sbs_json = nlohmann::json::parse(settings);
+      sanitizeConfig(sbs_json);
+      sdk_behavior_settings = sbs_json;
+      _logger->log(LogLevel::INFO, "[ConfigurationModule] _processSDKBehaviorSettings, SDK config:\n" + sdk_behavior_settings.dump(2));
+      populateConfigValues();
+    } catch (const nlohmann::json::parse_error &e) {
+      _logger->log(LogLevel::ERROR, "[ConfigurationModule] _processSDKBehaviorSettings, Failed to parse SDK behavior settings: " + std::string(e.what()));
+    }
+  }
+
+  void populateConfigValues(bool fromStorage = false) { // from storage means, we do not send disable location request, send it after fetching from server
     // get values here
     bool trackingEnabledVal = trackingEnabled.load(std::memory_order_acquire);
     bool networkingEnabledVal = networkingEnabled.load(std::memory_order_acquire);
