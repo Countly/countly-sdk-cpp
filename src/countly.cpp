@@ -1286,6 +1286,11 @@ void Countly::enableRemoteConfig() {
 }
 
 void Countly::_fetchRemoteConfig(const std::map<std::string, std::string> &data) {
+  if (configurationModule->isNetworkingEnabled() == false) {
+    log(LogLevel::ERROR, "[Countly] _fetchRemoteConfig, Error fetching remote config, networking is disabled in SBS");
+    return;
+  }
+
   HTTPResponse response = requestModule->sendHTTP("/o/sdk", requestBuilder->serializeData(data));
   mutex->lock();
   if (response.success) {
@@ -1319,6 +1324,11 @@ nlohmann::json Countly::getRemoteConfigValue(const std::string &key) {
 }
 
 void Countly::_updateRemoteConfigWithSpecificValues(const std::map<std::string, std::string> &data) {
+  if (configurationModule->isNetworkingEnabled() == false) {
+    log(LogLevel::ERROR, "[Countly] _updateRemoteConfigWithSpecificValues, Error fetching remote config, networking is disabled in SBS");
+    return;
+  }
+  
   HTTPResponse response = requestModule->sendHTTP("/o/sdk", requestBuilder->serializeData(data));
   mutex->lock();
   if (response.success) {
