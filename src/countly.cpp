@@ -925,7 +925,7 @@ void Countly::sendEventsToRQ(const nlohmann::json &events) {
 
 bool Countly::endSession() {
   log(LogLevel::INFO, "[Countly][endSession]");
-  if (configurationModule->isSessionTrackingEnabled() == false) {
+  if (is_being_disposed == false && configurationModule->isSessionTrackingEnabled() == false) {
     log(LogLevel::ERROR, "[Countly][endSession] Session tracking is disabled in server configuration, can not end session.");
     mutex->unlock();
     return false;
