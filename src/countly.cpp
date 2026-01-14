@@ -560,6 +560,10 @@ void Countly::addEvent(const cly::Event &event) {
 void Countly::checkAndSendEventToRQ() {
   nlohmann::json events = nlohmann::json::array();
   int queueSize = checkEQSize();
+  // if queue size could not be get return early
+  if (queueSize < 0) {
+    return;
+  }
   mutex->lock();
 #ifdef COUNTLY_USE_SQLITE
   if (queueSize >= configurationModule->getEventQueueSizeLimit()) {
