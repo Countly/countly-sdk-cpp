@@ -31,6 +31,7 @@ Countly::~Countly() {
   stop();
   crash_module.reset();
   views_module.reset();
+  configurationModule.reset();
   logger.reset();
 }
 
@@ -512,7 +513,6 @@ void Countly::startOnCloud(const std::string &app_key) {
 }
 
 void Countly::stop() {
-  configurationModule->stopTimer();
   _deleteThread();
   if (configuration->manualSessionControl == false) {
     endSession();
