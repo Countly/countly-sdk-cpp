@@ -54,7 +54,6 @@ static constexpr const char *KEY_BOM_DURATION = "bom_d";
 
 class ConfigurationModule::ConfigurationModuleImpl {
 private:
-  std::shared_ptr<CountlyConfiguration> _configuration;
   std::shared_ptr<RequestBuilder> _requestBuilder;
   std::shared_ptr<StorageModuleBase> _storageModule;
   std::shared_ptr<RequestModule> _requestModule;
@@ -64,6 +63,7 @@ private:
 public:
   std::shared_ptr<LoggerModule> _logger;
   std::shared_ptr<std::mutex> _mutex;
+  std::shared_ptr<CountlyConfiguration> _configuration;
 
   std::atomic<bool> stopConfigThread{false};
   std::thread configUpdateThread;
@@ -112,7 +112,6 @@ public:
   }
 
   void _initializeConfigParameters() {
-    eventQueueThreshold.store(_configuration->eventQueueThreshold, std::memory_order_release);
     requestQueueSizeLimit.store(_configuration->requestQueueThreshold, std::memory_order_release);
     sessionUpdateInterval.store(_configuration->sessionDuration, std::memory_order_release);
   }
@@ -163,7 +162,7 @@ public:
     locationTrackingEnabled.store(locationTrackingCurrent, std::memory_order_release);
     customEventTrackingEnabled.store(getBool(KEY_CUSTOM_EVENT_TRACKING, customEventTrackingEnabledVal), std::memory_order_release);
     crashReportingEnabled.store(getBool(KEY_CRASH_REPORTING, crashReportingEnabledVal), std::memory_order_release);
-    eventQueueThreshold.store(getUInt(KEY_EVENT_QUEUE_SIZE, _configuration->eventQueueThreshold), std::memory_order_release);
+    eventQueueThreshold.store(getUInt(KEY_EVENT_QUEUE_SIZE, 0), std::memory_order_release);
     requestQueueSizeLimit.store(getUInt(KEY_REQ_QUEUE_SIZE, _configuration->requestQueueThreshold), std::memory_order_release);
     sessionUpdateInterval.store(getUInt(KEY_SESSION_UPDATE_INTERVAL, _configuration->sessionDuration), std::memory_order_release);
     serverConfigUpdateInterval.store(getUInt(KEY_SERVER_CONFIG_UPDATE_INTERVAL, 4), std::memory_order_release);
@@ -351,7 +350,12 @@ bool ConfigurationModule::isCrashReportingEnabled() const { return impl->crashRe
 
 unsigned int ConfigurationModule::getRequestQueueSizeLimit() const { return impl->requestQueueSizeLimit.load(std::memory_order_acquire); }
 
-unsigned int ConfigurationModule::getEventQueueSizeLimit() { return impl->eventQueueThreshold.load(std::memory_order_acquire); }
+unsigned int ConfigurationModule::getEventQueueSizeLimit() {
+    // this is because we permit EQ size to change after initialization
+    unsigned int value = impl->eventQueueThreshold.load(std::memory_order_acquire);
+    return value == 0 ? impl->_configuration->eventQueueThreshold : value;
+
+}
 
 unsigned int ConfigurationModule::getSessionUpdateInterval() { return impl->sessionUpdateInterval.load(std::memory_order_acquire); }
 // namespace cly
