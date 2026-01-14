@@ -100,6 +100,7 @@ public:
   }
 
   void _initializeSBSFromStorage() {
+    _initializeConfigParameters();
     std::string sbs_string = _storageModule->getSDKBehaviorSettings();
     if (!sbs_string.empty()) {
       _processSDKBehaviorSettings(sbs_string);
@@ -108,6 +109,12 @@ public:
       _onSBSChanged(_processSDKBehaviorSettings(_configuration->sdkBehaviorSettings));
       _logger->log(LogLevel::INFO, "[ConfigurationModule] _initializeSBSFromStorage, initialized SDK behavior settings from configuration.");
     }
+  }
+
+  void _initializeConfigParameters() {
+    eventQueueThreshold.store(_configuration->eventQueueThreshold, std::memory_order_release);
+    requestQueueSizeLimit.store(_configuration->requestQueueThreshold, std::memory_order_release);
+    sessionUpdateInterval.store(_configuration->sessionDuration, std::memory_order_release);
   }
 
   nlohmann::json _processSDKBehaviorSettings(const std::string &settings) {
@@ -234,11 +241,6 @@ public:
   }
 
   void _stopTimer() {
-    if (_configuration->sdkBehaviorSettingsUpdatesDisabled) {
-      _logger->log(LogLevel::INFO, "[ConfigurationModule] _stopTimer, SDK behavior settings updates are disabled.");
-      return;
-    }
-
     _logger->log(LogLevel::WARNING, "[ConfigurationModule] stopTimer, stopping server config update timer thread.");
     stopConfigThread.store(true, std::memory_order_release);
     configUpdateCv.notify_all();
@@ -332,8 +334,6 @@ void ConfigurationModule::fetchConfigFromStorage() {
 }
 
 void ConfigurationModule::startServerConfigUpdateTimer(nlohmann::json session_params) { impl->_startTimer(session_params); }
-
-void ConfigurationModule::stopTimer() { impl->_stopTimer(); }
 
 bool ConfigurationModule::isTrackingEnabled() const { return impl->trackingEnabled.load(std::memory_order_acquire); }
 
