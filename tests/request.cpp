@@ -59,8 +59,11 @@ TEST_CASE("Test Request Module with Memory Storage") {
   std::shared_ptr<StorageModuleMemory> storageModule = std::make_shared<StorageModuleMemory>(configuration, logger);
   std::shared_ptr<RequestBuilder> requestBuilder = std::make_shared<RequestBuilder>(configuration, logger);
   std::shared_ptr<RequestModule> requestModule = std::make_shared<RequestModule>(configuration, logger, requestBuilder, storageModule);
+  std::shared_ptr<ConfigurationModule> configurationModule = std::make_shared<ConfigurationModule>(nullptr, configuration, logger, requestBuilder, storageModule, requestModule, std::make_shared<std::mutex>());
 
+  requestModule->setConfigurationProvider(configurationModule);
   storageModule->init();
+  configurationModule->fetchConfigFromStorage();
 
   SUBCASE("Validate request queue threshold") { ValidateRequestSizeOnReachingThresholdLimit(storageModule, requestModule); }
 }
@@ -78,8 +81,11 @@ TEST_CASE("Test Request Module with SQLite Storage") {
   std::shared_ptr<StorageModuleDB> storageModule = std::make_shared<StorageModuleDB>(configuration, logger);
   std::shared_ptr<RequestBuilder> requestBuilder = std::make_shared<RequestBuilder>(configuration, logger);
   std::shared_ptr<RequestModule> requestModule = std::make_shared<RequestModule>(configuration, logger, requestBuilder, storageModule);
+  std::shared_ptr<ConfigurationModule> configurationModule = std::make_shared<ConfigurationModule>(nullptr, configuration, logger, requestBuilder, storageModule, requestModule, std::make_shared<std::mutex>());
 
+  requestModule->setConfigurationProvider(configurationModule);
   storageModule->init();
+  configurationModule->fetchConfigFromStorage();
 
   SUBCASE("Validate request queue threshold") { ValidateRequestSizeOnReachingThresholdLimit(storageModule, requestModule); }
 }

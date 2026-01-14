@@ -33,7 +33,8 @@ TEST_CASE("sessions unit tests") {
 
   SUBCASE("init sdk - session begin ") {
     countly.processRQDebug();
-    HTTPCall http_call = popHTTPCall();
+    HTTPCall http_call = popHTTPCall(); // first request is SBS
+    http_call = popHTTPCall();      // second request is session begin
     long long timestamp = getUnixTimestamp();
     long long timestampDiff = timestamp - stoll(http_call.data["timestamp"]);
     CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);

@@ -104,6 +104,7 @@ TEST_CASE("Tests setting 'setEventsToRQThreshold' before we start the SDK") {
 
 TEST_CASE("Tests setting 'setEventsToRQThreshold' after we start the SDK") {
   clearSDK();
+  http_call_queue.clear();
   Countly &countly = Countly::getInstance();
 
   SUBCASE("Custom threshold size should be used instead of the default one") {
