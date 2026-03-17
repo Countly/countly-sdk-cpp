@@ -5,6 +5,7 @@
 #include "countly/countly_configuration.hpp"
 
 #include <chrono>
+#include <condition_variable>
 #include <functional>
 #include <iterator>
 #include <map>
@@ -351,6 +352,7 @@ private:
   bool enable_automatic_session = false;
   bool stop_thread = false;
   bool running = false;
+  std::condition_variable stop_cv; // Wakes updateLoop immediately on stop
   size_t wait_milliseconds = COUNTLY_KEEPALIVE_INTERVAL;
 
   size_t max_events = COUNTLY_MAX_EVENTS_DEFAULT;
