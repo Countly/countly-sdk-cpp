@@ -479,6 +479,7 @@ void Countly::_deleteThread() {
   mutex->lock();
   stop_thread = true;
   mutex->unlock();
+  stop_cv.notify_one();
   if (thread && thread->joinable()) {
     try {
       thread->join();
@@ -1193,15 +1194,17 @@ void Countly::updateLoop() {
   running = true;
   mutex->unlock();
   while (true) {
-    mutex->lock();
-    if (stop_thread) {
-      stop_thread = false;
-      mutex->unlock();
-      break;
+    {
+      std::unique_lock<std::mutex> lk(*mutex);
+      stop_cv.wait_for(lk, std::chrono::milliseconds(wait_milliseconds), [this] {
+        return stop_thread;
+      });
+      if (stop_thread) {
+        stop_thread = false;
+        running = false;
+        return;
+      }
     }
-    size_t last_wait_milliseconds = wait_milliseconds;
-    mutex->unlock();
-    std::this_thread::sleep_for(std::chrono::milliseconds(last_wait_milliseconds));
     if (enable_automatic_session == true && configuration->manualSessionControl == false) {
       updateSession();
     } else if (configuration->manualSessionControl == true) {
