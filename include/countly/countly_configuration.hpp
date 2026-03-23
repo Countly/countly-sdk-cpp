@@ -72,6 +72,13 @@ struct CountlyConfiguration {
 
   bool autoEventsOnUserProperties = true;
 
+  /**
+   * Enable immediate stop notification using a condition variable.
+   * When enabled, the update loop wakes immediately on stop instead of
+   * waiting for the current sleep interval to expire.
+   */
+  bool immediateRequestOnStop = false;
+
   HTTPClientFunction http_client_function = nullptr;
 
   nlohmann::json metrics;
