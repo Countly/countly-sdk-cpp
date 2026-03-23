@@ -156,6 +156,16 @@ void Countly::disableAutoEventsOnUserProperties() {
   mutex->unlock();
 }
 
+void Countly::enableImmediateRequestOnStop() {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][enableImmediateRequestOnStop] You can not enable immediate request on stop after SDK initialization.");
+    return;
+  }
+
+  std::lock_guard<std::mutex> lk(*mutex);
+  configuration->immediateRequestOnStop = true;
+}
+
 void Countly::setMetrics(const std::string &os, const std::string &os_version, const std::string &device, const std::string &resolution, const std::string &carrier, const std::string &app_version) {
   if (is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly][setMetrics] You can not set metrics after SDK initialization.");
@@ -501,10 +511,13 @@ void Countly::stop() {
 }
 
 void Countly::_deleteThread() {
-  mutex->lock();
-  stop_thread = true;
-  mutex->unlock();
-  stop_cv.notify_one();
+  {
+    std::lock_guard<std::mutex> lk(*mutex);
+    stop_thread = true;
+  }
+  if (configuration->immediateRequestOnStop) {
+    stop_cv.notify_one();
+  }
   if (thread && thread->joinable()) {
     try {
       thread->join();
@@ -516,9 +529,13 @@ void Countly::_deleteThread() {
 }
 
 void Countly::setUpdateInterval(size_t milliseconds) {
-  mutex->lock();
-  wait_milliseconds = milliseconds;
-  mutex->unlock();
+  {
+    std::lock_guard<std::mutex> lk(*mutex);
+    wait_milliseconds = milliseconds;
+  }
+  if (configuration->immediateRequestOnStop) {
+    stop_cv.notify_one();
+  }
 }
 
 void Countly::addEvent(const cly::Event &event) {
@@ -1214,31 +1231,58 @@ std::chrono::system_clock::duration Countly::getSessionDuration() { return Count
 
 void Countly::updateLoop() {
   log(LogLevel::DEBUG, "[Countly][updateLoop]");
-  mutex->lock();
-  running = true;
-  mutex->unlock();
-  while (true) {
-    {
-      std::unique_lock<std::mutex> lk(*mutex);
-      stop_cv.wait_for(lk, std::chrono::milliseconds(wait_milliseconds), [this] {
-        return stop_thread;
-      });
+  {
+    std::lock_guard<std::mutex> lk(*mutex);
+    running = true;
+  }
+  if (configuration->immediateRequestOnStop) {
+    try {
+      while (true) {
+        {
+          std::unique_lock<std::mutex> lk(*mutex);
+          stop_cv.wait_for(lk, std::chrono::milliseconds(wait_milliseconds), [this] {
+            return stop_thread;
+          });
+          if (stop_thread) {
+            stop_thread = false;
+            running = false;
+            return;
+          }
+        }
+        if (enable_automatic_session == true && configuration->manualSessionControl == false) {
+          updateSession();
+        } else if (configuration->manualSessionControl == true) {
+          packEvents();
+        }
+        requestModule->processQueue(mutex);
+      }
+    } catch (...) {
+      std::lock_guard<std::mutex> lk(*mutex);
+      running = false;
+      log(LogLevel::ERROR, "[Countly][updateLoop] unexpected exception, stopping update loop");
+    }
+  } else {
+    while (true) {
+      mutex->lock();
       if (stop_thread) {
         stop_thread = false;
-        running = false;
-        return;
+        mutex->unlock();
+        break;
       }
+      size_t last_wait_milliseconds = wait_milliseconds;
+      mutex->unlock();
+      std::this_thread::sleep_for(std::chrono::milliseconds(last_wait_milliseconds));
+      if (enable_automatic_session == true && configuration->manualSessionControl == false) {
+        updateSession();
+      } else if (configuration->manualSessionControl == true) {
+        packEvents();
+      }
+      requestModule->processQueue(mutex);
     }
-    if (enable_automatic_session == true && configuration->manualSessionControl == false) {
-      updateSession();
-    } else if (configuration->manualSessionControl == true) {
-      packEvents();
-    }
-    requestModule->processQueue(mutex);
+    mutex->lock();
+    running = false;
+    mutex->unlock();
   }
-  mutex->lock();
-  running = false;
-  mutex->unlock();
 }
 
 void Countly::enableRemoteConfig() {
