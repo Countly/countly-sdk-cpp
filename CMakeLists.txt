@@ -113,7 +113,8 @@ if(COUNTLY_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/event.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/crash.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/request.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/config.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/config.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/immediate_stop.cpp)
     
     target_compile_options(countly-tests PRIVATE -g)
     target_compile_definitions(countly-tests PRIVATE COUNTLY_BUILD_TESTS)
