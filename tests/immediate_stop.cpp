@@ -146,8 +146,9 @@ TEST_CASE("immediateRequestOnStop - manual session control through CV loop") {
   cly::Event event("manual_event", 5);
   ct.addEvent(event);
 
-  // Wait for the thread to pack and send events
-  std::this_thread::sleep_for(std::chrono::seconds(3));
+  // Wait for the thread to pack events (cycle 1) and send them via HTTP (cycle 2).
+  // With a 1-second interval, 5 seconds gives enough margin.
+  std::this_thread::sleep_for(std::chrono::seconds(5));
   ct.stop();
   // Flush any remaining items from the RQ
   ct.processRQDebug();
