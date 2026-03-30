@@ -1,5 +1,6 @@
 ## XX.XX.XX
 - Added `enableImmediateRequestOnStop` configuration option. When enabled, the update loop uses a condition variable instead of polling, allowing `stop()` and `setUpdateInterval()` to take effect immediately rather than waiting for the current sleep interval to expire.
+- Fixed OpenSSL discovery in CMakeLists.txt to dynamically resolve the Homebrew prefix, supporting both Apple Silicon and Intel Macs.
 
 ## 23.2.4
 - Mitigated an issue where cached events were not queued when a user property was recorded.
