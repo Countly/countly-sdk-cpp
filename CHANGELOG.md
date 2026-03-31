@@ -1,5 +1,7 @@
 ## XX.XX.XX
 - Fixed OpenSSL discovery in CMakeLists.txt to dynamically resolve the Homebrew prefix, supporting both Apple Silicon and Intel Macs.
+- Added `dow` (day of week) and `hour` fields to every event.
+- Added `dow`, `hour`, and `tz` (timezone offset in minutes) fields to every request.
 
 ## 23.2.4
 - Mitigated an issue where cached events were not queued when a user property was recorded.
