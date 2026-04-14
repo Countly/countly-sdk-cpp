@@ -211,7 +211,36 @@ void Countly::setUserDetails(const std::map<std::string, std::string> &value) {
 
 void Countly::setCustomUserDetails(const std::map<std::string, std::string> &value) {
   mutex->lock();
-  session_params["user_details"]["custom"] = value;
+
+  // Apply user property filter
+  if (configurationModule) {
+    auto upFilter = configurationModule->getUserPropertyFilterList();
+    if (!upFilter.filterList.empty()) {
+      std::map<std::string, std::string> filteredValue;
+      for (const auto &kv : value) {
+        bool allowed;
+        if (upFilter.isWhitelist) {
+          allowed = (upFilter.filterList.find(kv.first) != upFilter.filterList.end());
+        } else {
+          allowed = (upFilter.filterList.find(kv.first) == upFilter.filterList.end());
+        }
+        if (allowed) {
+          filteredValue[kv.first] = kv.second;
+        }
+      }
+
+      if (filteredValue.empty()) {
+        log(LogLevel::DEBUG, "[Countly][setCustomUserDetails] All user properties were filtered out by SBS user property filter.");
+        mutex->unlock();
+        return;
+      }
+      session_params["user_details"]["custom"] = filteredValue;
+    } else {
+      session_params["user_details"]["custom"] = value;
+    }
+  } else {
+    session_params["user_details"]["custom"] = value;
+  }
 
   if (!is_sdk_initialized) {
     log(LogLevel::ERROR, "[Countly][setCustomUserDetails] Can not send user detail if the SDK has not been initialized.");
@@ -540,18 +569,87 @@ void Countly::setUpdateInterval(size_t milliseconds) {
 }
 
 void Countly::addEvent(const cly::Event &event) {
-  if (configurationModule->isCustomEventTrackingEnabled() == false) {
-    std::string eventStr = event.serialize();
-    if (eventStr.find("[CLY]_") == std::string::npos) {
-      log(LogLevel::DEBUG, "[Countly] addEvent, custom event tracking is disabled in server configuration, can not add event with key: " + eventStr);
-      return;
+  if (!is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] addEvent, SDK is not initialized.");
+    return;
+  }
+
+  std::string eventKey = event.getKey();
+  bool isInternalEvent = eventKey.find("[CLY]_") == 0;
+
+  // Check custom event tracking (only blocks custom events)
+  if (!configurationModule->isCustomEventTrackingEnabled() && !isInternalEvent) {
+    log(LogLevel::DEBUG, "[Countly] addEvent, custom event tracking is disabled in server configuration, can not add event with key: " + eventKey);
+    return;
+  }
+
+  // Apply event filter (only for custom events)
+  if (!isInternalEvent) {
+    auto filter = configurationModule->getEventFilterList();
+    if (!filter.filterList.empty()) {
+      bool blocked = false;
+      if (filter.isWhitelist) {
+        blocked = (filter.filterList.find(eventKey) == filter.filterList.end());
+      } else {
+        blocked = (filter.filterList.find(eventKey) != filter.filterList.end());
+      }
+      if (blocked) {
+        log(LogLevel::DEBUG, "[Countly] addEvent, event filtered out by SBS event filter: " + eventKey);
+        return;
+      }
     }
   }
+
+  // Copy the event so we can apply segmentation filters without modifying the caller's object
+  cly::Event filteredEvent = event;
+
+  // Apply segmentation filters
+  if (filteredEvent.hasSegmentation()) {
+    // Global segmentation filter (sb/sw)
+    auto segFilter = configurationModule->getSegmentationFilterList();
+    if (!segFilter.filterList.empty()) {
+      if (segFilter.isWhitelist) {
+        // Parse segmentation keys to find which ones to remove
+        nlohmann::json seg = nlohmann::json::parse(filteredEvent.serialize())["segmentation"];
+        for (auto it = seg.begin(); it != seg.end(); ++it) {
+          if (segFilter.filterList.find(it.key()) == segFilter.filterList.end()) {
+            filteredEvent.removeSegmentation(it.key());
+          }
+        }
+      } else {
+        for (const auto &key : segFilter.filterList) {
+          filteredEvent.removeSegmentation(key);
+        }
+      }
+    }
+
+    // Event-specific segmentation filter (esb/esw)
+    auto eSegFilter = configurationModule->getEventSegmentationFilterList();
+    if (!eSegFilter.filterList.empty()) {
+      auto mapIt = eSegFilter.filterList.find(eventKey);
+      if (mapIt != eSegFilter.filterList.end()) {
+        const auto &filterKeys = mapIt->second;
+        if (eSegFilter.isWhitelist) {
+          nlohmann::json seg = nlohmann::json::parse(filteredEvent.serialize())["segmentation"];
+          for (auto it = seg.begin(); it != seg.end(); ++it) {
+            if (filterKeys.find(it.key()) == filterKeys.end()) {
+              filteredEvent.removeSegmentation(it.key());
+            }
+          }
+        } else {
+          for (const auto &key : filterKeys) {
+            filteredEvent.removeSegmentation(key);
+          }
+        }
+      }
+    }
+  }
+
   mutex->lock();
 #ifndef COUNTLY_USE_SQLITE
-  event_queue.push_back(event.serialize());
+  event_queue.push_back(filteredEvent.serialize());
 #else
-  addEventToSqlite(event);
+  addEventToSqlite(filteredEvent);
 #endif
   mutex->unlock();
   checkAndSendEventToRQ();
@@ -927,7 +1025,6 @@ bool Countly::endSession() {
   log(LogLevel::INFO, "[Countly][endSession]");
   if (is_being_disposed == false && configurationModule->isSessionTrackingEnabled() == false) {
     log(LogLevel::ERROR, "[Countly][endSession] Session tracking is disabled in server configuration, can not end session.");
-    mutex->unlock();
     return false;
   }
   if (began_session == false) {

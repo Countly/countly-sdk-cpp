@@ -9,7 +9,17 @@
 #include "countly/request_module.hpp"
 #include "countly/storage_module_base.hpp"
 
+#include <set>
+#include <map>
+
 namespace cly {
+
+template<typename T>
+struct FilterList {
+  T filterList;
+  bool isWhitelist = false;
+};
+
 class ConfigurationModule : public ConfigurationProvider {
 
 public:
@@ -33,6 +43,11 @@ public:
   unsigned int getRequestQueueSizeLimit() const override;
   unsigned int getEventQueueSizeLimit();
   unsigned int getSessionUpdateInterval();
+
+  FilterList<std::set<std::string>> getEventFilterList() const;
+  FilterList<std::set<std::string>> getUserPropertyFilterList() const;
+  FilterList<std::set<std::string>> getSegmentationFilterList() const;
+  FilterList<std::map<std::string, std::set<std::string>>> getEventSegmentationFilterList() const;
 
 private:
   class ConfigurationModuleImpl;
