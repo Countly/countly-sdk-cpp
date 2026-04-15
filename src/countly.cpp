@@ -281,8 +281,13 @@ void Countly::setLocation(double lattitude, double longitude) {
 }
 
 void Countly::setLocation(const std::string &countryCode, const std::string &city, const std::string &gpsCoordinates, const std::string &ipAddress) {
+  if (!is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][setLocation] SDK is not initialized.");
+    return;
+  }
+  bool isClearingLocation = countryCode.empty() && city.empty() && gpsCoordinates.empty() && ipAddress.empty();
   mutex->lock();
-  if (configurationModule->isLocationTrackingEnabled() == false) {
+  if (!isClearingLocation && configurationModule->isLocationTrackingEnabled() == false) {
     log(LogLevel::ERROR, "[Countly][setLocation] Location tracking is disabled in server configuration, can not set location.");
     mutex->unlock();
     return;
@@ -334,12 +339,16 @@ void Countly::_sendIndependantLocationRequest() {
   const std::chrono::system_clock::time_point now = Countly::getTimestamp();
   const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
 
-  if (!data.empty()) {
-    data["app_key"] = session_params["app_key"].get<std::string>();
-    data["device_id"] = session_params["device_id"].get<std::string>();
-    data["timestamp"] = std::to_string(timestamp.count());
-    requestModule->addRequestToQueue(data);
+  data["app_key"] = session_params["app_key"].get<std::string>();
+  data["device_id"] = session_params["device_id"].get<std::string>();
+  data["timestamp"] = std::to_string(timestamp.count());
+
+  if (data.size() == 3) {
+    // No location fields were added — send empty location to clear server-side location
+    data["location"] = "";
   }
+
+  requestModule->addRequestToQueue(data);
 
   mutex->unlock();
 }
@@ -498,9 +507,17 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   bool result = true;
 #ifdef COUNTLY_USE_SQLITE
   result = createEventTableSchema();
+  if (!result) {
+    log(LogLevel::ERROR, "[Countly][start] Failed to initialize database at path: '" + configuration->databasePath + "'. SDK will not be initialized. Please verify the path is valid and writable.");
+  }
 #endif
 
   is_sdk_initialized = result; // after this point SDK is initialized.
+  if (!is_sdk_initialized) {
+    log(LogLevel::ERROR, "[Countly][start] SDK initialization failed.");
+    mutex->unlock();
+    return;
+  }
 
   if (is_sdk_initialized) {
     mutex->unlock();
@@ -828,6 +845,10 @@ std::vector<std::string> Countly::debugReturnStateOfEQ() {
 #endif
 
 bool Countly::beginSession() {
+  if (!is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][beginSession] SDK is not initialized.");
+    return false;
+  }
   mutex->lock();
   log(LogLevel::INFO, "[Countly][beginSession]");
   if (configurationModule->isSessionTrackingEnabled() == false) {
@@ -888,6 +909,10 @@ bool Countly::beginSession() {
  * @brief Update session
  */
 bool Countly::updateSession() {
+  if (!is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][updateSession] SDK is not initialized.");
+    return false;
+  }
   try {
     // Check if there was a session, if not try to start one
     mutex->lock();
@@ -1022,6 +1047,10 @@ void Countly::sendEventsToRQ(const nlohmann::json &events) {
 }
 
 bool Countly::endSession() {
+  if (!is_sdk_initialized && !is_being_disposed) {
+    log(LogLevel::WARNING, "[Countly][endSession] SDK is not initialized.");
+    return false;
+  }
   log(LogLevel::INFO, "[Countly][endSession]");
   if (is_being_disposed == false && configurationModule->isSessionTrackingEnabled() == false) {
     log(LogLevel::ERROR, "[Countly][endSession] Session tracking is disabled in server configuration, can not end session.");
@@ -1401,6 +1430,10 @@ void Countly::_fetchRemoteConfig(const std::map<std::string, std::string> &data)
 }
 
 void Countly::updateRemoteConfig() {
+  if (!is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][updateRemoteConfig] SDK is not initialized.");
+    return;
+  }
   mutex->lock();
   if (!session_params["app_key"].is_string() || !session_params["device_id"].is_string()) {
 
@@ -1441,6 +1474,10 @@ void Countly::_updateRemoteConfigWithSpecificValues(const std::map<std::string, 
 }
 
 void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
+  if (!is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][updateRemoteConfigFor] SDK is not initialized.");
+    return;
+  }
   mutex->lock();
   std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
 
@@ -1459,6 +1496,10 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
 }
 
 void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
+  if (!is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly][updateRemoteConfigExcept] SDK is not initialized.");
+    return;
+  }
   mutex->lock();
   std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
 
