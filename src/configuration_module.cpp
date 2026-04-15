@@ -1,4 +1,5 @@
 #include "countly/configuration_module.hpp"
+#include <condition_variable>
 #include <thread>
 
 namespace cly {
