@@ -12,6 +12,7 @@
 #ifndef COUNTLY_USE_CUSTOM_HTTP
 #ifdef _WIN32
 #include "Windows.h"
+#include "WinHTTP.h"
 #undef ERROR
 #pragma comment(lib, "winhttp.lib")
 #else
