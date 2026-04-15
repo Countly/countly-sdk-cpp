@@ -1,8 +1,10 @@
+#include <chrono>
 #include <cstdlib>
 #include <deque>
 #include <iostream>
 #include <map>
 #include <string>
+#include <thread>
 
 #include "countly.hpp"
 #include "doctest.h"
@@ -51,6 +53,8 @@ TEST_CASE("crash unit tests") {
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   countly.SetPath(TEST_DATABASE_NAME);
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+  // Wait for the async SBS config fetch thread to complete
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
   SUBCASE("record crash without bread crumbs") {
     // clear the request queue, it contains session begin request

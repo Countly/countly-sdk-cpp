@@ -163,6 +163,8 @@ static void initCountlyWithFakeNetworking(bool clearInitialNetworkingState, cly:
 
   // start the Countly SDK
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+  // Wait for the async SBS config fetch thread to complete
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
   CHECK(countly.checkEQSize() == 0);
 
   // Process the RQ so that thing will be at the http call queue
