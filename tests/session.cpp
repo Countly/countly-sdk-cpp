@@ -30,6 +30,8 @@ TEST_CASE("sessions unit tests") {
   countly.setAutomaticSessionUpdateInterval(2);
   countly.SetPath(TEST_DATABASE_NAME);
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+  // Wait for the async SBS config fetch thread to complete
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
   SUBCASE("init sdk - session begin ") {
     countly.processRQDebug();
@@ -88,6 +90,8 @@ TEST_CASE("event request unit tests") {
   countly.SetPath(TEST_DATABASE_NAME);
 
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+  // Wait for the async SBS config fetch thread to complete
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
   countly.processRQDebug();
   countly.clearRequestQueue(); // request queue contains session begin request
