@@ -45,7 +45,11 @@ Countly &Countly::getInstance() {
 }
 
 #ifdef COUNTLY_BUILD_TESTS
-void Countly::halt() { _sharedInstance.reset(new Countly()); }
+void Countly::halt() { 
+    if (_sharedInstance) {
+        _sharedInstance->stop();  // joins threads, releases mutex normally
+    }
+    _sharedInstance.reset(new Countly()); }
 #endif
 
 /**
