@@ -76,11 +76,11 @@ public:
   std::string _openView(const std::string &name, const std::map<std::string, std::string> &segmentation) {
     if (std::shared_ptr<ConfigurationProvider> config = _configProvider.lock()) {
       if (config->isViewTrackingEnabled() == false) {
-        _logger->log(LogLevel::DEBUG, "[ViewsModule] _openView: View tracking is disabled. Not opening view.");
+        _logger->log(LogLevel::DEBUG, "[Countly] [ViewsModule] _openView, View tracking is disabled. Not opening view.");
         return "";
       }
     } else {
-      _logger->log(LogLevel::WARNING, "[ViewsModule] _openView: ConfigurationProvider unavailable.");
+      _logger->log(LogLevel::WARNING, "[Countly] [ViewsModule] _openView, ConfigurationProvider unavailable.");
       return "";
     }
     ViewModuleImpl::ViewInfo *v = new ViewModuleImpl::ViewInfo();
@@ -99,17 +99,17 @@ public:
   void _closeViewWithName(const std::string &name) {
     if (std::shared_ptr<ConfigurationProvider> config = _configProvider.lock()) {
       if (config->isViewTrackingEnabled() == false) {
-        _logger->log(LogLevel::DEBUG, "[ViewsModule] _closeViewWithName: View tracking is disabled. Not closing view.");
+        _logger->log(LogLevel::DEBUG, "[Countly] [ViewsModule] _closeViewWithName, View tracking is disabled. Not closing view.");
         return;
       }
     } else {
-      _logger->log(LogLevel::WARNING, "[ViewsModule] _closeViewWithName: ConfigurationProvider unavailable.");
+      _logger->log(LogLevel::WARNING, "[Countly] [ViewsModule] _closeViewWithName, ConfigurationProvider unavailable.");
       return;
     }
     std::shared_ptr<ViewModuleImpl::ViewInfo> v = findViewByName(name);
     if (v == nullptr) {
-      _logger->log(cly::LogLevel::WARNING, cly::utils::format_string("[ViewModuleImpl] _closeViewWithName:  Couldn't found "
-                                                                     "view with name = %s",
+      _logger->log(cly::LogLevel::WARNING, cly::utils::format_string("[Countly] [ViewsModule] _closeViewWithName, Couldn't find "
+                                                                     "view with name = [%s]",
                                                                      name.c_str()));
       return;
     }
@@ -119,17 +119,17 @@ public:
   void _closeViewWithID(const std::string &viewId) {
     if (std::shared_ptr<ConfigurationProvider> config = _configProvider.lock()) {
       if (config->isViewTrackingEnabled() == false) {
-        _logger->log(LogLevel::DEBUG, "[ViewsModule] _closeViewWithID: View tracking is disabled. Not closing view.");
+        _logger->log(LogLevel::DEBUG, "[Countly] [ViewsModule] _closeViewWithID, View tracking is disabled. Not closing view.");
         return;
       }
     } else {
-      _logger->log(LogLevel::WARNING, "[ViewsModule] _closeViewWithID: ConfigurationProvider unavailable.");
+      _logger->log(LogLevel::WARNING, "[Countly] [ViewsModule] _closeViewWithID, ConfigurationProvider unavailable.");
       return;
     }
 
     if (_viewsStartTime.find(viewId) == _viewsStartTime.end()) {
-      _logger->log(cly::LogLevel::WARNING, cly::utils::format_string("[ViewModuleImpl] _closeViewWithID:  Couldn't found "
-                                                                     "view with viewId = %s",
+      _logger->log(cly::LogLevel::WARNING, cly::utils::format_string("[Countly] [ViewsModule] _closeViewWithID, Couldn't find "
+                                                                     "view with viewId = [%s]",
                                                                      viewId.c_str()));
       return;
     }
@@ -141,17 +141,17 @@ public:
 ViewsModule::ViewsModule(cly::CountlyDelegates *cly, std::shared_ptr<cly::LoggerModule> logger) {
   impl.reset(new ViewModuleImpl(cly, logger));
 
-  impl->_logger->log(cly::LogLevel::DEBUG, cly::utils::format_string("[ViewsModule] Initialized"));
+  impl->_logger->log(cly::LogLevel::DEBUG, cly::utils::format_string("[Countly] [ViewsModule] Initialized"));
 }
 
 ViewsModule::~ViewsModule() { impl.reset(); }
 
 std::string ViewsModule::openView(const std::string &name, const std::map<std::string, std::string> &segmentation) {
 
-  impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[ViewsModule] openView:  name = %s, segmentation = %s", name.c_str(), utils::mapToString(segmentation).c_str()));
+  impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[Countly] [ViewsModule] openView, name = [%s], segmentation = [%s]", name.c_str(), utils::mapToString(segmentation).c_str()));
 
   if (name.empty()) {
-    impl->_logger->log(cly::LogLevel::WARNING, "[ViewsModule] openView: view name can not be null or empty!");
+    impl->_logger->log(cly::LogLevel::WARNING, "[Countly] [ViewsModule] openView, view name can not be null or empty!");
     return {};
   }
 
@@ -159,20 +159,20 @@ std::string ViewsModule::openView(const std::string &name, const std::map<std::s
 }
 
 void ViewsModule::closeViewWithName(const std::string &name) {
-  impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[ViewsModule] closeViewWithName:  name = %s", name.c_str()));
+  impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[Countly] [ViewsModule] closeViewWithName, name = [%s]", name.c_str()));
 
   if (name.empty()) {
-    impl->_logger->log(cly::LogLevel::WARNING, "[ViewsModule] closeViewWithName: view name can not be null or empty!");
+    impl->_logger->log(cly::LogLevel::WARNING, "[Countly] [ViewsModule] closeViewWithName, view name can not be null or empty!");
     return;
   }
   impl->_closeViewWithName(name);
 }
 
 void ViewsModule::closeViewWithID(const std::string &viewId) {
-  impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[ViewsModule] closeViewWithID:  viewId = %s", viewId.c_str()));
+  impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[Countly] [ViewsModule] closeViewWithID, viewId = [%s]", viewId.c_str()));
 
   if (viewId.empty()) {
-    impl->_logger->log(cly::LogLevel::WARNING, "[ViewsModule] closeViewWithID: viewId can not be null or empty!");
+    impl->_logger->log(cly::LogLevel::WARNING, "[Countly] [ViewsModule] closeViewWithID, viewId can not be null or empty!");
     return;
   }
 

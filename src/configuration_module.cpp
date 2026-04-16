@@ -147,19 +147,19 @@ public:
           sanitizeConfig(response.data[KEY_CONFIG]);
           sdk_behavior_settings = response.data[KEY_CONFIG];
           _storageModule->storeSDKBehaviorSettings(sdk_behavior_settings.dump());
-          _logger->log(LogLevel::INFO, "[ConfigurationModule] _fetchConfigFromServerHTTP, SDK config:\n" + sdk_behavior_settings.dump(2));
+          _logger->log(LogLevel::INFO, "[Countly] [ConfigurationModule] _fetchConfigFromServerHTTP, SDK config:\n" + sdk_behavior_settings.dump(2));
           changedSettings = _populateConfigValues();
         }
         _onSBSChanged(changedSettings, session_params);
       } else {
         _logger->log(LogLevel::WARNING,
-                     "[ConfigurationModule] _fetchConfigFromServerHTTP, failed to fetch."
+                     "[Countly] [ConfigurationModule] _fetchConfigFromServerHTTP, failed to fetch."
                      " success=" +
                          std::string(response.success ? "true" : "false") + ", is_object=" + std::string(response.data.is_object() ? "true" : "false") +
                          ", has_config=" + std::string((response.data.is_object() && response.data.contains(KEY_CONFIG)) ? "true" : "false") + ", response=" + response.data.dump());
       }
     } catch (const std::exception &e) {
-      _logger->log(LogLevel::ERROR, "[ConfigurationModule] _fetchConfigFromServerHTTP, exception: " + std::string(e.what()));
+      _logger->log(LogLevel::ERROR, "[Countly] [ConfigurationModule] _fetchConfigFromServerHTTP, exception: [" + std::string(e.what()) + "]");
     }
   }
 
@@ -169,13 +169,13 @@ public:
     std::string sbs_string = _storageModule->getSDKBehaviorSettings();
     if (!sbs_string.empty()) {
       nlohmann::json changed = _processSDKBehaviorSettings(sbs_string);
-      _logger->log(LogLevel::INFO, "[ConfigurationModule] _initializeSBSFromStorage, initialized SDK behavior settings from storage.");
+      _logger->log(LogLevel::INFO, "[Countly] [ConfigurationModule] _initializeSBSFromStorage, initialized SDK behavior settings from storage.");
       return changed;
     } else if (!_configuration->sdkBehaviorSettings.empty()) {
       nlohmann::json changed = _processSDKBehaviorSettings(_configuration->sdkBehaviorSettings);
       // Persist the provided SBS so it's available on future re-inits
       _storageModule->storeSDKBehaviorSettings(sdk_behavior_settings.dump());
-      _logger->log(LogLevel::INFO, "[ConfigurationModule] _initializeSBSFromStorage, initialized SDK behavior settings from configuration.");
+      _logger->log(LogLevel::INFO, "[Countly] [ConfigurationModule] _initializeSBSFromStorage, initialized SDK behavior settings from configuration.");
       return changed;
     }
     return nlohmann::json{};
@@ -192,10 +192,10 @@ public:
       nlohmann::json sbs_json = nlohmann::json::parse(settings);
       sanitizeConfig(sbs_json);
       sdk_behavior_settings = sbs_json;
-      _logger->log(LogLevel::INFO, "[ConfigurationModule] _processSDKBehaviorSettings, SDK config:\n" + sdk_behavior_settings.dump(2));
+      _logger->log(LogLevel::INFO, "[Countly] [ConfigurationModule] _processSDKBehaviorSettings, SDK config:\n" + sdk_behavior_settings.dump(2));
       return _populateConfigValues();
     } catch (const nlohmann::json::parse_error &e) {
-      _logger->log(LogLevel::ERROR, "[ConfigurationModule] _processSDKBehaviorSettings, Failed to parse SDK behavior settings: " + std::string(e.what()));
+      _logger->log(LogLevel::ERROR, "[Countly] [ConfigurationModule] _processSDKBehaviorSettings, Failed to parse SDK behavior settings: [" + std::string(e.what()) + "]");
       return nlohmann::json{};
     }
   }
@@ -308,7 +308,7 @@ public:
           continue;
         }
       } else {
-        _logger->log(LogLevel::DEBUG, "[ConfigurationModule] sanitizeConfig, removing unknown key: " + key);
+        _logger->log(LogLevel::DEBUG, "[Countly] [ConfigurationModule] sanitizeConfig, removing unknown key: [" + key + "]");
         it = c.erase(it);
         continue;
       }
@@ -348,7 +348,7 @@ public:
         _fetchConfigFromServerHTTP(data, session_params);
         lock.lock();
       } catch (const std::exception &e) {
-        _logger->log(LogLevel::ERROR, "[ConfigurationModule] _updateConfigPeriodically, exception: " + std::string(e.what()));
+        _logger->log(LogLevel::ERROR, "[Countly] [ConfigurationModule] _updateConfigPeriodically, exception: [" + std::string(e.what()) + "]");
         if (!lock.owns_lock()) {
           lock.lock();
         }
@@ -357,7 +357,7 @@ public:
   }
 
   void _stopTimer() {
-    _logger->log(LogLevel::WARNING, "[ConfigurationModule] stopTimer, stopping server config update timer thread.");
+    _logger->log(LogLevel::WARNING, "[Countly] [ConfigurationModule] stopTimer, stopping server config update timer thread.");
     stopConfigThread.store(true, std::memory_order_release);
     configUpdateCv.notify_all();
 
@@ -368,7 +368,7 @@ public:
 
   void _startTimer(nlohmann::json session_params) {
     if (_configuration->sdkBehaviorSettingsUpdatesDisabled) {
-      _logger->log(LogLevel::INFO, "[ConfigurationModule] _startTimer, SDK behavior settings updates are disabled.");
+      _logger->log(LogLevel::INFO, "[Countly] [ConfigurationModule] _startTimer, SDK behavior settings updates are disabled.");
       return;
     }
 
@@ -422,7 +422,7 @@ public:
 ConfigurationModule::ConfigurationModule(cly::CountlyDelegates *cly, std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule, std::shared_ptr<RequestModule> requestModule,
                                          std::shared_ptr<std::mutex> mutex) {
   impl.reset(new ConfigurationModuleImpl(cly, config, logger, requestBuilder, storageModule, requestModule, mutex));
-  impl->_logger->log(LogLevel::DEBUG, "[ConfigurationModule] Initialized");
+  impl->_logger->log(LogLevel::DEBUG, "[Countly] [ConfigurationModule] Initialized");
 }
 
 ConfigurationModule::~ConfigurationModule() { impl.reset(); }
