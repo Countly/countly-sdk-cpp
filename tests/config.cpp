@@ -52,6 +52,7 @@ TEST_CASE("Validate setting configuration values") {
     CHECK(config.forcePost == false);
     CHECK(config.port == 443);
     CHECK(config.manualSessionControl == false);
+    CHECK(config.immediateRequestOnStop == false);
     CHECK(config.sha256_function == nullptr);
     CHECK(config.http_client_function == nullptr);
     CHECK(config.metrics.empty());
@@ -78,6 +79,7 @@ TEST_CASE("Validate setting configuration values") {
     ct.SetPath(TEST_DATABASE_NAME);
     ct.setMaxRQProcessingBatchSize(10);
     ct.enableManualSessionControl();
+    ct.enableImmediateRequestOnStop();
     ct.start("YOUR_APP_KEY", "https://try.count.ly", -1, false);
 
     // Get configuration values using Countly getters
@@ -97,6 +99,7 @@ TEST_CASE("Validate setting configuration values") {
     CHECK(config.forcePost == true);
     CHECK(config.port == 443);
     CHECK(config.manualSessionControl == true);
+    CHECK(config.immediateRequestOnStop == true);
     CHECK(config.sha256_function("custom SHA256") == customSha_1_returnValue);
 
     HTTPResponse response = config.http_client_function(true, "", "");
@@ -182,6 +185,7 @@ TEST_CASE("Validate setting configuration values") {
     ct.setSalt("new-salt");
     ct.setMaxRequestQueueSize(100);
     ct.SetPath("new_database.db");
+    ct.enableImmediateRequestOnStop();
 
     // get SDK configuration again and make sure that they haven't changed
     config = ct.getConfiguration();
@@ -199,6 +203,7 @@ TEST_CASE("Validate setting configuration values") {
     CHECK(config.breadcrumbsThreshold == 100);
     CHECK(config.forcePost == true);
     CHECK(config.port == 443);
+    CHECK(config.immediateRequestOnStop == false); // was never enabled before init, should stay false
     CHECK(config.sha256_function("custom SHA256") == customSha_1_returnValue);
 
     response = config.http_client_function(true, "", "");

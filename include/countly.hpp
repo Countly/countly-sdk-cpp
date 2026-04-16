@@ -4,7 +4,9 @@
 #include "countly/constants.hpp"
 #include "countly/countly_configuration.hpp"
 
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <functional>
 #include <iterator>
 #include <map>
@@ -61,6 +63,8 @@ public:
   void enableManualSessionControl();
 
   void disableAutoEventsOnUserProperties();
+
+  void enableImmediateRequestOnStop();
 
   void setHTTPClient(HTTPClientFunction fun);
 
@@ -363,8 +367,8 @@ private:
   void updateLoop();
   void packEvents();
   bool began_session = false;
-  bool is_being_disposed = false;
-  bool is_sdk_initialized = false;
+  std::atomic<bool> is_being_disposed{false};
+  std::atomic<bool> is_sdk_initialized{false};
 
   std::chrono::system_clock::time_point last_sent_session_request;
   nlohmann::json session_params;
@@ -382,9 +386,10 @@ private:
   std::shared_ptr<std::mutex> mutex = std::make_shared<std::mutex>();
 
   bool is_queue_being_processed = false;
-  bool enable_automatic_session = false;
-  bool stop_thread = false;
-  bool running = false;
+  std::atomic<bool> enable_automatic_session{false};
+  std::atomic<bool> stop_thread{false};
+  std::atomic<bool> running{false};
+  std::condition_variable stop_cv; // Wakes updateLoop immediately on stop
   size_t wait_milliseconds = COUNTLY_KEEPALIVE_INTERVAL;
 
   size_t max_events = COUNTLY_MAX_EVENTS_DEFAULT;

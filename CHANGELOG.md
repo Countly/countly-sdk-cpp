@@ -1,6 +1,7 @@
 ## 26.1.0
 - ! Minor breaking change ! SDK Behavior Settings is now enabled by default. Changes made on SDK Manager > SDK Behavior Settings on your server will affect SDK behavior directly.
 
+- Added `enableImmediateRequestOnStop` configuration option. When enabled, the update loop uses a condition variable instead of polling, allowing `stop()` and `setUpdateInterval()` to take effect immediately rather than waiting for the current sleep interval to expire.
 - Added init config method "disableSDKBehaviorSettingsUpdates" to disable periodic SBS updates from the server.
 - Added init config method "setSDKBehaviorSettings" to provide server configuration in JSON format during initialization.
 
