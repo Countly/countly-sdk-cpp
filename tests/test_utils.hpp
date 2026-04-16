@@ -152,6 +152,37 @@ static HTTPResponse fakeSendHTTP(bool use_post, const std::string &url, const st
   return response;
 }
 
+// Search http_call_queue for a request containing a specific key=value pair
+static bool httpQueueContains(const std::string &key, const std::string &value) {
+  for (const auto &call : http_call_queue) {
+    auto it = call.data.find(key);
+    if (it != call.data.end() && it->second == value) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Search http_call_queue for a request containing a specific event key
+static bool httpQueueContainsEvent(const std::string &event_key) {
+  for (const auto &call : http_call_queue) {
+    auto it = call.data.find("events");
+    if (it != call.data.end()) {
+      try {
+        nlohmann::json events = nlohmann::json::parse(it->second);
+        for (const auto &e : events) {
+          if (e["key"].get<std::string>() == event_key) {
+            return true;
+          }
+        }
+      } catch (const nlohmann::json::exception &) {
+        // Malformed events JSON — skip this entry
+      }
+    }
+  }
+  return false;
+}
+
 static void initCountlyWithFakeNetworking(bool clearInitialNetworkingState, cly::Countly &countly) {
   // set the HTTP client to the fake one which just stores the HTTP calls in a queue
   countly.setHTTPClient(fakeSendHTTP);

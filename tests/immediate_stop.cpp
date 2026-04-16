@@ -17,33 +17,6 @@ using namespace test_utils;
  * A separate test case verifies the fallback (sleep-based) path.
  */
 
-// Helper: search http_call_queue for a request containing a specific key=value pair
-static bool httpQueueContains(const std::string &key, const std::string &value) {
-  for (const auto &call : http_call_queue) {
-    auto it = call.data.find(key);
-    if (it != call.data.end() && it->second == value) {
-      return true;
-    }
-  }
-  return false;
-}
-
-// Helper: search http_call_queue for a request containing a specific event key
-static bool httpQueueContainsEvent(const std::string &event_key) {
-  for (const auto &call : http_call_queue) {
-    auto it = call.data.find("events");
-    if (it != call.data.end()) {
-      nlohmann::json events = nlohmann::json::parse(it->second);
-      for (const auto &e : events) {
-        if (e["key"].get<std::string>() == event_key) {
-          return true;
-        }
-      }
-    }
-  }
-  return false;
-}
-
 TEST_CASE("immediateRequestOnStop - session lifecycle through CV loop") {
   clearSDK();
   Countly &ct = Countly::getInstance();
@@ -51,7 +24,7 @@ TEST_CASE("immediateRequestOnStop - session lifecycle through CV loop") {
   ct.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   ct.SetPath(TEST_DATABASE_NAME);
   ct.enableImmediateRequestOnStop();
-  ct.setAutomaticSessionUpdateInterval(1);
+  ct.setUpdateInterval(1000);
   http_call_queue.clear();
 
   ct.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, true);
@@ -78,7 +51,7 @@ TEST_CASE("immediateRequestOnStop - event delivery through CV loop") {
   ct.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   ct.SetPath(TEST_DATABASE_NAME);
   ct.enableImmediateRequestOnStop();
-  ct.setAutomaticSessionUpdateInterval(1);
+  ct.setUpdateInterval(1000);
   http_call_queue.clear();
 
   ct.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, true);
@@ -93,6 +66,7 @@ TEST_CASE("immediateRequestOnStop - event delivery through CV loop") {
   // With 1-second interval, 3 seconds gives at least 2 full cycles
   std::this_thread::sleep_for(std::chrono::seconds(3));
   ct.stop();
+  ct.processRQDebug();
 
   CHECK(httpQueueContainsEvent("purchase"));
   CHECK(httpQueueContainsEvent("login"));
@@ -105,8 +79,8 @@ TEST_CASE("immediateRequestOnStop - stop responsiveness with long interval") {
   ct.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   ct.SetPath(TEST_DATABASE_NAME);
   ct.enableImmediateRequestOnStop();
-  // Use a long update interval to prove the CV wakes the thread, not the timeout
-  ct.setAutomaticSessionUpdateInterval(60);
+  // Use a long loop interval to prove the CV wakes the thread, not the timeout
+  ct.setUpdateInterval(60000);
   http_call_queue.clear();
 
   ct.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, true);
@@ -137,7 +111,7 @@ TEST_CASE("immediateRequestOnStop - manual session control through CV loop") {
   ct.SetPath(TEST_DATABASE_NAME);
   ct.enableImmediateRequestOnStop();
   ct.enableManualSessionControl();
-  ct.setAutomaticSessionUpdateInterval(1);
+  ct.setUpdateInterval(1000);
   http_call_queue.clear();
 
   ct.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, true);
@@ -146,7 +120,7 @@ TEST_CASE("immediateRequestOnStop - manual session control through CV loop") {
   cly::Event event("manual_event", 5);
   ct.addEvent(event);
 
-  // Wait for the thread to pack events (cycle 1) and send them via HTTP (cycle 2).
+  // Wait for the thread to pack events and send them via HTTP.
   // With a 1-second interval, 5 seconds gives enough margin.
   std::this_thread::sleep_for(std::chrono::seconds(5));
   ct.stop();
@@ -167,7 +141,7 @@ TEST_CASE("immediateRequestOnStop - fallback sleep path") {
   ct.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   ct.SetPath(TEST_DATABASE_NAME);
   // Do NOT enable immediateRequestOnStop -- exercises the old sleep_for path
-  ct.setAutomaticSessionUpdateInterval(1);
+  ct.setUpdateInterval(1000);
   http_call_queue.clear();
 
   ct.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, true);

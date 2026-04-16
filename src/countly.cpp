@@ -522,7 +522,7 @@ void Countly::_deleteThread() {
     try {
       thread->join();
     } catch (const std::system_error &e) {
-      log(LogLevel::WARNING, "Could not join thread");
+      log(LogLevel::WARNING, std::string("[Countly][_deleteThread] Could not join thread: ") + e.what());
     }
     thread.reset();
   }
@@ -1235,8 +1235,8 @@ void Countly::updateLoop() {
     std::lock_guard<std::mutex> lk(*mutex);
     running = true;
   }
-  if (configuration->immediateRequestOnStop) {
-    try {
+  try {
+    if (configuration->immediateRequestOnStop) {
       while (true) {
         {
           std::unique_lock<std::mutex> lk(*mutex);
@@ -1256,32 +1256,42 @@ void Countly::updateLoop() {
         }
         requestModule->processQueue(mutex);
       }
-    } catch (...) {
+    } else {
+      while (true) {
+        size_t last_wait_milliseconds;
+        {
+          std::lock_guard<std::mutex> lk(*mutex);
+          if (stop_thread) {
+            stop_thread = false;
+            break;
+          }
+          last_wait_milliseconds = wait_milliseconds;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(last_wait_milliseconds));
+        if (enable_automatic_session == true && configuration->manualSessionControl == false) {
+          updateSession();
+        } else if (configuration->manualSessionControl == true) {
+          packEvents();
+        }
+        requestModule->processQueue(mutex);
+      }
       std::lock_guard<std::mutex> lk(*mutex);
       running = false;
-      log(LogLevel::ERROR, "[Countly][updateLoop] unexpected exception, stopping update loop");
     }
-  } else {
-    while (true) {
-      mutex->lock();
-      if (stop_thread) {
-        stop_thread = false;
-        mutex->unlock();
-        break;
-      }
-      size_t last_wait_milliseconds = wait_milliseconds;
-      mutex->unlock();
-      std::this_thread::sleep_for(std::chrono::milliseconds(last_wait_milliseconds));
-      if (enable_automatic_session == true && configuration->manualSessionControl == false) {
-        updateSession();
-      } else if (configuration->manualSessionControl == true) {
-        packEvents();
-      }
-      requestModule->processQueue(mutex);
-    }
-    mutex->lock();
+  } catch (const std::exception &e) {
+    bool acquired = mutex->try_lock();
     running = false;
-    mutex->unlock();
+    log(LogLevel::ERROR, std::string("[Countly][updateLoop] exception in update loop: ") + e.what());
+    if (acquired) {
+      mutex->unlock();
+    }
+  } catch (...) {
+    bool acquired = mutex->try_lock();
+    running = false;
+    log(LogLevel::FATAL, "[Countly][updateLoop] unknown non-std::exception caught, stopping update loop");
+    if (acquired) {
+      mutex->unlock();
+    }
   }
 }
 
