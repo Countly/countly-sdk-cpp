@@ -2038,4 +2038,237 @@ TEST_CASE("SBS Storage Behavior") {
     remove(TEST_DATABASE_NAME);
   }
 }
+
+// ---------------------------------------------------------------------------
+// 13. Location Auto-Clearing and Clearing When Disabled
+// ---------------------------------------------------------------------------
+
+TEST_CASE("SBS Location Clearing") {
+  clearSDK();
+  http_call_queue.clear();
+
+  SUBCASE("setLocation clearing (all empty) is allowed when lt=false") {
+    clearSDK();
+    Countly &countly = Countly::getInstance();
+    json sbs = {{"lt", false}};
+    initWithSBSConfig(sbs, countly);
+
+    // Setting actual location should be blocked
+    countly.setLocation("US", "New York", "40.7,-74.0", "1.2.3.4");
+    countly.processRQDebug();
+    bool hasLocationSet = false;
+    while (!http_call_queue.empty()) {
+      HTTPCall call = popCall();
+      if (call.data.find("country_code") != call.data.end() && call.data["country_code"] == "US") {
+        hasLocationSet = true;
+      }
+    }
+    CHECK_FALSE(hasLocationSet);
+
+    // But clearing location (all empty) should be allowed even when lt=false
+    countly.setLocation("", "", "", "");
+    countly.processRQDebug();
+    bool hasClearRequest = false;
+    while (!http_call_queue.empty()) {
+      HTTPCall call = popCall();
+      if (call.data.find("location") != call.data.end() && call.data["location"].empty()) {
+        hasClearRequest = true;
+      }
+    }
+    CHECK(hasClearRequest);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 14. processQueue Tracking Gate (distinct from addRequestToQueue)
+// ---------------------------------------------------------------------------
+
+TEST_CASE("SBS processQueue Tracking Gate") {
+  clearSDK();
+  http_call_queue.clear();
+
+  SUBCASE("Queued requests are not sent when tracking is later disabled") {
+    // Step 1: Init with tracking enabled, begin session to queue a request
+    clearSDK();
+    Countly &countly1 = Countly::getInstance();
+    json sbs1 = {{"tracking", true}};
+    initWithSBSConfig(sbs1, countly1);
+
+    countly1.beginSession();
+    // Session request is now in the RQ
+
+    // Step 2: Re-init with tracking disabled (stored SBS takes precedence on re-init)
+    Countly::halt();
+    http_call_queue.clear();
+
+    Countly &countly2 = Countly::getInstance();
+    json sbs2 = {{"tracking", false}};
+    initWithSBSConfig(sbs2, countly2);
+
+    // Step 3: Process the queue — the old session request should NOT be sent
+    countly2.processRQDebug();
+    CHECK(http_call_queue.empty());
+
+    Countly::halt();
+    remove(TEST_DATABASE_NAME);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 15. Session Update Interval (sui) Override
+// ---------------------------------------------------------------------------
+
+TEST_CASE("SBS Session Update Interval Override") {
+  clearSDK();
+  http_call_queue.clear();
+
+  SUBCASE("sui=1 causes session update to be sent after 1 second") {
+    clearSDK();
+    Countly &countly = Countly::getInstance();
+    json sbs = {{"sui", 1}};
+    initWithSBSConfig(sbs, countly);
+
+    countly.beginSession();
+    countly.processRQDebug();
+    http_call_queue.clear();
+
+    // Wait longer than sui (1 second)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+
+    countly.updateSession();
+    countly.processRQDebug();
+
+    // Session update should have been sent (duration >= sui)
+    bool hasSessionUpdate = false;
+    while (!http_call_queue.empty()) {
+      HTTPCall call = popCall();
+      if (call.data.find("session_duration") != call.data.end()) {
+        hasSessionUpdate = true;
+      }
+    }
+    CHECK(hasSessionUpdate);
+  }
+
+  SUBCASE("Large sui prevents premature session updates") {
+    clearSDK();
+    Countly &countly = Countly::getInstance();
+    json sbs = {{"sui", 300}};
+    initWithSBSConfig(sbs, countly);
+
+    countly.beginSession();
+    countly.processRQDebug();
+    http_call_queue.clear();
+
+    // Wait only 1 second (far less than sui=300)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+
+    countly.updateSession();
+    countly.processRQDebug();
+
+    // No session update should be sent (duration < sui)
+    bool hasSessionUpdate = false;
+    while (!http_call_queue.empty()) {
+      HTTPCall call = popCall();
+      if (call.data.find("session_duration") != call.data.end()) {
+        hasSessionUpdate = true;
+      }
+    }
+    CHECK_FALSE(hasSessionUpdate);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 16. Blacklist-to-Whitelist Transition
+// ---------------------------------------------------------------------------
+
+TEST_CASE("SBS Blacklist to Whitelist Transition") {
+  clearSDK();
+  http_call_queue.clear();
+
+  SUBCASE("Switching from event blacklist to whitelist works correctly") {
+    // Step 1: Init with event blacklist
+    clearSDK();
+    Countly &countly1 = Countly::getInstance();
+    json sbs1 = {{"eb", json::array({"blocked_event"})}, {"eqs", 1}};
+    initWithSBSConfig(sbs1, countly1);
+
+    // "blocked_event" should be blocked, "other_event" allowed
+    cly::Event e1("blocked_event", 1);
+    countly1.addEvent(e1);
+    CHECK(countly1.checkEQSize() == 0); // blocked
+
+    cly::Event e2("other_event", 1);
+    countly1.addEvent(e2);
+    CHECK(countly1.checkEQSize() == 0); // flushed to RQ (eqs=1)
+
+    // Step 2: Re-init with event whitelist (no blacklist)
+    Countly::halt();
+    http_call_queue.clear();
+    remove(TEST_DATABASE_NAME); // clear stored SBS so provided SBS takes effect
+
+    Countly &countly2 = Countly::getInstance();
+    json sbs2 = {{"ew", json::array({"allowed_only"})}, {"eqs", 1}};
+    initWithSBSConfig(sbs2, countly2);
+
+    // "allowed_only" should pass, "other_event" should be blocked by whitelist
+    cly::Event e3("allowed_only", 1);
+    countly2.addEvent(e3);
+    CHECK(countly2.checkEQSize() == 0); // flushed (allowed + eqs=1)
+
+    cly::Event e4("other_event", 1);
+    countly2.addEvent(e4);
+    CHECK(countly2.checkEQSize() == 0); // blocked by whitelist, EQ still 0
+
+    // Verify only "allowed_only" made it to RQ
+    countly2.processRQDebug();
+    bool hasAllowed = false;
+    bool hasOther = false;
+    while (!http_call_queue.empty()) {
+      HTTPCall call = popCall();
+      if (call.data.find("events") != call.data.end()) {
+        std::string eventsStr = call.data["events"];
+        if (eventsStr.find("allowed_only") != std::string::npos) hasAllowed = true;
+        if (eventsStr.find("other_event") != std::string::npos) hasOther = true;
+      }
+    }
+    CHECK(hasAllowed);
+    CHECK_FALSE(hasOther);
+
+    Countly::halt();
+    remove(TEST_DATABASE_NAME);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 17. Malformed SBS JSON Handling
+// ---------------------------------------------------------------------------
+
+TEST_CASE("SBS Malformed JSON Handling") {
+  clearSDK();
+  http_call_queue.clear();
+
+  SUBCASE("Corrupted SBS string from config falls back to defaults") {
+    clearSDK();
+    Countly &countly = Countly::getInstance();
+    std::string badJson = "{this is not valid json!!!}";
+    countly.setSDKBehaviorSettings(badJson);
+    countly.disableSDKBehaviorSettingsUpdates();
+    countly.setHTTPClient(test_utils::fakeSendHTTP);
+    countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+    countly.SetPath(TEST_DATABASE_NAME);
+    countly.enableManualSessionControl();
+    countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    countly.processRQDebug();
+    countly.clearRequestQueue();
+    http_call_queue.clear();
+
+    // SDK should use defaults — session tracking enabled, custom events enabled, etc.
+    CHECK(countly.beginSession() == true);
+
+    cly::Event e("test_event", 1);
+    countly.addEvent(e);
+    CHECK(countly.checkEQSize() > 0);
+  }
+}
 #endif // COUNTLY_USE_SQLITE

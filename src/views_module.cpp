@@ -79,6 +79,9 @@ public:
         _logger->log(LogLevel::DEBUG, "[ViewsModule] _openView: View tracking is disabled. Not opening view.");
         return "";
       }
+    } else {
+      _logger->log(LogLevel::WARNING, "[ViewsModule] _openView: ConfigurationProvider unavailable.");
+      return "";
     }
     ViewModuleImpl::ViewInfo *v = new ViewModuleImpl::ViewInfo();
     v->name = name;
@@ -99,6 +102,9 @@ public:
         _logger->log(LogLevel::DEBUG, "[ViewsModule] _closeViewWithName: View tracking is disabled. Not closing view.");
         return;
       }
+    } else {
+      _logger->log(LogLevel::WARNING, "[ViewsModule] _closeViewWithName: ConfigurationProvider unavailable.");
+      return;
     }
     std::shared_ptr<ViewModuleImpl::ViewInfo> v = findViewByName(name);
     if (v == nullptr) {
@@ -116,6 +122,9 @@ public:
         _logger->log(LogLevel::DEBUG, "[ViewsModule] _closeViewWithID: View tracking is disabled. Not closing view.");
         return;
       }
+    } else {
+      _logger->log(LogLevel::WARNING, "[ViewsModule] _closeViewWithID: ConfigurationProvider unavailable.");
+      return;
     }
 
     if (_viewsStartTime.find(viewId) == _viewsStartTime.end()) {

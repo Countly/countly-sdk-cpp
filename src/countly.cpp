@@ -622,31 +622,12 @@ void Countly::addEvent(const cly::Event &event) {
 
   // Apply segmentation filters
   if (filteredEvent.hasSegmentation()) {
-    // Global segmentation filter (sb/sw)
-    auto segFilter = configurationModule->getSegmentationFilterList();
-    if (!segFilter.filterList.empty()) {
-      if (segFilter.isWhitelist) {
-        // Parse segmentation keys to find which ones to remove
-        nlohmann::json seg = nlohmann::json::parse(filteredEvent.serialize())["segmentation"];
-        for (auto it = seg.begin(); it != seg.end(); ++it) {
-          if (segFilter.filterList.find(it.key()) == segFilter.filterList.end()) {
-            filteredEvent.removeSegmentation(it.key());
-          }
+    try {
+      auto applySegFilter = [&filteredEvent](const std::set<std::string> &filterKeys, bool isWhitelist) {
+        if (filterKeys.empty()) {
+          return;
         }
-      } else {
-        for (const auto &key : segFilter.filterList) {
-          filteredEvent.removeSegmentation(key);
-        }
-      }
-    }
-
-    // Event-specific segmentation filter (esb/esw)
-    auto eSegFilter = configurationModule->getEventSegmentationFilterList();
-    if (!eSegFilter.filterList.empty()) {
-      auto mapIt = eSegFilter.filterList.find(eventKey);
-      if (mapIt != eSegFilter.filterList.end()) {
-        const auto &filterKeys = mapIt->second;
-        if (eSegFilter.isWhitelist) {
+        if (isWhitelist) {
           nlohmann::json seg = nlohmann::json::parse(filteredEvent.serialize())["segmentation"];
           for (auto it = seg.begin(); it != seg.end(); ++it) {
             if (filterKeys.find(it.key()) == filterKeys.end()) {
@@ -658,7 +639,22 @@ void Countly::addEvent(const cly::Event &event) {
             filteredEvent.removeSegmentation(key);
           }
         }
+      };
+
+      // Global segmentation filter (sb/sw)
+      auto segFilter = configurationModule->getSegmentationFilterList();
+      applySegFilter(segFilter.filterList, segFilter.isWhitelist);
+
+      // Event-specific segmentation filter (esb/esw)
+      auto eSegFilter = configurationModule->getEventSegmentationFilterList();
+      if (!eSegFilter.filterList.empty()) {
+        auto mapIt = eSegFilter.filterList.find(eventKey);
+        if (mapIt != eSegFilter.filterList.end()) {
+          applySegFilter(mapIt->second, eSegFilter.isWhitelist);
+        }
       }
+    } catch (const std::exception &e) {
+      log(LogLevel::ERROR, "[Countly] addEvent, error applying segmentation filter: " + std::string(e.what()));
     }
   }
 

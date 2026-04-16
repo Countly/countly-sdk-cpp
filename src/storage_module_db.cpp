@@ -32,10 +32,8 @@ void StorageModuleDB::init() {
     }
 #endif
 
-    // Create schema for the requests table
-    _is_initialized = createSchema(REQUESTS_TABLE_NAME, REQUESTS_TABLE_REQUEST_ID, REQUESTS_TABLE_REQUEST_DATA);
-    // Create schema for the SDK behavior settings table
-    _is_initialized = createSchema(SDK_BEHAVIOR_SETTINGS_TABLE_NAME, SDK_BEHAVIOR_SETTINGS_KEY_COLUMN_NAME, SDK_BEHAVIOR_SETTINGS_DATA_COLUMN_NAME);
+    // Create schema for the requests table and the SDK behavior settings table
+    _is_initialized = createSchema(REQUESTS_TABLE_NAME, REQUESTS_TABLE_REQUEST_ID, REQUESTS_TABLE_REQUEST_DATA) && createSchema(SDK_BEHAVIOR_SETTINGS_TABLE_NAME, SDK_BEHAVIOR_SETTINGS_KEY_COLUMN_NAME, SDK_BEHAVIOR_SETTINGS_DATA_COLUMN_NAME);
 
     if (_is_initialized) {
       vacuumDatabase();
@@ -118,6 +116,7 @@ bool StorageModuleDB::createSchema(const char tableName[], const char keyColumnN
     std::ostringstream log_message;
     log_message << "createSchema, error: " << e.what();
     _logger->log(LogLevel::FATAL, log_message.str());
+    return false;
   }
 }
 
@@ -261,6 +260,7 @@ long long StorageModuleDB::RQCount() {
     std::ostringstream log_message;
     log_message << "RQCount, error: " << e.what();
     _logger->log(LogLevel::FATAL, log_message.str());
+    return -1;
   }
 }
 
@@ -318,6 +318,7 @@ std::vector<std::shared_ptr<DataEntry>> StorageModuleDB::RQPeekAll() {
     std::ostringstream log_message;
     log_message << "RQPeekAll, error: " << e.what();
     _logger->log(LogLevel::FATAL, log_message.str());
+    return {};
   }
 }
 
@@ -457,93 +458,101 @@ const std::shared_ptr<DataEntry> StorageModuleDB::RQPeekFront() {
     std::ostringstream log_message;
     log_message << "RQPeekFront, error: " << e.what();
     _logger->log(LogLevel::FATAL, log_message.str());
+    return std::shared_ptr<DataEntry>(new DataEntry(-1, ""));
   }
 }
 
 void StorageModuleDB::storeSDKBehaviorSettings(const std::string &sdk_behavior_settings) {
-  if (!_is_initialized) {
-    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] storeSDKBehaviorSettings: Module is not initialized");
-    return;
-  }
+  try {
+    if (!_is_initialized) {
+      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] storeSDKBehaviorSettings: Module is not initialized");
+      return;
+    }
 
-  if (sdk_behavior_settings.empty()) {
-    _logger->log(LogLevel::WARNING, "[Countly][StorageModuleDB] storeSDKBehaviorSettings: Empty data");
-    return;
-  }
+    if (sdk_behavior_settings.empty()) {
+      _logger->log(LogLevel::WARNING, "[Countly][StorageModuleDB] storeSDKBehaviorSettings: Empty data");
+      return;
+    }
 
-  _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] storeSDKBehaviorSettings");
+    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] storeSDKBehaviorSettings");
 
 #ifdef COUNTLY_USE_SQLITE
-  sqlite3 *db = nullptr;
-  sqlite3_stmt *stmt = nullptr;
+    sqlite3 *db = nullptr;
+    sqlite3_stmt *stmt = nullptr;
 
-  if (sqlite3_open(_configuration->databasePath.c_str(), &db) != SQLITE_OK) {
-    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] Failed to open database");
-    return;
-  }
+    if (sqlite3_open(_configuration->databasePath.c_str(), &db) != SQLITE_OK) {
+      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] Failed to open database");
+      return;
+    }
 
-  const char *sql = "INSERT OR REPLACE INTO " SDK_BEHAVIOR_SETTINGS_TABLE_NAME " (" SDK_BEHAVIOR_SETTINGS_KEY_COLUMN_NAME ", " SDK_BEHAVIOR_SETTINGS_DATA_COLUMN_NAME ") "
-                    "VALUES (?, ?);";
+    const char *sql = "INSERT OR REPLACE INTO " SDK_BEHAVIOR_SETTINGS_TABLE_NAME " (" SDK_BEHAVIOR_SETTINGS_KEY_COLUMN_NAME ", " SDK_BEHAVIOR_SETTINGS_DATA_COLUMN_NAME ") "
+                      "VALUES (?, ?);";
 
-  if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] Failed to prepare statement");
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] Failed to prepare statement");
+      sqlite3_close(db);
+      return;
+    }
+
+    sqlite3_bind_int(stmt, 1, SDK_BEHAVIOR_SETTINGS_KEY_VALUE);
+    sqlite3_bind_text(stmt, 2, sdk_behavior_settings.c_str(), -1, SQLITE_TRANSIENT);
+
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+      const char *err = sqlite3_errmsg(db);
+      _logger->log(LogLevel::ERROR, std::string("[Countly][StorageModuleDB] storeSDKBehaviorSettings failed: ") + err);
+    }
+
+    sqlite3_finalize(stmt);
     sqlite3_close(db);
-    return;
-  }
-
-  sqlite3_bind_int(stmt, 1, SDK_BEHAVIOR_SETTINGS_KEY_VALUE);
-  sqlite3_bind_text(stmt, 2, sdk_behavior_settings.c_str(), -1, SQLITE_TRANSIENT);
-
-  if (sqlite3_step(stmt) != SQLITE_DONE) {
-  const char* err = sqlite3_errmsg(db);
-  _logger->log(
-    LogLevel::ERROR,
-    std::string("[Countly][StorageModuleDB] storeSDKBehaviorSettings failed: ") +
-    err);  }
-
-  sqlite3_finalize(stmt);
-  sqlite3_close(db);
 #endif
+  } catch (const std::exception &e) {
+    _logger->log(LogLevel::ERROR, std::string("[Countly][StorageModuleDB] storeSDKBehaviorSettings, exception: ") + e.what());
+  }
 }
 
 std::string StorageModuleDB::getSDKBehaviorSettings() {
-  if (!_is_initialized) {
-    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] getSDKBehaviorSettings: Module is not initialized");
-    return "";
-  }
+  try {
+    if (!_is_initialized) {
+      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] getSDKBehaviorSettings: Module is not initialized");
+      return "";
+    }
 
 #ifdef COUNTLY_USE_SQLITE
-  sqlite3 *db = nullptr;
-  sqlite3_stmt *stmt = nullptr;
-  std::string result;
+    sqlite3 *db = nullptr;
+    sqlite3_stmt *stmt = nullptr;
+    std::string result;
 
-  if (sqlite3_open(_configuration->databasePath.c_str(), &db) != SQLITE_OK) {
-    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] Failed to open database");
+    if (sqlite3_open(_configuration->databasePath.c_str(), &db) != SQLITE_OK) {
+      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] Failed to open database");
+      return "";
+    }
+
+    const char *sql = "SELECT " SDK_BEHAVIOR_SETTINGS_DATA_COLUMN_NAME " FROM " SDK_BEHAVIOR_SETTINGS_TABLE_NAME " LIMIT 1;";
+
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+      if (sqlite3_step(stmt) == SQLITE_ROW) {
+        const unsigned char *text = sqlite3_column_text(stmt, 0);
+        if (text) {
+          result = reinterpret_cast<const char *>(text);
+        }
+      }
+    } else {
+      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] Failed to prepare statement");
+    }
+
+    if (stmt) {
+      sqlite3_finalize(stmt);
+    }
+    sqlite3_close(db);
+
+    return result;
+#else
+    return "";
+#endif
+  } catch (const std::exception &e) {
+    _logger->log(LogLevel::ERROR, std::string("[Countly][StorageModuleDB] getSDKBehaviorSettings, exception: ") + e.what());
     return "";
   }
-
-  const char *sql = "SELECT " SDK_BEHAVIOR_SETTINGS_DATA_COLUMN_NAME " FROM " SDK_BEHAVIOR_SETTINGS_TABLE_NAME " LIMIT 1;";
-
-  if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-      const unsigned char *text = sqlite3_column_text(stmt, 0);
-      if (text) {
-        result = reinterpret_cast<const char *>(text);
-      }
-    }
-  } else {
-    _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] Failed to prepare statement");
-  }
-
-  if (stmt) {
-    sqlite3_finalize(stmt);
-  }
-  sqlite3_close(db);
-
-  return result;
-#else
-  return "";
-#endif
 }
 
 }; // namespace cly

@@ -56,6 +56,9 @@ void CrashModule::recordException(const std::string &title, const std::string &s
       impl->_logger->log(LogLevel::DEBUG, "[CrashModule] recordException: Crash reporting is disabled. Not recording exception.");
       return;
     }
+  } else {
+    impl->_logger->log(LogLevel::WARNING, "[CrashModule] recordException: ConfigurationProvider unavailable.");
+    return;
   }
 
   if (title.empty()) {

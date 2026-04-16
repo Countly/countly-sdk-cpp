@@ -1,4 +1,5 @@
 #include "countly/configuration_module.hpp"
+#include <atomic>
 #include <condition_variable>
 #include <thread>
 
@@ -121,21 +122,44 @@ public:
     return result;
   }
 
-  void _fetchConfigFromServerHTTP(const std::map<std::string, std::string> &data, const nlohmann::json &session_params) {
-    HTTPResponse response = _requestModule->sendHTTP("/o/sdk", _requestBuilder->serializeData(data));
-    if (response.success && response.data.is_object() && response.data.contains(KEY_CONFIG)) {
-      nlohmann::json changedSettings;
-      {
-        std::lock_guard<std::mutex> lock(sbsMutex);
-        sanitizeConfig(response.data[KEY_CONFIG]);
-        sdk_behavior_settings = response.data[KEY_CONFIG];
-        _storageModule->storeSDKBehaviorSettings(sdk_behavior_settings.dump());
-        _logger->log(LogLevel::INFO, "[ConfigurationModule] _fetchConfigFromServerHTTP, SDK config:\n" + sdk_behavior_settings.dump(2));
-        changedSettings = _populateConfigValues();
-      }
-      _onSBSChanged(changedSettings, session_params);
+  // Helper to populate a list filter from blacklist/whitelist keys, reducing duplication
+  template <typename T, typename ParseFunc>
+  void populateListFilter(FilterList<T> &filter, const char *blacklistKey, const char *whitelistKey, ParseFunc parseFunc) {
+    if (sdk_behavior_settings.contains(blacklistKey)) {
+      filter.isWhitelist = false;
+      filter.filterList = parseFunc(sdk_behavior_settings[blacklistKey]);
+    } else if (sdk_behavior_settings.contains(whitelistKey)) {
+      filter.isWhitelist = true;
+      filter.filterList = parseFunc(sdk_behavior_settings[whitelistKey]);
     } else {
-      _logger->log(LogLevel::WARNING, cly::utils::format_string("[ConfigurationModule] _fetchConfigFromServerHTTP, failed to fetch response_success: [%s]", response.success ? "true" : "false"));
+      filter.filterList.clear();
+      filter.isWhitelist = false;
+    }
+  }
+
+  void _fetchConfigFromServerHTTP(const std::map<std::string, std::string> &data, const nlohmann::json &session_params) {
+    try {
+      HTTPResponse response = _requestModule->sendHTTP("/o/sdk", _requestBuilder->serializeData(data));
+      if (response.success && response.data.is_object() && response.data.contains(KEY_CONFIG)) {
+        nlohmann::json changedSettings;
+        {
+          std::lock_guard<std::mutex> lock(sbsMutex);
+          sanitizeConfig(response.data[KEY_CONFIG]);
+          sdk_behavior_settings = response.data[KEY_CONFIG];
+          _storageModule->storeSDKBehaviorSettings(sdk_behavior_settings.dump());
+          _logger->log(LogLevel::INFO, "[ConfigurationModule] _fetchConfigFromServerHTTP, SDK config:\n" + sdk_behavior_settings.dump(2));
+          changedSettings = _populateConfigValues();
+        }
+        _onSBSChanged(changedSettings, session_params);
+      } else {
+        _logger->log(LogLevel::WARNING,
+                     "[ConfigurationModule] _fetchConfigFromServerHTTP, failed to fetch."
+                     " success=" +
+                         std::string(response.success ? "true" : "false") + ", is_object=" + std::string(response.data.is_object() ? "true" : "false") +
+                         ", has_config=" + std::string((response.data.is_object() && response.data.contains(KEY_CONFIG)) ? "true" : "false") + ", response=" + response.data.dump());
+      }
+    } catch (const std::exception &e) {
+      _logger->log(LogLevel::ERROR, "[ConfigurationModule] _fetchConfigFromServerHTTP, exception: " + std::string(e.what()));
     }
   }
 
@@ -198,10 +222,10 @@ public:
     bool locationTrackingEnabledVal = locationTrackingEnabled.load(std::memory_order_acquire);
     bool customEventTrackingEnabledVal = customEventTrackingEnabled.load(std::memory_order_acquire);
     bool crashReportingEnabledVal = crashReportingEnabled.load(std::memory_order_acquire);
-    int unsigned serverConfigUpdateIntervalVal = serverConfigUpdateInterval.load(std::memory_order_acquire);
+    unsigned int serverConfigUpdateIntervalVal = serverConfigUpdateInterval.load(std::memory_order_acquire);
 
     bool locationTrackingCurrent = getBool(KEY_LOCATION_TRACKING, locationTrackingEnabledVal);
-    int unsigned serverConfigUpdateIntervalCurrent = getUInt(KEY_SERVER_CONFIG_UPDATE_INTERVAL, serverConfigUpdateIntervalVal);
+    unsigned int serverConfigUpdateIntervalCurrent = getUInt(KEY_SERVER_CONFIG_UPDATE_INTERVAL, serverConfigUpdateIntervalVal);
 
     trackingEnabled.store(getBool(KEY_TRACKING, trackingEnabledVal), std::memory_order_release);
     networkingEnabled.store(getBool(KEY_NETWORKING, networkingEnabledVal), std::memory_order_release);
@@ -211,61 +235,36 @@ public:
     customEventTrackingEnabled.store(getBool(KEY_CUSTOM_EVENT_TRACKING, customEventTrackingEnabledVal), std::memory_order_release);
     crashReportingEnabled.store(getBool(KEY_CRASH_REPORTING, crashReportingEnabledVal), std::memory_order_release);
     eventQueueThreshold.store(getUInt(KEY_EVENT_QUEUE_SIZE, 0), std::memory_order_release);
-    requestQueueSizeLimit.store(getUInt(KEY_REQ_QUEUE_SIZE, _configuration->requestQueueThreshold), std::memory_order_release);
-    sessionUpdateInterval.store(getUInt(KEY_SESSION_UPDATE_INTERVAL, _configuration->sessionDuration), std::memory_order_release);
-    serverConfigUpdateInterval.store(getUInt(KEY_SERVER_CONFIG_UPDATE_INTERVAL, 4), std::memory_order_release);
 
-    // Parse listing filters
+    unsigned int rqs = getUInt(KEY_REQ_QUEUE_SIZE, _configuration->requestQueueThreshold);
+    if (rqs < 1) {
+      rqs = _configuration->requestQueueThreshold;
+    }
+    requestQueueSizeLimit.store(rqs, std::memory_order_release);
+
+    unsigned int sui = getUInt(KEY_SESSION_UPDATE_INTERVAL, _configuration->sessionDuration);
+    if (sui < 1) {
+      sui = _configuration->sessionDuration;
+    }
+    sessionUpdateInterval.store(sui, std::memory_order_release);
+
+    unsigned int scui = getUInt(KEY_SERVER_CONFIG_UPDATE_INTERVAL, 4);
+    if (scui < 1) {
+      scui = 4;
+    } else if (scui > 720) {
+      scui = 720; // cap at 30 days
+    }
+    serverConfigUpdateInterval.store(scui, std::memory_order_release);
+
+    // Parse listing filters — blacklist takes precedence over whitelist for each type
     {
       std::lock_guard<std::mutex> lock(filterMutex);
-
-      // Event filter - blacklist takes precedence
-      if (sdk_behavior_settings.contains(KEY_EVENT_BLACKLIST)) {
-        eventFilter.isWhitelist = false;
-        eventFilter.filterList = parseStringArray(sdk_behavior_settings[KEY_EVENT_BLACKLIST]);
-      } else if (sdk_behavior_settings.contains(KEY_EVENT_WHITELIST)) {
-        eventFilter.isWhitelist = true;
-        eventFilter.filterList = parseStringArray(sdk_behavior_settings[KEY_EVENT_WHITELIST]);
-      } else {
-        eventFilter.filterList.clear();
-        eventFilter.isWhitelist = false;
-      }
-
-      // User property filter - blacklist takes precedence
-      if (sdk_behavior_settings.contains(KEY_USER_PROPERTY_BLACKLIST)) {
-        userPropertyFilter.isWhitelist = false;
-        userPropertyFilter.filterList = parseStringArray(sdk_behavior_settings[KEY_USER_PROPERTY_BLACKLIST]);
-      } else if (sdk_behavior_settings.contains(KEY_USER_PROPERTY_WHITELIST)) {
-        userPropertyFilter.isWhitelist = true;
-        userPropertyFilter.filterList = parseStringArray(sdk_behavior_settings[KEY_USER_PROPERTY_WHITELIST]);
-      } else {
-        userPropertyFilter.filterList.clear();
-        userPropertyFilter.isWhitelist = false;
-      }
-
-      // Segmentation filter - blacklist takes precedence
-      if (sdk_behavior_settings.contains(KEY_SEGMENTATION_BLACKLIST)) {
-        segmentationFilter.isWhitelist = false;
-        segmentationFilter.filterList = parseStringArray(sdk_behavior_settings[KEY_SEGMENTATION_BLACKLIST]);
-      } else if (sdk_behavior_settings.contains(KEY_SEGMENTATION_WHITELIST)) {
-        segmentationFilter.isWhitelist = true;
-        segmentationFilter.filterList = parseStringArray(sdk_behavior_settings[KEY_SEGMENTATION_WHITELIST]);
-      } else {
-        segmentationFilter.filterList.clear();
-        segmentationFilter.isWhitelist = false;
-      }
-
-      // Event segmentation filter - blacklist takes precedence
-      if (sdk_behavior_settings.contains(KEY_EVENT_SEGMENTATION_BLACKLIST)) {
-        eventSegmentationFilter.isWhitelist = false;
-        eventSegmentationFilter.filterList = parseEventSegmentationMap(sdk_behavior_settings[KEY_EVENT_SEGMENTATION_BLACKLIST]);
-      } else if (sdk_behavior_settings.contains(KEY_EVENT_SEGMENTATION_WHITELIST)) {
-        eventSegmentationFilter.isWhitelist = true;
-        eventSegmentationFilter.filterList = parseEventSegmentationMap(sdk_behavior_settings[KEY_EVENT_SEGMENTATION_WHITELIST]);
-      } else {
-        eventSegmentationFilter.filterList.clear();
-        eventSegmentationFilter.isWhitelist = false;
-      }
+      auto parseArray = [this](const nlohmann::json &j) { return parseStringArray(j); };
+      auto parseMap = [this](const nlohmann::json &j) { return parseEventSegmentationMap(j); };
+      populateListFilter(eventFilter, KEY_EVENT_BLACKLIST, KEY_EVENT_WHITELIST, parseArray);
+      populateListFilter(userPropertyFilter, KEY_USER_PROPERTY_BLACKLIST, KEY_USER_PROPERTY_WHITELIST, parseArray);
+      populateListFilter(segmentationFilter, KEY_SEGMENTATION_BLACKLIST, KEY_SEGMENTATION_WHITELIST, parseArray);
+      populateListFilter(eventSegmentationFilter, KEY_EVENT_SEGMENTATION_BLACKLIST, KEY_EVENT_SEGMENTATION_WHITELIST, parseMap);
     }
 
     nlohmann::json changedSettings;
@@ -318,40 +317,42 @@ public:
   }
 
   // Lock ordering: _mutex -> sbsMutex -> filterMutex (must never be reversed)
+  // configUpdateMutex is only used by the timer thread and _stopTimer; never held while acquiring _mutex.
   void _updateConfigPeriodically(const nlohmann::json &session_params) {
     std::unique_lock<std::mutex> lock(configUpdateMutex);
 
     while (!stopConfigThread.load(std::memory_order_acquire)) {
+      try {
+        unsigned int interval = serverConfigUpdateInterval.load(std::memory_order_acquire);
 
-      unsigned int interval = serverConfigUpdateInterval.load(std::memory_order_acquire);
+        if (interval < 1) {
+          interval = 4;
+        }
 
-      if (interval < 1) {
-        interval = 4;
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::hours(interval);
+        bool stopped = configUpdateCv.wait_until(lock, deadline, [&] { return stopConfigThread.load(std::memory_order_acquire); });
+        if (stopped) {
+          return;
+        }
+
+        if (std::chrono::steady_clock::now() < deadline) {
+          continue;
+        }
+
+        lock.unlock();
+        std::map<std::string, std::string> data;
+        {
+          std::lock_guard<std::mutex> mutexLock(*_mutex);
+          data = {{"method", "sc"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
+        }
+        _fetchConfigFromServerHTTP(data, session_params);
+        lock.lock();
+      } catch (const std::exception &e) {
+        _logger->log(LogLevel::ERROR, "[ConfigurationModule] _updateConfigPeriodically, exception: " + std::string(e.what()));
+        if (!lock.owns_lock()) {
+          lock.lock();
+        }
       }
-
-      // Use deadline-based wait so we can distinguish timeout from notify wake-up.
-      // When _onSBSChanged notifies us (interval changed), we re-loop to pick up
-      // the new interval without triggering a premature fetch.
-      auto deadline = std::chrono::steady_clock::now() + std::chrono::hours(interval);
-      bool stopped = configUpdateCv.wait_until(lock, deadline, [&] { return stopConfigThread.load(std::memory_order_acquire); });
-      if (stopped) {
-        return;
-      }
-
-      // If woken before deadline (e.g., interval changed via notify_all), re-loop
-      // to re-read the new interval instead of fetching prematurely.
-      if (std::chrono::steady_clock::now() < deadline) {
-        continue;
-      }
-
-      lock.unlock();
-
-      _mutex->lock();
-      std::map<std::string, std::string> data = {{"method", "sc"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
-      _mutex->unlock();
-      _fetchConfigFromServerHTTP(data, session_params);
-
-      lock.lock();
     }
   }
 
@@ -386,28 +387,6 @@ public:
       configFetchThread.join();
     }
     _stopTimer();
-    {
-      std::lock_guard<std::mutex> lock(sbsMutex);
-      sdk_behavior_settings.clear();
-    }
-
-    networkingEnabled.store(true, std::memory_order_relaxed);
-    trackingEnabled.store(true, std::memory_order_relaxed);
-    sessionTrackingEnabled.store(true, std::memory_order_relaxed);
-    viewTrackingEnabled.store(true, std::memory_order_relaxed);
-    locationTrackingEnabled.store(true, std::memory_order_relaxed);
-    customEventTrackingEnabled.store(true, std::memory_order_relaxed);
-    crashReportingEnabled.store(true, std::memory_order_relaxed);
-    eventQueueThreshold.store(0, std::memory_order_relaxed);
-    requestQueueSizeLimit.store(0, std::memory_order_relaxed);
-    sessionUpdateInterval.store(0, std::memory_order_relaxed);
-    {
-      std::lock_guard<std::mutex> lock(filterMutex);
-      eventFilter.filterList.clear();
-      userPropertyFilter.filterList.clear();
-      segmentationFilter.filterList.clear();
-      eventSegmentationFilter.filterList.clear();
-    }
     _logger.reset();
   }
 
@@ -454,17 +433,21 @@ void ConfigurationModule::fetchConfigFromServer(nlohmann::json session_params) {
     impl->configFetchThread.join();
   }
 
-  impl->_mutex->lock();
-  std::map<std::string, std::string> data = {{"method", "sc"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
-  impl->_mutex->unlock();
+  std::map<std::string, std::string> data;
+  {
+    std::lock_guard<std::mutex> lock(*impl->_mutex);
+    data = {{"method", "sc"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
+  }
 
   impl->configFetchThread = std::thread(&ConfigurationModule::ConfigurationModuleImpl::_fetchConfigFromServerHTTP, impl.get(), data, session_params);
 }
 
 void ConfigurationModule::fetchConfigFromStorage() {
-  impl->_mutex->lock();
-  nlohmann::json changedSettings = impl->_initializeSBSFromStorage();
-  impl->_mutex->unlock();
+  nlohmann::json changedSettings;
+  {
+    std::lock_guard<std::mutex> lock(*impl->_mutex);
+    changedSettings = impl->_initializeSBSFromStorage();
+  }
 
   // Call _onSBSChanged outside of _mutex to avoid deadlock with RecordLocation
   if (!changedSettings.empty()) {

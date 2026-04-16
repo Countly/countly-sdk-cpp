@@ -99,21 +99,24 @@ static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n
 }
 
 void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &data) {
-
-  if (std::shared_ptr<ConfigurationProvider> config = _configProvider.lock()) {
-    if (config->isTrackingEnabled() == false) {
-      impl->_logger->log(LogLevel::DEBUG, "[RequestModule] addRequestToQueue: Tracking is disabled. Not adding request to queue.");
-      return;
-    }
-
-    if (config->getRequestQueueSizeLimit() <= impl->_storageModule->RQCount()) {
-      impl->_logger->log(LogLevel::WARNING, cly::utils::format_string("[RequestModule] addRequestToQueue: Request Queue is full. Dropping the oldest request."));
-      impl->_storageModule->RQRemoveFront();
-    }
-
-    const std::string request = impl->_requestBuilder->buildRequest(data);
-    impl->_storageModule->RQInsertAtEnd(request);
+  std::shared_ptr<ConfigurationProvider> config = _configProvider.lock();
+  if (!config) {
+    impl->_logger->log(LogLevel::WARNING, "[RequestModule] addRequestToQueue: ConfigurationProvider unavailable. Not adding request.");
+    return;
   }
+
+  if (config->isTrackingEnabled() == false) {
+    impl->_logger->log(LogLevel::DEBUG, "[RequestModule] addRequestToQueue: Tracking is disabled. Not adding request to queue.");
+    return;
+  }
+
+  if (config->getRequestQueueSizeLimit() <= impl->_storageModule->RQCount()) {
+    impl->_logger->log(LogLevel::WARNING, cly::utils::format_string("[RequestModule] addRequestToQueue: Request Queue is full. Dropping the oldest request."));
+    impl->_storageModule->RQRemoveFront();
+  }
+
+  const std::string request = impl->_requestBuilder->buildRequest(data);
+  impl->_storageModule->RQInsertAtEnd(request);
 }
 
 void RequestModule::clearRequestQueue() { impl->_storageModule->RQClearAll(); }
@@ -132,6 +135,10 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
       mutex->unlock();
       return;
     }
+  } else {
+    impl->_logger->log(LogLevel::WARNING, "[RequestModule] processQueue: ConfigurationProvider unavailable, skipping queue processing.");
+    mutex->unlock();
+    return;
   }
 
   // making sure that no other thread is processing the queue
