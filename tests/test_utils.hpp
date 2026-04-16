@@ -26,6 +26,7 @@ static std::deque<HTTPCall> http_call_queue;
 static void clearSDK() {
   cly::Countly::halt();
   remove(TEST_DATABASE_NAME);
+  http_call_queue.clear();
 }
 
 /**
