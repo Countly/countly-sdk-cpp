@@ -3,6 +3,7 @@
 #include "countly/countly_configuration.hpp"
 #include "countly/logger_module.hpp"
 #include "nlohmann/json.hpp"
+#include <map>
 #include <memory>
 #include <string>
 

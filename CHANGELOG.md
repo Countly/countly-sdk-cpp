@@ -1,6 +1,13 @@
 ## XX.XX.XX
+- ! Minor breaking change ! SDK Behavior Settings is now enabled by default. Changes made on SDK Manager > SDK Behavior Settings on your server will affect SDK behavior directly.
+
 - Added `enableImmediateRequestOnStop` configuration option. When enabled, the update loop uses a condition variable instead of polling, allowing `stop()` and `setUpdateInterval()` to take effect immediately rather than waiting for the current sleep interval to expire.
+- Added init config method "disableSDKBehaviorSettingsUpdates" to disable periodic SBS updates from the server.
+- Added init config method "setSDKBehaviorSettings" to provide server configuration in JSON format during initialization.
+
 - Fixed OpenSSL discovery in CMakeLists.txt to dynamically resolve the Homebrew prefix, supporting both Apple Silicon and Intel Macs.
+- Added `dow` (day of week) and `hour` fields to every event.
+- Added `dow`, `hour`, and `tz` (timezone offset in minutes) fields to every request.
 
 ## 23.2.4
 - Mitigated an issue where cached events were not queued when a user property was recorded.

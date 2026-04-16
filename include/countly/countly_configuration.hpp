@@ -83,6 +83,10 @@ struct CountlyConfiguration {
 
   nlohmann::json metrics;
 
+  bool sdkBehaviorSettingsUpdatesDisabled = false;
+
+  std::string sdkBehaviorSettings;
+
   CountlyConfiguration(const std::string appKey, std::string serverUrl) {
     this->appKey = appKey;
     this->serverUrl = serverUrl;

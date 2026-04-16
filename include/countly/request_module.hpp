@@ -9,6 +9,7 @@
 #include "countly/logger_module.hpp"
 #include "countly/request_builder.hpp"
 #include "countly/storage_module_base.hpp"
+#include "countly/configuration_provider.hpp"
 
 namespace cly {
 class RequestModule {
@@ -36,10 +37,12 @@ public:
   void clearRequestQueue();
 
   long long RQSize();
+  void setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider); // try injecting
 
 private:
   class RequestModuleImpl;
   std::unique_ptr<RequestModuleImpl> impl;
+  std::weak_ptr<ConfigurationProvider> _configProvider;
 };
 } // namespace cly
 #endif

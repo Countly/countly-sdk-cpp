@@ -26,6 +26,8 @@ public:
   std::vector<std::shared_ptr<DataEntry>> RQPeekAll() override;
   void RQRemoveFront(std::shared_ptr<DataEntry> request) override;
   void RQInsertAtEnd(const std::string &request) override;
+  void storeSDKBehaviorSettings(const std::string &sdk_behavior_settings) override;
+  std::string getSDKBehaviorSettings() override;
 };
 } // namespace cly
 #endif

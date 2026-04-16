@@ -94,6 +94,10 @@ public:
    * @param request: content of the request
    */
   virtual void RQInsertAtEnd(const std::string &request) = 0;
+
+  virtual void storeSDKBehaviorSettings(const std::string &sdk_behavior_settings) = 0;
+
+  virtual std::string getSDKBehaviorSettings() = 0;
 };
 
 } // namespace cly
