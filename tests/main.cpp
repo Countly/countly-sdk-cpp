@@ -5,7 +5,10 @@
 #include <map>
 #include <string>
 
-#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#define DOCTEST_CONFIG_IMPLEMENT
+#ifdef __APPLE__
+#define DOCTEST_CONFIG_NO_BREAK_INTO_DEBUGGER
+#endif
 
 #include "doctest.h"
 
@@ -14,6 +17,17 @@
 using json = nlohmann::json;
 using namespace cly;
 using namespace test_utils;
+
+int main(int argc, char **argv) {
+  doctest::Context context;
+  context.applyCommandLine(argc, argv);
+  int res = context.run();
+  // Clean up the Countly singleton before global statics are destroyed.
+  // Without this, ~Countly() runs during static destruction and may
+  // access already-destroyed objects, causing a segfault.
+  clearSDK();
+  return res;
+}
 
 TEST_CASE("urlencoding is correct") {
   CHECK(RequestBuilder::encodeURL("hello world") == "hello%20world");

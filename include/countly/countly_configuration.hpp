@@ -68,9 +68,17 @@ struct CountlyConfiguration {
 
   SHA256Function sha256_function = nullptr;
 
+  bool manualSessionControl = false;
+
+  bool autoEventsOnUserProperties = true;
+
   HTTPClientFunction http_client_function = nullptr;
 
   nlohmann::json metrics;
+
+  bool sdkBehaviorSettingsUpdatesDisabled = false;
+
+  std::string sdkBehaviorSettings;
 
   CountlyConfiguration(const std::string appKey, std::string serverUrl) {
     this->appKey = appKey;

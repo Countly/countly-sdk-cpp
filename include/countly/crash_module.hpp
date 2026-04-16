@@ -35,8 +35,10 @@ public:
   void recordException(const std::string &title, const std::string &stackTrace, const bool fatal, const std::map<std::string, std::string> &crashMetrics, const std::map<std::string, std::string> &segmentation = {});
 
 private:
+  friend class Countly;
   class CrashModuleImpl;
   std::unique_ptr<CrashModuleImpl> impl;
+  void setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider); // try injecting
 };
 } // namespace cly
 #endif

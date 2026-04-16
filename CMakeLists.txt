@@ -48,7 +48,8 @@ add_library(countly
   ${CMAKE_CURRENT_SOURCE_DIR}/src/request_builder.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/storage_module_db.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/storage_module_memory.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/event.cpp)
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/event.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/configuration_module.cpp)
 
 target_include_directories(countly
   PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -75,7 +76,10 @@ if (COUNTLY_USE_CUSTOM_SHA256)
 else()
 if (APPLE)
   message("Setting openssl root for Mac")
-  set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl")
+  execute_process(COMMAND brew --prefix openssl OUTPUT_VARIABLE OPENSSL_ROOT_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if(NOT OPENSSL_ROOT_DIR)
+    set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl")
+  endif()
 endif()
 find_package(OpenSSL REQUIRED)
 target_include_directories(countly PRIVATE ${OPENSSL_INCLUDE_DIR})
@@ -113,7 +117,8 @@ if(COUNTLY_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/event.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/crash.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/request.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/config.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/config.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/sbs.cpp)
     
     target_compile_options(countly-tests PRIVATE -g)
     target_compile_definitions(countly-tests PRIVATE COUNTLY_BUILD_TESTS)

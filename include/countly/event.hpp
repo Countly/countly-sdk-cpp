@@ -27,6 +27,14 @@ public:
 
   std::string serialize() const;
 
+  std::string getKey() const;
+
+  bool hasSegmentation() const;
+
+  void removeSegmentation(const std::string &key);
+
+  void clearSegmentation();
+
 private:
   nlohmann::json object;
   bool timer_running;

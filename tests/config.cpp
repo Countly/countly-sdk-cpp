@@ -51,6 +51,7 @@ TEST_CASE("Validate setting configuration values") {
     CHECK(config.breadcrumbsThreshold == 100);
     CHECK(config.forcePost == false);
     CHECK(config.port == 443);
+    CHECK(config.manualSessionControl == false);
     CHECK(config.sha256_function == nullptr);
     CHECK(config.http_client_function == nullptr);
     CHECK(config.metrics.empty());
@@ -76,6 +77,7 @@ TEST_CASE("Validate setting configuration values") {
     ct.setMaxRequestQueueSize(10);
     ct.SetPath(TEST_DATABASE_NAME);
     ct.setMaxRQProcessingBatchSize(10);
+    ct.enableManualSessionControl();
     ct.start("YOUR_APP_KEY", "https://try.count.ly", -1, false);
 
     // Get configuration values using Countly getters
@@ -94,6 +96,7 @@ TEST_CASE("Validate setting configuration values") {
     CHECK(config.breadcrumbsThreshold == 100);
     CHECK(config.forcePost == true);
     CHECK(config.port == 443);
+    CHECK(config.manualSessionControl == true);
     CHECK(config.sha256_function("custom SHA256") == customSha_1_returnValue);
 
     HTTPResponse response = config.http_client_function(true, "", "");

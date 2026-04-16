@@ -24,6 +24,8 @@
 #include "countly/logger_module.hpp"
 #include "countly/storage_module_base.hpp"
 #include "countly/views_module.hpp"
+#include <countly/configuration_module.hpp>
+#include <countly/configuration_provider.hpp>
 #include <countly/crash_module.hpp>
 #include <countly/request_builder.hpp>
 #include <countly/request_module.hpp>
@@ -55,6 +57,10 @@ public:
   void setLogger(void (*fun)(LogLevel level, const std::string &message));
 
   void setSha256(cly::SHA256Function fun);
+
+  void enableManualSessionControl();
+
+  void disableAutoEventsOnUserProperties();
 
   void setHTTPClient(HTTPClientFunction fun);
 
@@ -104,6 +110,11 @@ public:
    * Checks and returns the size of the event queue in memory or persistent storage.
    */
   int checkEQSize();
+
+  /*
+   * Checks and returns the size of the request queue in memory or persistent storage.
+   */
+  int checkRQSize();
 
   /**
    * Checks and returns the size of the event queue in persistent storage.
@@ -248,6 +259,8 @@ public:
     addEvent(event);
   }
 
+  void RecordLocation(const std::string &countryCode, const std::string &city, const std::string &gpsCoordinates, const std::string &ipAddress) override { setLocation(countryCode, city, gpsCoordinates, ipAddress); };
+
   /* Provide 'updateInterval' in seconds. */
   inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) {
     if (is_sdk_initialized) {
@@ -256,6 +269,35 @@ public:
     }
 
     configuration->sessionDuration = updateInterval;
+  }
+
+  /**
+   * Disable SDK behavior settings updates that SDK performs periodically from the server.
+   */
+  void disableSDKBehaviorSettingsUpdates() {
+    if (is_sdk_initialized) {
+      log(LogLevel::WARNING, "[Countly] disableSDKBehaviorSettingsUpdates, You can not disable SDK behavior settings updates after SDK initialization.");
+      return;
+    }
+
+    configuration->sdkBehaviorSettingsUpdatesDisabled = true;
+  }
+
+  /**
+   * Provide SDK behavior settings in JSON format string.
+   */
+  void setSDKBehaviorSettings(std::string &settings_json) {
+    if (is_sdk_initialized) {
+      log(LogLevel::WARNING, "[Countly] setSDKBehaviorSettings, You can not provide SDK behavior settings after SDK initialization.");
+      return;
+    }
+
+    if(settings_json.empty()) {
+      log(LogLevel::WARNING, "[Countly] setSDKBehaviorSettings, Provided SDK behavior settings is empty.");
+      return;
+    }
+
+    configuration->sdkBehaviorSettings = settings_json;
   }
 
 #ifdef COUNTLY_BUILD_TESTS
@@ -319,6 +361,7 @@ private:
   std::chrono::system_clock::duration getSessionDuration();
 
   void updateLoop();
+  void packEvents();
   bool began_session = false;
   bool is_being_disposed = false;
   bool is_sdk_initialized = false;
@@ -335,6 +378,7 @@ private:
   std::shared_ptr<cly::RequestBuilder> requestBuilder;
   std::shared_ptr<cly::RequestModule> requestModule;
   std::shared_ptr<cly::StorageModuleBase> storageModule;
+  std::shared_ptr<cly::ConfigurationModule> configurationModule;
   std::shared_ptr<std::mutex> mutex = std::make_shared<std::mutex>();
 
   bool is_queue_being_processed = false;

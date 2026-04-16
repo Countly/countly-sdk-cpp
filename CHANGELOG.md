@@ -1,3 +1,24 @@
+## XX.XX.XX
+- ! Minor breaking change ! SDK Behavior Settings is now enabled by default. Changes made on SDK Manager > SDK Behavior Settings on your server will affect SDK behavior directly.
+
+- Added init config method "disableSDKBehaviorSettingsUpdates" to disable periodic SBS updates from the server.
+- Added init config method "setSDKBehaviorSettings" to provide server configuration in JSON format during initialization.
+
+- Fixed OpenSSL discovery in CMakeLists.txt to dynamically resolve the Homebrew prefix, supporting both Apple Silicon and Intel Macs.
+
+## 23.2.4
+- Mitigated an issue where cached events were not queued when a user property was recorded.
+
+## 23.2.3
+- Mitigated an issue where the new device ID was used when ending a session if device ID was changed without merging.
+
+## 23.2.2
+- Mitigated a mutex issue that can happen during update loop.
+
+## 23.2.1
+- Added manual session control via "Countly::enableManualSessionControl". When enabled, automatic session calls are ignored, while manual calls remain usable for finer control.
+- Added "checkRQSize" function to return the current number of requests in the queue.
+
 ## 23.2.0
 - Request queue processing now is limited to 100 requests at a time
 - Added 'setEventsToRQThreshold' method that sets the number of events after which all events will be sent to the RQ. Default value is set to 100.
