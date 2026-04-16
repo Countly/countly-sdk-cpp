@@ -264,7 +264,7 @@ public:
   /* Provide 'updateInterval' in seconds. */
   inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) {
     if (is_sdk_initialized) {
-      log(LogLevel::WARNING, "[Countly][setAutomaticSessionUpdateInterval] You can not set the session duration after SDK initialization.");
+      log(LogLevel::WARNING, "[Countly]setAutomaticSessionUpdateInterval, You can not set the session duration after SDK initialization.");
       return;
     }
 
