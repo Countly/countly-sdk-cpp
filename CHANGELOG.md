@@ -1,4 +1,4 @@
-## XX.XX.XX
+## 26.1.0
 - ! Minor breaking change ! SDK Behavior Settings is now enabled by default. Changes made on SDK Manager > SDK Behavior Settings on your server will affect SDK behavior directly.
 
 - Added init config method "disableSDKBehaviorSettingsUpdates" to disable periodic SBS updates from the server.
