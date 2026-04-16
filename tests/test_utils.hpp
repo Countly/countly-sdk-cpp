@@ -172,7 +172,9 @@ static HTTPResponse fakeSendHTTP(bool use_post, const std::string &url, const st
 
 // Search http_call_queue for a request containing a specific key=value pair
 static bool httpQueueContains(const std::string &key, const std::string &value) {
-  for (const auto &call : http_call_queue) {
+  size_t n = http_call_queue.size();
+  for (size_t i = 0; i < n; i++) {
+    HTTPCall call = http_call_queue.at(i);
     auto it = call.data.find(key);
     if (it != call.data.end() && it->second == value) {
       return true;
@@ -183,7 +185,9 @@ static bool httpQueueContains(const std::string &key, const std::string &value) 
 
 // Search http_call_queue for a request containing a specific event key
 static bool httpQueueContainsEvent(const std::string &event_key) {
-  for (const auto &call : http_call_queue) {
+  size_t n = http_call_queue.size();
+  for (size_t i = 0; i < n; i++) {
+    HTTPCall call = http_call_queue.at(i);
     auto it = call.data.find("events");
     if (it != call.data.end()) {
       try {
