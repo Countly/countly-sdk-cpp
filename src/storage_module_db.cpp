@@ -22,12 +22,12 @@ StorageModuleDB::~StorageModuleDB() {}
 
 void StorageModuleDB::init() {
   try {
-    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] initialized.");
+    _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] init, Initialized.");
 
 #ifdef COUNTLY_USE_SQLITE
     // Check if the database path is empty or blank
     if (_configuration->databasePath == "" || _configuration->databasePath == " ") {
-      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] init: Database path can not be empty or blank!");
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] init, Database path can not be empty or blank!");
       return;
     }
 #endif
@@ -40,14 +40,14 @@ void StorageModuleDB::init() {
     }
   } catch (const std::system_error &e) {
     std::ostringstream log_message;
-    log_message << "init, error: " << e.what();
+    log_message << "[Countly] [StorageModuleDB] init, error: " << e.what();
     _logger->log(LogLevel::FATAL, log_message.str());
   }
 }
 
 void StorageModuleDB::vacuumDatabase() {
   try {
-    _logger->log(LogLevel::INFO, "[StorageModuleDB][Vacuum] Will try to vacuum the database");
+    _logger->log(LogLevel::INFO, "[Countly] [StorageModuleDB] vacuumDatabase, Will try to vacuum the database");
 
 #ifdef COUNTLY_USE_SQLITE
     sqlite3 *database;
@@ -57,27 +57,27 @@ void StorageModuleDB::vacuumDatabase() {
     if (return_value == SQLITE_OK) {
       return_value = sqlite3_exec(database, "VACUUM", nullptr, nullptr, &error_message);
       if (return_value != SQLITE_OK) {
-        _logger->log(LogLevel::ERROR, error_message);
+        _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] vacuumDatabase, SQLite error: " + std::string(error_message));
         sqlite3_free(error_message);
       } else {
-        _logger->log(LogLevel::INFO, "[StorageModuleDB][Vacuum] Database vacuumed successfully");
+        _logger->log(LogLevel::INFO, "[Countly] [StorageModuleDB] vacuumDatabase, Database vacuumed successfully");
       }
     } else {
       const char *error = sqlite3_errmsg(database);
-      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB][Vacuum] " + std::string(error));
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] vacuumDatabase, Could not open database: " + std::string(error));
     }
     sqlite3_close(database);
 #endif
   } catch (const std::system_error &e) {
     std::ostringstream log_message;
-    log_message << "vacuumDatabase, error: " << e.what();
+    log_message << "[Countly] [StorageModuleDB] vacuumDatabase, error: " << e.what();
     _logger->log(LogLevel::FATAL, log_message.str());
   }
 }
 
 bool StorageModuleDB::createSchema(const char tableName[], const char keyColumnName[], const char dataColumnName[]) {
   try {
-    _logger->log(LogLevel::INFO, "[StorageModuleDB][createSchema]");
+    _logger->log(LogLevel::INFO, "[Countly] [StorageModuleDB] createSchema, Start");
 
     bool result = false;
 #ifdef COUNTLY_USE_SQLITE
@@ -97,14 +97,14 @@ bool StorageModuleDB::createSchema(const char tableName[], const char keyColumnN
       // Execute the SQL statement
       return_value = sqlite3_exec(database, statement.c_str(), nullptr, nullptr, &error_message);
       if (return_value != SQLITE_OK) {
-        _logger->log(LogLevel::ERROR, error_message);
+        _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] createSchema, SQLite error: " + std::string(error_message));
         sqlite3_free(error_message);
       } else {
         result = true;
       }
     } else {
       const char *error = sqlite3_errmsg(database);
-      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB][createSchema] " + std::string(error));
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] createSchema, Could not open database: " + std::string(error));
     }
 
     // Close the SQLite database
@@ -114,7 +114,7 @@ bool StorageModuleDB::createSchema(const char tableName[], const char keyColumnN
     return result;
   } catch (const std::system_error &e) {
     std::ostringstream log_message;
-    log_message << "createSchema, error: " << e.what();
+    log_message << "[Countly] [StorageModuleDB] createSchema, error: " << e.what();
     _logger->log(LogLevel::FATAL, log_message.str());
     return false;
   }
@@ -124,11 +124,11 @@ bool StorageModuleDB::createSchema(const char tableName[], const char keyColumnN
 void StorageModuleDB::RQRemoveFront() {
   try {
     if (!_is_initialized) {
-      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQRemoveFront: Module is not initialized");
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQRemoveFront, Module is not initialized");
       return;
     }
 
-    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront");
+    _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] RQRemoveFront, Start");
 
 #ifdef COUNTLY_USE_SQLITE
     // Declare SQLite database, return value and error message variables
@@ -141,7 +141,7 @@ void StorageModuleDB::RQRemoveFront() {
       // Remove the first entry in the requests table
       std::ostringstream sql_statement_stream;
       sql_statement_stream << "DELETE FROM " << REQUESTS_TABLE_NAME << " WHERE " << REQUESTS_TABLE_REQUEST_ID << " = ( SELECT MIN(" << REQUESTS_TABLE_REQUEST_ID << ") FROM " << REQUESTS_TABLE_NAME << " );";
-      _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront SQL = " + sql_statement_stream.str());
+      _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] RQRemoveFront, SQL = " + sql_statement_stream.str());
 
       std::string sql_statement = sql_statement_stream.str();
 
@@ -149,7 +149,7 @@ void StorageModuleDB::RQRemoveFront() {
       return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
       if (return_value != SQLITE_OK) {
         std::string error(error_message);
-        _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQRemoveFront error = " + error);
+        _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQRemoveFront, error = " + error);
         sqlite3_free(error_message);
       }
     }
@@ -158,7 +158,7 @@ void StorageModuleDB::RQRemoveFront() {
 #endif
   } catch (const std::system_error &e) {
     std::ostringstream log_message;
-    log_message << "RQRemoveFront, error: " << e.what();
+    log_message << "[Countly] [StorageModuleDB] RQRemoveFront, error: " << e.what();
     _logger->log(LogLevel::FATAL, log_message.str());
   }
 }
@@ -166,18 +166,18 @@ void StorageModuleDB::RQRemoveFront() {
 void StorageModuleDB::RQRemoveFront(std::shared_ptr<DataEntry> request) {
   try {
     if (!_is_initialized) {
-      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQRemoveFront(request): Module is not initialized");
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQRemoveFront, Module is not initialized");
       return;
     }
 
     if (request == nullptr) {
       // Check if request is null
-      _logger->log(LogLevel::WARNING, "[Countly][StorageModuleDB] RQRemoveFront request = null");
+      _logger->log(LogLevel::WARNING, "[Countly] [StorageModuleDB] RQRemoveFront, request is null");
       return;
     }
 
     // Log the request ID being removed
-    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront RequestID = " + std::to_string(request->getId()));
+    _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] RQRemoveFront, Removing RequestID = " + std::to_string(request->getId()));
 
 #ifdef COUNTLY_USE_SQLITE
     sqlite3 *database;
@@ -189,7 +189,7 @@ void StorageModuleDB::RQRemoveFront(std::shared_ptr<DataEntry> request) {
       // Build SQL statement to remove request from database
       std::ostringstream sql_statement_stream;
       sql_statement_stream << "DELETE FROM " << REQUESTS_TABLE_NAME << " WHERE " << REQUESTS_TABLE_REQUEST_ID << " = " << request->getId() << ';';
-      _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQRemoveFront SQL = " + sql_statement_stream.str());
+      _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] RQRemoveFront SQL = " + sql_statement_stream.str());
 
       std::string sql_statement = sql_statement_stream.str();
 
@@ -197,7 +197,7 @@ void StorageModuleDB::RQRemoveFront(std::shared_ptr<DataEntry> request) {
       return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
       if (return_value != SQLITE_OK) {
         std::string error(error_message);
-        _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQRemoveFront error = " + error);
+        _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQRemoveFront error = " + error);
         sqlite3_free(error_message);
       }
     }
@@ -214,11 +214,11 @@ void StorageModuleDB::RQRemoveFront(std::shared_ptr<DataEntry> request) {
 long long StorageModuleDB::RQCount() {
   try {
     if (!_is_initialized) {
-      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQCount: Module is not initialized");
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQCount, Module is not initialized");
       return -1;
     }
 
-    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQCount");
+    _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] RQCount, Start");
     long long requestCount = 0;
 
 #ifdef COUNTLY_USE_SQLITE
@@ -242,7 +242,7 @@ long long StorageModuleDB::RQCount() {
       } else {
         // Log any errors encountered during the execution of the SQL statement
         std::string error(error_message);
-        _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQCount error = " + error);
+        _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQCount, error = " + error);
         sqlite3_free(error_message);
       }
       // Free the memory allocated for the result table
@@ -253,12 +253,12 @@ long long StorageModuleDB::RQCount() {
 #endif
 
     // Log the number of requests in the requests table
-    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQCount requests count = " + std::to_string(requestCount));
+    _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] RQCount, requests count = " + std::to_string(requestCount));
     // Return the number of requests
     return requestCount;
   } catch (const std::system_error &e) {
     std::ostringstream log_message;
-    log_message << "RQCount, error: " << e.what();
+    log_message << "[Countly] [StorageModuleDB] RQCount, error: " << e.what();
     _logger->log(LogLevel::FATAL, log_message.str());
     return -1;
   }
@@ -267,11 +267,11 @@ long long StorageModuleDB::RQCount() {
 std::vector<std::shared_ptr<DataEntry>> StorageModuleDB::RQPeekAll() {
   try {
     if (!_is_initialized) {
-      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQPeekAll: Module is not initialized");
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQPeekAll, Module is not initialized");
       return {}; // Return an empty vector if the module is not initialized
     }
 
-    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQPeekAll");
+    _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] RQPeekAll, Start");
 
     std::vector<std::shared_ptr<DataEntry>> v; // Initialize a vector to store the data entries
 
@@ -304,7 +304,7 @@ std::vector<std::shared_ptr<DataEntry>> StorageModuleDB::RQPeekAll() {
 
       } else if (return_value != SQLITE_OK) { // If there was an error executing the query
         std::string error(error_message);
-        _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQPeekAll error =" + error);
+        _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQPeekAll, error = " + error);
         sqlite3_free(error_message);
       }
       // Free the result table
@@ -316,7 +316,7 @@ std::vector<std::shared_ptr<DataEntry>> StorageModuleDB::RQPeekAll() {
     return v; // Return the vector containing all the data entries
   } catch (const std::system_error &e) {
     std::ostringstream log_message;
-    log_message << "RQPeekAll, error: " << e.what();
+    log_message << "[Countly] [StorageModuleDB] RQPeekAll, error: " << e.what();
     _logger->log(LogLevel::FATAL, log_message.str());
     return {};
   }
@@ -325,15 +325,15 @@ std::vector<std::shared_ptr<DataEntry>> StorageModuleDB::RQPeekAll() {
 void StorageModuleDB::RQInsertAtEnd(const std::string &request) {
   try {
     if (!_is_initialized) {
-      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQInsertAtEnd: Module is not initialized");
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQInsertAtEnd, Module is not initialized");
       return; // Checks if the module is initialized, returns if not
     }
 
     // Logs the request being inserted
-    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQInsertAtEnd request = " + request);
+    _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] RQInsertAtEnd, request = [" + request + "]");
 
     if (request == "") {
-      _logger->log(LogLevel::WARNING, "[Countly][StorageModuleMemory] RQInsertAtEnd request is empty");
+      _logger->log(LogLevel::WARNING, "[Countly] [StorageModuleDB] RQInsertAtEnd, request is empty");
       return; // Checks if the request is empty, logs a warning and returns if it is
     }
 
@@ -354,7 +354,7 @@ void StorageModuleDB::RQInsertAtEnd(const std::string &request) {
       return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
       if (return_value != SQLITE_OK) {
         std::string error(error_message);
-        _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQInsertAtEnd error =" + error);
+        _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQInsertAtEnd, error = " + error);
         sqlite3_free(error_message);
       }
     }
@@ -363,7 +363,7 @@ void StorageModuleDB::RQInsertAtEnd(const std::string &request) {
 #endif
   } catch (const std::system_error &e) {
     std::ostringstream log_message;
-    log_message << "RQInsertAtEnd, error: " << e.what();
+    log_message << "[Countly] [StorageModuleDB] RQInsertAtEnd, error: " << e.what();
     _logger->log(LogLevel::FATAL, log_message.str());
   }
 }
@@ -371,10 +371,10 @@ void StorageModuleDB::RQInsertAtEnd(const std::string &request) {
 void StorageModuleDB::RQClearAll() {
   try {
     if (!_is_initialized) {
-      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQClearAll: Module is not initialized");
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQClearAll, Module is not initialized");
       return;
     }
-    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQClearAll");
+    _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] RQClearAll, Start");
 
 #ifdef COUNTLY_USE_SQLITE
     sqlite3 *database;
@@ -391,7 +391,7 @@ void StorageModuleDB::RQClearAll() {
       return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
       if (return_value != SQLITE_OK) { // Check if SQL statement executed successfully
         std::string error(error_message);
-        _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQRemoveFront error = " + error);
+        _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQClearAll, error = " + error);
         sqlite3_free(error_message);
       }
     }
@@ -400,7 +400,7 @@ void StorageModuleDB::RQClearAll() {
 #endif
   } catch (const std::system_error &e) {
     std::ostringstream log_message;
-    log_message << "RQClearAll, error: " << e.what();
+    log_message << "[Countly] [StorageModuleDB] RQClearAll, error: " << e.what();
     _logger->log(LogLevel::FATAL, log_message.str());
   }
 }
@@ -409,11 +409,11 @@ const std::shared_ptr<DataEntry> StorageModuleDB::RQPeekFront() {
   try {
     std::shared_ptr<DataEntry> front = std::make_shared<DataEntry>(-1, ""); // Initialize a shared pointer to a default-constructed DataEntry object
     if (!_is_initialized) {
-      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQPeekFront: Module is not initialized");
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQPeekFront, Module is not initialized");
       return front;
     }
 
-    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQPeekFronts");
+    _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] RQPeekFront, Start");
 
 #ifdef COUNTLY_USE_SQLITE
     sqlite3 *database;
@@ -440,12 +440,12 @@ const std::shared_ptr<DataEntry> StorageModuleDB::RQPeekFront() {
           std::string request = table[(event_index * column_count) + 1];
           // Create a new DataEntry object and reset the shared pointer to point to it
           DataEntry *frontEntry = new DataEntry(std::stoll(requestId), request);
-          _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] RQPeekFronts id =" + requestId);
+          _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] RQPeekFront, id = " + requestId);
           front.reset(frontEntry);
         }
       } else if (return_value != SQLITE_OK) {
         std::string error(error_message);
-        _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] RQPeekFronts error =" + error);
+        _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQPeekFront, error = " + error);
         sqlite3_free(error_message); // free the error message pointer
       }
       sqlite3_free_table(table); // Free the table pointer
@@ -456,7 +456,7 @@ const std::shared_ptr<DataEntry> StorageModuleDB::RQPeekFront() {
     return front; // Return the shared pointer to the DataEntry object
   } catch (const std::system_error &e) {
     std::ostringstream log_message;
-    log_message << "RQPeekFront, error: " << e.what();
+    log_message << "[Countly] [StorageModuleDB] RQPeekFront, error: " << e.what();
     _logger->log(LogLevel::FATAL, log_message.str());
     return std::shared_ptr<DataEntry>(new DataEntry(-1, ""));
   }
@@ -465,23 +465,23 @@ const std::shared_ptr<DataEntry> StorageModuleDB::RQPeekFront() {
 void StorageModuleDB::storeSDKBehaviorSettings(const std::string &sdk_behavior_settings) {
   try {
     if (!_is_initialized) {
-      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] storeSDKBehaviorSettings: Module is not initialized");
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] storeSDKBehaviorSettings, Module is not initialized");
       return;
     }
 
     if (sdk_behavior_settings.empty()) {
-      _logger->log(LogLevel::WARNING, "[Countly][StorageModuleDB] storeSDKBehaviorSettings: Empty data");
+      _logger->log(LogLevel::WARNING, "[Countly] [StorageModuleDB] storeSDKBehaviorSettings, Empty data");
       return;
     }
 
-    _logger->log(LogLevel::DEBUG, "[Countly][StorageModuleDB] storeSDKBehaviorSettings");
+    _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] storeSDKBehaviorSettings, Start");
 
 #ifdef COUNTLY_USE_SQLITE
     sqlite3 *db = nullptr;
     sqlite3_stmt *stmt = nullptr;
 
     if (sqlite3_open(_configuration->databasePath.c_str(), &db) != SQLITE_OK) {
-      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] Failed to open database");
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] storeSDKBehaviorSettings, Failed to open database");
       return;
     }
 
@@ -489,7 +489,7 @@ void StorageModuleDB::storeSDKBehaviorSettings(const std::string &sdk_behavior_s
                       "VALUES (?, ?);";
 
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
-      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] Failed to prepare statement");
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] storeSDKBehaviorSettings, Failed to prepare statement");
       sqlite3_close(db);
       return;
     }
@@ -499,21 +499,21 @@ void StorageModuleDB::storeSDKBehaviorSettings(const std::string &sdk_behavior_s
 
     if (sqlite3_step(stmt) != SQLITE_DONE) {
       const char *err = sqlite3_errmsg(db);
-      _logger->log(LogLevel::ERROR, std::string("[Countly][StorageModuleDB] storeSDKBehaviorSettings failed: ") + err);
+      _logger->log(LogLevel::ERROR, std::string("[Countly] [StorageModuleDB] storeSDKBehaviorSettings, failed: [") + err + "]");
     }
 
     sqlite3_finalize(stmt);
     sqlite3_close(db);
 #endif
   } catch (const std::exception &e) {
-    _logger->log(LogLevel::ERROR, std::string("[Countly][StorageModuleDB] storeSDKBehaviorSettings, exception: ") + e.what());
+    _logger->log(LogLevel::ERROR, std::string("[Countly] [StorageModuleDB] storeSDKBehaviorSettings, exception: [") + e.what() + "]");
   }
 }
 
 std::string StorageModuleDB::getSDKBehaviorSettings() {
   try {
     if (!_is_initialized) {
-      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] getSDKBehaviorSettings: Module is not initialized");
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] getSDKBehaviorSettings, Module is not initialized");
       return "";
     }
 
@@ -523,7 +523,7 @@ std::string StorageModuleDB::getSDKBehaviorSettings() {
     std::string result;
 
     if (sqlite3_open(_configuration->databasePath.c_str(), &db) != SQLITE_OK) {
-      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] Failed to open database");
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] getSDKBehaviorSettings, Failed to open database");
       return "";
     }
 
@@ -537,7 +537,7 @@ std::string StorageModuleDB::getSDKBehaviorSettings() {
         }
       }
     } else {
-      _logger->log(LogLevel::ERROR, "[Countly][StorageModuleDB] Failed to prepare statement");
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] getSDKBehaviorSettings, Failed to prepare statement");
     }
 
     if (stmt) {
@@ -550,7 +550,7 @@ std::string StorageModuleDB::getSDKBehaviorSettings() {
     return "";
 #endif
   } catch (const std::exception &e) {
-    _logger->log(LogLevel::ERROR, std::string("[Countly][StorageModuleDB] getSDKBehaviorSettings, exception: ") + e.what());
+    _logger->log(LogLevel::ERROR, std::string("[Countly] [StorageModuleDB] getSDKBehaviorSettings, exception: [") + e.what() + "]");
     return "";
   }
 }
