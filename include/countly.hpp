@@ -4,7 +4,9 @@
 #include "countly/constants.hpp"
 #include "countly/countly_configuration.hpp"
 
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <functional>
 #include <iterator>
 #include <map>
@@ -24,6 +26,8 @@
 #include "countly/logger_module.hpp"
 #include "countly/storage_module_base.hpp"
 #include "countly/views_module.hpp"
+#include <countly/configuration_module.hpp>
+#include <countly/configuration_provider.hpp>
 #include <countly/crash_module.hpp>
 #include <countly/request_builder.hpp>
 #include <countly/request_module.hpp>
@@ -57,6 +61,10 @@ public:
   void setSha256(cly::SHA256Function fun);
 
   void enableManualSessionControl();
+
+  void disableAutoEventsOnUserProperties();
+
+  void enableImmediateRequestOnStop();
 
   void setHTTPClient(HTTPClientFunction fun);
 
@@ -255,14 +263,45 @@ public:
     addEvent(event);
   }
 
+  void RecordLocation(const std::string &countryCode, const std::string &city, const std::string &gpsCoordinates, const std::string &ipAddress) override { setLocation(countryCode, city, gpsCoordinates, ipAddress); };
+
   /* Provide 'updateInterval' in seconds. */
   inline void setAutomaticSessionUpdateInterval(unsigned short updateInterval) {
     if (is_sdk_initialized) {
-      log(LogLevel::WARNING, "[Countly][setAutomaticSessionUpdateInterval] You can not set the session duration after SDK initialization.");
+      log(LogLevel::WARNING, "[Countly]setAutomaticSessionUpdateInterval, You can not set the session duration after SDK initialization.");
       return;
     }
 
     configuration->sessionDuration = updateInterval;
+  }
+
+  /**
+   * Disable SDK behavior settings updates that SDK performs periodically from the server.
+   */
+  void disableSDKBehaviorSettingsUpdates() {
+    if (is_sdk_initialized) {
+      log(LogLevel::WARNING, "[Countly] disableSDKBehaviorSettingsUpdates, You can not disable SDK behavior settings updates after SDK initialization.");
+      return;
+    }
+
+    configuration->sdkBehaviorSettingsUpdatesDisabled = true;
+  }
+
+  /**
+   * Provide SDK behavior settings in JSON format string.
+   */
+  void setSDKBehaviorSettings(std::string &settings_json) {
+    if (is_sdk_initialized) {
+      log(LogLevel::WARNING, "[Countly] setSDKBehaviorSettings, You can not provide SDK behavior settings after SDK initialization.");
+      return;
+    }
+
+    if(settings_json.empty()) {
+      log(LogLevel::WARNING, "[Countly] setSDKBehaviorSettings, Provided SDK behavior settings is empty.");
+      return;
+    }
+
+    configuration->sdkBehaviorSettings = settings_json;
   }
 
 #ifdef COUNTLY_BUILD_TESTS
@@ -328,8 +367,8 @@ private:
   void updateLoop();
   void packEvents();
   bool began_session = false;
-  bool is_being_disposed = false;
-  bool is_sdk_initialized = false;
+  std::atomic<bool> is_being_disposed{false};
+  std::atomic<bool> is_sdk_initialized{false};
 
   std::chrono::system_clock::time_point last_sent_session_request;
   nlohmann::json session_params;
@@ -343,12 +382,14 @@ private:
   std::shared_ptr<cly::RequestBuilder> requestBuilder;
   std::shared_ptr<cly::RequestModule> requestModule;
   std::shared_ptr<cly::StorageModuleBase> storageModule;
+  std::shared_ptr<cly::ConfigurationModule> configurationModule;
   std::shared_ptr<std::mutex> mutex = std::make_shared<std::mutex>();
 
   bool is_queue_being_processed = false;
-  bool enable_automatic_session = false;
-  bool stop_thread = false;
-  bool running = false;
+  std::atomic<bool> enable_automatic_session{false};
+  std::atomic<bool> stop_thread{false};
+  std::atomic<bool> running{false};
+  std::condition_variable stop_cv; // Wakes updateLoop immediately on stop
   size_t wait_milliseconds = COUNTLY_KEEPALIVE_INTERVAL;
 
   size_t max_events = COUNTLY_MAX_EVENTS_DEFAULT;

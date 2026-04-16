@@ -13,7 +13,7 @@
 #include <string>
 
 #define COUNTLY_SDK_NAME "cpp-native-unknown"
-#define COUNTLY_SDK_VERSION "23.2.3"
+#define COUNTLY_SDK_VERSION "26.1.0"
 #define COUNTLY_POST_THRESHOLD 2000
 #define COUNTLY_KEEPALIVE_INTERVAL 3000
 #define COUNTLY_MAX_EVENTS_DEFAULT 200
@@ -93,6 +93,8 @@ public:
   virtual void RecordEvent(const std::string &key, const std::map<std::string, std::string> &segmentation, int count, double sum) = 0;
 
   virtual void RecordEvent(const std::string &key, const std::map<std::string, std::string> &segmentation, int count, double sum, double duration) = 0;
+
+  virtual void RecordLocation(const std::string &countryCode, const std::string &city, const std::string &gpsCoordinates, const std::string &ipAddress) = 0;
 };
 
 } // namespace cly

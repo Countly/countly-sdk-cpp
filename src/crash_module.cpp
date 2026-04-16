@@ -16,6 +16,7 @@ public:
   std::shared_ptr<LoggerModule> _logger;
   std::shared_ptr<RequestModule> _requestModule;
   std::shared_ptr<std::mutex> _mutex;
+  std::weak_ptr<ConfigurationProvider> _configProvider;
   CrashModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestModule> requestModule, std::shared_ptr<std::mutex> mutex) : _configuration(config), _logger(logger), _requestModule(requestModule), _mutex(mutex) {}
 
   // destructor to reset logger
@@ -28,12 +29,12 @@ CrashModule::~CrashModule() { impl.reset(); }
 CrashModule::CrashModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestModule> requestModule, std::shared_ptr<std::mutex> mutex) {
   impl.reset(new CrashModuleImpl(config, logger, requestModule, mutex));
 
-  impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[CrashModule] Initialized"));
+  impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [CrashModule] Initialized"));
 }
 
 // function to add breadcrumb
 void CrashModule::addBreadcrumb(const std::string &value) {
-  impl->_logger->log(LogLevel::INFO, "[CrashModule] addBreadcrumb : " + value);
+  impl->_logger->log(LogLevel::INFO, "[Countly] [CrashModule] addBreadcrumb, value = [" + value + "]");
 
   impl->_mutex->lock();
   // if breadcrumb threshold is reached, remove oldest breadcrumb
@@ -48,26 +49,36 @@ void CrashModule::addBreadcrumb(const std::string &value) {
 // function to record exception
 void CrashModule::recordException(const std::string &title, const std::string &stackTrace, const bool fatal, const std::map<std::string, std::string> &crashMetrics, const std::map<std::string, std::string> &segmentation) {
 
-  impl->_logger->log(LogLevel::INFO, cly::utils::format_string("[CrashModule] recordException: title = %s, stackTrace = %s", title.c_str(), stackTrace.c_str()));
+  impl->_logger->log(LogLevel::INFO, cly::utils::format_string("[Countly] [CrashModule] recordException, title = [%s], stackTrace = [%s]", title.c_str(), stackTrace.c_str()));
+
+  if (std::shared_ptr<ConfigurationProvider> config = impl->_configProvider.lock()) {
+    if (config->isCrashReportingEnabled() == false) {
+      impl->_logger->log(LogLevel::DEBUG, "[Countly] [CrashModule] recordException, Crash reporting is disabled. Not recording exception.");
+      return;
+    }
+  } else {
+    impl->_logger->log(LogLevel::WARNING, "[Countly] [CrashModule] recordException, ConfigurationProvider unavailable.");
+    return;
+  }
 
   if (title.empty()) {
-    impl->_logger->log(LogLevel::WARNING, "[CrashModule] recordException : The parameter 'title' can't be empty");
+    impl->_logger->log(LogLevel::WARNING, "[Countly] [CrashModule] recordException, The parameter 'title' can't be empty");
   }
 
   if (stackTrace.empty()) {
-    impl->_logger->log(LogLevel::ERROR, "[CrashModule] recordException : The parameter 'stackTrace' can't be empty");
+    impl->_logger->log(LogLevel::ERROR, "[Countly] [CrashModule] recordException, The parameter 'stackTrace' can't be empty");
   }
 
   // check if the crash metric '_os' exists and is not empty
   auto it = crashMetrics.find("_os");
   if (it == crashMetrics.end() || it->second.empty()) {
-    impl->_logger->log(LogLevel::ERROR, "[CrashModule] recordException : The crash metric '_os' can't be empty");
+    impl->_logger->log(LogLevel::ERROR, "[Countly] [CrashModule] recordException, The crash metric '_os' can't be empty");
   }
 
   // check if the crash metric '_app_version' exists and is not empty
   it = crashMetrics.find("_app_version");
   if (it == crashMetrics.end() || it->second.empty()) {
-    impl->_logger->log(LogLevel::ERROR, "[CrashModule] recordException : The crash metric '_app_version' can't be empty");
+    impl->_logger->log(LogLevel::ERROR, "[Countly] [CrashModule] recordException, The crash metric '_app_version' can't be empty");
   }
 
   // lock mutex to avoid concurrent access
@@ -93,5 +104,7 @@ void CrashModule::recordException(const std::string &title, const std::string &s
   // unlock mutex
   impl->_mutex->unlock();
 }
+
+void CrashModule::setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider) { impl->_configProvider = std::move(provider); }
 
 } // namespace cly

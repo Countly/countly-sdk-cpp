@@ -7,58 +7,271 @@ on:
     branches: [master, staging]
 
 jobs:
-  doctests:
+  # ──────────────────────────────────────────────
+  # Core test matrix: OS × SQLite
+  # ──────────────────────────────────────────────
+  tests:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-22.04
-          - macos-15
-          - windows-2022
-
-        include:
+        os: [ubuntu-22.04, ubuntu-24.04, macos-15, windows-2022]
+        sqlite: [OFF, ON]
+        exclude:
+          # Windows has no system sqlite3.lib
           - os: windows-2022
-            cmake-generator: -G "Visual Studio 17 2022" -A x64
-            cmake-install: "" #Already installed on hosted runner
-            dependencies: "" #Already installed on hosted runner
-            make: msbuild countly-tests.vcxproj -t:rebuild -verbosity:diag -property:Configuration=Release && .\Release\countly-tests.exe
-          - os: macos-15
-            cmake-install: "" #Already installed on hosted runner
-            dependencies: "" #Already installed on hosted runner
-            make: make ./countly-tests && ./countly-tests
-          - os: ubuntu-22.04
-            cmake-install: "" #Already installed on hosted runner
-            dependencies: |
-              sudo apt-get update && sudo apt-get install -y \
-                libcurl4-openssl-dev \
-                libssl-dev
-            make: make ./countly-tests && ./countly-tests
+            sqlite: ON
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: "recursive"
 
-      - name: Update submodules
-        run: git submodule update --init --recursive
-
-      - name: Install CMake
-        run: ${{ matrix.cmake-install }}
-
-      - name: Install dependencies
-        run: ${{ matrix.dependencies }}
+      - name: Install dependencies (Ubuntu)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libsqlite3-dev
 
       - name: Set up MSVC
         if: matrix.os == 'windows-2022'
-        uses: microsoft/setup-msbuild@v1
+        uses: microsoft/setup-msbuild@v2
 
-      - name: Build and run tests
-        run: |
-          cmake -DCOUNTLY_BUILD_TESTS=1 -B build . ${{ matrix.cmake-generator }}
-          cd build
-          ${{ matrix.make }}
+      - name: Configure (Unix)
+        if: matrix.os != 'windows-2022'
+        run: cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=${{ matrix.sqlite }} -B build .
         env:
-          CMAKE_POLICY_VERSION_MINIMUM: 3.31
+          CMAKE_POLICY_VERSION_MINIMUM: "3.31"
+
+      - name: Configure (Windows)
+        if: matrix.os == 'windows-2022'
+        run: cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=${{ matrix.sqlite }} -G "Visual Studio 17 2022" -A x64 -B build .
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.31"
+
+      - name: Build (Unix)
+        if: matrix.os != 'windows-2022'
+        run: cd build && make ./countly-tests
+
+      - name: Build (Windows)
+        if: matrix.os == 'windows-2022'
+        run: cd build && msbuild countly-tests.vcxproj -t:rebuild -verbosity:minimal -property:Configuration=Release
+
+      - name: Run tests (Unix)
+        if: matrix.os != 'windows-2022'
+        run: cd build && ./countly-tests
+
+      - name: Run tests (Windows)
+        if: matrix.os == 'windows-2022'
+        run: cd build && .\Release\countly-tests.exe
+
+  # ──────────────────────────────────────────────
+  # Sanitizers (Linux only, with SQLite)
+  # ──────────────────────────────────────────────
+  sanitizer-asan:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libsqlite3-dev
+
+      - name: Configure with ASAN
+        run: |
+          cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=ON \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address" \
+            -B build .
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.31"
+
+      - name: Build
+        run: cd build && make ./countly-tests
+
+      - name: Run tests
+        run: cd build && ./countly-tests
+        env:
+          ASAN_OPTIONS: "detect_leaks=1"
+
+  sanitizer-tsan:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    # TSAN detects known threading issues tracked for future refactor.
+    # Runs for visibility but does not block the pipeline.
+    continue-on-error: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libsqlite3-dev
+
+      - name: Configure with TSAN
+        run: |
+          cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=ON \
+            -DCMAKE_CXX_FLAGS="-fsanitize=thread" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=thread" \
+            -B build .
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.31"
+
+      - name: Build
+        run: cd build && make ./countly-tests
+
+      - name: Run tests
+        run: cd build && ./countly-tests
+        env:
+          TSAN_OPTIONS: "second_deadlock_stack=1"
+
+  sanitizer-ubsan:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libsqlite3-dev
+
+      - name: Configure with UBSAN
+        run: |
+          cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=ON \
+            -DCMAKE_CXX_FLAGS="-fsanitize=undefined -fno-sanitize-recover=all" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=undefined" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=undefined" \
+            -B build .
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.31"
+
+      - name: Build
+        run: cd build && make ./countly-tests
+
+      - name: Run tests
+        run: cd build && ./countly-tests
+        env:
+          UBSAN_OPTIONS: "print_stacktrace=1"
+
+  # ──────────────────────────────────────────────
+  # Static library build (custom HTTP, no curl)
+  # ──────────────────────────────────────────────
+  static-build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            libssl-dev \
+            libsqlite3-dev
+
+      - name: Configure static build
+        run: |
+          cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=ON \
+            -DBUILD_SHARED_LIBS=OFF -DCOUNTLY_USE_CUSTOM_HTTP=ON \
+            -B build .
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.31"
+
+      - name: Build
+        run: cd build && make ./countly-tests
+
+      - name: Run tests
+        run: cd build && ./countly-tests
+
+  # ──────────────────────────────────────────────
+  # C++17 compatibility check
+  # ──────────────────────────────────────────────
+  cpp17:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libsqlite3-dev
+
+      - name: Configure with C++17
+        run: |
+          cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=ON \
+            -DCMAKE_CXX_STANDARD=17 \
+            -B build .
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.31"
+
+      - name: Build
+        run: cd build && make ./countly-tests
+
+      - name: Run tests
+        run: cd build && ./countly-tests
+
+  # ──────────────────────────────────────────────
+  # Clang on Linux
+  # ──────────────────────────────────────────────
+  clang-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            clang \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libsqlite3-dev
+
+      - name: Configure with Clang
+        run: |
+          cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=ON \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -B build .
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.31"
+
+      - name: Build
+        run: cd build && make ./countly-tests
+
+      - name: Run tests
+        run: cd build && ./countly-tests

@@ -52,7 +52,7 @@ public:
     std::string salted_data = data + salt;
 #ifdef COUNTLY_USE_CUSTOM_SHA256
     if (_configuration->sha256_function == nullptr) {
-      _logger->log(LogLevel::FATAL, "Missing SHA 256 function");
+      _logger->log(LogLevel::FATAL, "[Countly] [RequestModule] calculateChecksum, Missing SHA 256 function");
       return {};
     }
 
@@ -78,7 +78,7 @@ public:
 RequestModule::RequestModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule) {
   impl.reset(new RequestModuleImpl(config, logger, requestBuilder, storageModule));
 
-  impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] Initialized"));
+  impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] Initialized"));
 
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
   curl_global_init(CURL_GLOBAL_ALL);
@@ -99,8 +99,19 @@ static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n
 }
 
 void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &data) {
-  if (impl->_configuration->requestQueueThreshold <= impl->_storageModule->RQCount()) {
-    impl->_logger->log(LogLevel::WARNING, cly::utils::format_string("[RequestModule] addRequestToQueue: Request Queue is full. Dropping the oldest request."));
+  std::shared_ptr<ConfigurationProvider> config = _configProvider.lock();
+  if (!config) {
+    impl->_logger->log(LogLevel::WARNING, "[Countly] [RequestModule] addRequestToQueue: ConfigurationProvider unavailable. Not adding request.");
+    return;
+  }
+
+  if (config->isTrackingEnabled() == false) {
+    impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] addRequestToQueue: Tracking is disabled. Not adding request to queue.");
+    return;
+  }
+
+  if (config->getRequestQueueSizeLimit() <= impl->_storageModule->RQCount()) {
+    impl->_logger->log(LogLevel::WARNING, cly::utils::format_string("[Countly] [RequestModule] addRequestToQueue: Request Queue is full. Dropping the oldest request."));
     impl->_storageModule->RQRemoveFront();
   }
 
@@ -112,6 +123,24 @@ void RequestModule::clearRequestQueue() { impl->_storageModule->RQClearAll(); }
 
 void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
   mutex->lock();
+
+  if (std::shared_ptr<ConfigurationProvider> config = _configProvider.lock()) {
+    if (config->isTrackingEnabled() == false) {
+      impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] processQueue: Tracking is disabled. Not processing request queue.");
+      mutex->unlock();
+      return;
+    }
+    if (config->isNetworkingEnabled() == false) {
+      impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] processQueue: Networking is disabled. Not processing request queue.");
+      mutex->unlock();
+      return;
+    }
+  } else {
+    impl->_logger->log(LogLevel::WARNING, "[Countly] [RequestModule] processQueue: ConfigurationProvider unavailable, skipping queue processing.");
+    mutex->unlock();
+    return;
+  }
+
   // making sure that no other thread is processing the queue
   if (impl->is_queue_being_processed) {
     mutex->unlock();
@@ -127,9 +156,9 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
 
   while (true) {
     mutex->lock();
-    impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] processQueue: Processing the request queue."));
+    impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] processQueue: Processing the request queue."));
     if (impl->_storageModule->RQCount() == 0) {
-      impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] processQueue: Queue is empty."));
+      impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] processQueue: Queue is empty."));
 
       // stop sending requests once the queue is empty
       mutex->unlock();
@@ -142,7 +171,7 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
 
     mutex->lock();
     if (!response.success) {
-      impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] processQueue: Failed to deliver to server, will try again later."));
+      impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] processQueue: Failed to deliver to server, will try again later."));
       // if the request was not a success, abort sending and try again in the future
       mutex->unlock();
       break;
@@ -154,7 +183,7 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
     processedRequestsCounter++;
 
     if (processedRequestsCounter > impl->_configuration->maxProcessingBatchSize) {
-      impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[RequestModule] processQueue: Batch limit has been reached, will do next batch later."));
+      impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] processQueue: Batch limit has been reached, will do next batch later."));
       mutex->unlock();
       break;
     }
@@ -170,7 +199,7 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
 
 HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
   bool use_post = impl->_configuration->forcePost || (data.size() > COUNTLY_POST_THRESHOLD);
-  impl->_logger->log(LogLevel::DEBUG, "[Countly][sendHTTP] data: " + data);
+  impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] sendHTTP, data: [" + data + "]");
   if (!impl->_configuration->salt.empty()) {
     std::string checksum = impl->calculateChecksum(impl->_configuration->salt, data);
     if (!data.empty()) {
@@ -178,7 +207,7 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
     }
 
     data += "checksum256=" + checksum;
-    impl->_logger->log(LogLevel::DEBUG, "[Countly][sendHTTP] with checksum, data: " + data);
+    impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] sendHTTP, with checksum, data: [" + data + "]");
   }
 
   HTTPResponse response;
@@ -186,7 +215,7 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
 
 #ifdef COUNTLY_USE_CUSTOM_HTTP
   if (!impl->_configuration->http_client_function) {
-    impl->_logger->log(LogLevel::FATAL, "Missing HTTP client function");
+    impl->_logger->log(LogLevel::FATAL, "[Countly] [RequestModule] sendHTTP, Missing HTTP client function");
     return response;
   }
 
@@ -275,7 +304,7 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
           if (!body.empty()) {
             const nlohmann::json &parseResult = nlohmann::json::parse(body, nullptr, false);
             if (parseResult.is_discarded()) {
-              impl->_logger->log(LogLevel::WARNING, "[Countly][sendHTTP] Returned response from the server was not a valid JSON.");
+              impl->_logger->log(LogLevel::WARNING, "[Countly] [RequestModule] sendHTTP, Returned response from the server was not a valid JSON.");
             } else {
               response.data = parseResult;
             }
@@ -309,7 +338,7 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
       curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.c_str());
     }
 
-    impl->_logger->log(LogLevel::DEBUG, "[Countly][sendHTTP] request: " + full_url_stream.str());
+    impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] sendHTTP, request: [" + full_url_stream.str() + "]");
 
     std::string full_url = full_url_stream.str();
     curl_easy_setopt(curl, CURLOPT_URL, full_url.c_str());
@@ -328,7 +357,7 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
       if (!body.empty()) {
         const nlohmann::json &parseResult = nlohmann::json::parse(body, nullptr, false);
         if (parseResult.is_discarded()) {
-          impl->_logger->log(LogLevel::WARNING, "[Countly][sendHTTP] Returned response from the server was not a valid JSON.");
+          impl->_logger->log(LogLevel::WARNING, "[Countly] [RequestModule] sendHTTP, Returned response from the server was not a valid JSON.");
         } else {
           response.data = parseResult;
         }
@@ -337,9 +366,12 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
     curl_easy_cleanup(curl);
   }
 #endif
-  impl->_logger->log(LogLevel::DEBUG, "[Countly][sendHTTP] response: " + response.data.dump());
+  impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] sendHTTP, response: [" + response.data.dump() + "]");
   return response;
 #endif
 }
 long long RequestModule::RQSize() { return impl->_storageModule->RQCount(); }
+
+void RequestModule::setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider) { _configProvider = std::move(provider); }
+
 } // namespace cly

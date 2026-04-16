@@ -70,9 +70,22 @@ struct CountlyConfiguration {
 
   bool manualSessionControl = false;
 
+  bool autoEventsOnUserProperties = true;
+
+  /**
+   * Enable immediate stop notification using a condition variable.
+   * When enabled, the update loop wakes immediately on stop instead of
+   * waiting for the current sleep interval to expire.
+   */
+  bool immediateRequestOnStop = false;
+
   HTTPClientFunction http_client_function = nullptr;
 
   nlohmann::json metrics;
+
+  bool sdkBehaviorSettingsUpdatesDisabled = false;
+
+  std::string sdkBehaviorSettings;
 
   CountlyConfiguration(const std::string appKey, std::string serverUrl) {
     this->appKey = appKey;

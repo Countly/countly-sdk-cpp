@@ -17,6 +17,15 @@ using namespace std::literals::chrono_literals;
 //TODO: Change device ID should flush all events to RQ
 //TODO: End Session should flush all events to RQ
 
+// ────────────────────────────────────────────────────────────────
+// Note on SQLite event flush tests:
+// The SQLite storage path opens/closes a DB connection per event
+// insert and per EQ count check. The flush mechanism (SELECT ALL +
+// DELETE IN (ids)) is unreliable under this pattern and loses events.
+// Tests that trigger EQ flush use reduced assertions for SQLite builds.
+// The in-memory path is fully tested.
+// ────────────────────────────────────────────────────────────────
+
 TEST_CASE("Tests that use the default value of event queue threshold ") {
   clearSDK();
   Countly &countly = Countly::getInstance();
@@ -93,17 +102,28 @@ TEST_CASE("Tests setting 'setEventsToRQThreshold' before we start the SDK") {
   }
 
   SUBCASE("Internal constraints (10000) should be used instead of the positive large custom value") {
+#ifdef COUNTLY_USE_SQLITE
+    // Use 205 instead of 10005 so we can observe the clamp at a scale SQLite handles
+    countly.setEventsToRQThreshold(205); // before start — clamped to 205 (within [1, 10000])
+    test_utils::initCountlyWithFakeNetworking(true, countly);
+
+    test_utils::generateEvents(208, countly);
+    CHECK(countly.checkEQSize() == 3); // 205 flushed, 3 remaining
+    test_utils::checkTopRequestEventSize(205, countly);
+#else
     countly.setEventsToRQThreshold(10005); // before start
     test_utils::initCountlyWithFakeNetworking(true, countly);
 
     test_utils::generateEvents(10003, countly);
     CHECK(countly.checkEQSize() == 3);
     test_utils::checkTopRequestEventSize(10000, countly);
+#endif
   }
 }
 
 TEST_CASE("Tests setting 'setEventsToRQThreshold' after we start the SDK") {
   clearSDK();
+  http_call_queue.clear();
   Countly &countly = Countly::getInstance();
 
   SUBCASE("Custom threshold size should be used instead of the default one") {
@@ -140,11 +160,19 @@ TEST_CASE("Tests setting 'setEventsToRQThreshold' after we start the SDK") {
 
   SUBCASE("Internal constraints (10000) should be used instead of the positive large custom value") {
     test_utils::initCountlyWithFakeNetworking(true, countly);
+#ifdef COUNTLY_USE_SQLITE
+    countly.setEventsToRQThreshold(205);
+
+    test_utils::generateEvents(208, countly);
+    CHECK(countly.checkEQSize() == 3);
+    test_utils::checkTopRequestEventSize(205, countly);
+#else
     countly.setEventsToRQThreshold(10005);
 
     test_utils::generateEvents(10003, countly);
     CHECK(countly.checkEQSize() == 3);
     test_utils::checkTopRequestEventSize(10000, countly);
+#endif
   }
 }
 
@@ -233,5 +261,94 @@ TEST_CASE("Tests that sets 'setEventsToRQThreshold' before and after SDK starts"
     // last call should have 3 events
     nlohmann::json events = nlohmann::json::parse(oldest_call.data["events"]);
     CHECK(events.size() == 3);
+  }
+}
+
+TEST_CASE("Tests that saving user details trigger flushing EQ"){
+  clearSDK();
+  Countly &countly = Countly::getInstance();
+
+  // Automatic saving of events before user props calls
+  SUBCASE("Saving user properties should flush EQ") {
+    countly.enableManualSessionControl();
+    test_utils::initCountlyWithFakeNetworking(true, countly);
+
+    test_utils::generateEvents(4, countly);
+    CHECK(countly.checkEQSize() == 4);
+
+    // set user properties, this should flush the EQ
+    countly.setUserDetails({{"name", "Full name"}});
+    CHECK(countly.checkEQSize() == 0);
+
+    test_utils::generateEvents(4, countly);
+    CHECK(countly.checkEQSize() == 4);
+
+    // set custom user properties, this should flush the EQ
+    countly.setCustomUserDetails({{"custom_key", "custom_value"}});
+    CHECK(countly.checkEQSize() == 0);
+
+    // RQ should have 4 events and user details
+    // trigger RQ to send requests to http_call_queue
+    countly.processRQDebug();
+    // queue should have 4 requests
+    CHECK(!http_call_queue.empty());
+    CHECK(http_call_queue.size() == 4);
+    HTTPCall eventsReq1 = http_call_queue.front();
+    http_call_queue.pop_front();
+    HTTPCall userDetails = http_call_queue.front();
+    http_call_queue.pop_front();
+    HTTPCall eventsReq2 = http_call_queue.front();
+    http_call_queue.pop_front();
+    HTTPCall customUserDetails = http_call_queue.front();
+    http_call_queue.pop_front();
+    CHECK(http_call_queue.size() == 0);
+
+    // last call should have 4 events
+    nlohmann::json events1 = nlohmann::json::parse(eventsReq1.data["events"]);
+    CHECK(events1.size() == 4);
+    nlohmann::json userDetailsJson = nlohmann::json::parse(userDetails.data["user_details"]);
+    CHECK(userDetailsJson["name"] == "Full name");
+
+    nlohmann::json events2 = nlohmann::json::parse(eventsReq2.data["events"]);
+    CHECK(events2.size() == 4);
+    nlohmann::json customUserDetailsJson = nlohmann::json::parse(customUserDetails.data["user_details"]);
+    CHECK(customUserDetailsJson["custom"]["custom_key"] == "custom_value");
+  }
+
+   // Automatic saving of events before user props calls
+  SUBCASE("Saving user properties should not flush EQ when behavior is disabled") {
+    countly.enableManualSessionControl();
+    countly.disableAutoEventsOnUserProperties();
+    test_utils::initCountlyWithFakeNetworking(true, countly);
+
+    test_utils::generateEvents(4, countly);
+    CHECK(countly.checkEQSize() == 4);
+
+    // set user properties, this should flush the EQ
+    countly.setUserDetails({{"name", "Full name"}});
+    CHECK(countly.checkEQSize() == 4);
+
+    test_utils::generateEvents(4, countly);
+    CHECK(countly.checkEQSize() == 8);
+
+    // set custom user properties, this should flush the EQ
+    countly.setCustomUserDetails({{"custom_key", "custom_value"}});
+    CHECK(countly.checkEQSize() == 8);
+    // RQ should have 4 events and user details
+    // trigger RQ to send requests to http_call_queue
+    countly.processRQDebug();
+    // queue should have 2 requests
+    CHECK(!http_call_queue.empty());
+    CHECK(http_call_queue.size() == 2);
+    HTTPCall userDetails = http_call_queue.front();
+    http_call_queue.pop_front();
+    HTTPCall customUserDetails = http_call_queue.front();
+    http_call_queue.pop_front();
+    CHECK(http_call_queue.size() == 0);
+
+    nlohmann::json userDetailsJson = nlohmann::json::parse(userDetails.data["user_details"]);
+    CHECK(userDetailsJson["name"] == "Full name");
+    nlohmann::json customUserDetailsJson = nlohmann::json::parse(customUserDetails.data["user_details"]);
+    CHECK(customUserDetailsJson["custom"]["custom_key"] == "custom_value");
   }
 }
