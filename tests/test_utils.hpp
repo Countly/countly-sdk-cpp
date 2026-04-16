@@ -5,6 +5,7 @@
 #include "doctest.h"
 #include "nlohmann/json.hpp"
 #include <cstdio>
+#include <mutex>
 
 using namespace cly;
 
@@ -21,7 +22,23 @@ struct HTTPCall {
   std::map<std::string, std::string> data;
 };
 
-static std::deque<HTTPCall> http_call_queue;
+// Thread-safe wrapper around the HTTP call queue.
+// The SDK's background threads (SBS config fetch, updateLoop) call fakeSendHTTP
+// which pushes to this queue, while the test thread reads/clears it.
+struct ThreadSafeHTTPCallQueue {
+  mutable std::mutex mtx;
+  std::deque<HTTPCall> queue;
+
+  void push_back(const HTTPCall &call) { std::lock_guard<std::mutex> lock(mtx); queue.push_back(call); }
+  void clear() { std::lock_guard<std::mutex> lock(mtx); queue.clear(); }
+  bool empty() const { std::lock_guard<std::mutex> lock(mtx); return queue.empty(); }
+  size_t size() const { std::lock_guard<std::mutex> lock(mtx); return queue.size(); }
+  HTTPCall front() const { std::lock_guard<std::mutex> lock(mtx); return queue.front(); }
+  void pop_front() { std::lock_guard<std::mutex> lock(mtx); queue.pop_front(); }
+  HTTPCall at(size_t idx) const { std::lock_guard<std::mutex> lock(mtx); return queue.at(idx); }
+};
+
+static ThreadSafeHTTPCallQueue http_call_queue;
 
 static void clearSDK() {
   cly::Countly::halt();
@@ -47,7 +64,7 @@ static void checkTopRequestEventSize(int size, cly::Countly &countly) {
   countly.processRQDebug();
 
   // check that the local HTTP request queue has atleast 1 event
-  CHECK(!http_call_queue.empty());
+  REQUIRE(!http_call_queue.empty());
   // get the oldest event
   HTTPCall oldest_call = http_call_queue.front();
   // remove the oldest event from the queue
