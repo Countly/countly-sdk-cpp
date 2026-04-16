@@ -42,4 +42,27 @@ void Event::stopTimer() {
 }
 
 std::string Event::serialize() const { return object.dump(); }
+
+std::string Event::getKey() const {
+  auto it = object.find("key");
+  if (it != object.end() && it->is_string()) {
+    return it->get<std::string>();
+  }
+  return "";
+}
+
+bool Event::hasSegmentation() const { return object.find("segmentation") != object.end() && object["segmentation"].is_object() && !object["segmentation"].empty(); }
+
+void Event::removeSegmentation(const std::string &key) {
+  if (object.find("segmentation") != object.end()) {
+    object["segmentation"].erase(key);
+    if (object["segmentation"].empty()) {
+      object.erase("segmentation");
+    }
+  }
+}
+
+void Event::clearSegmentation() {
+  object.erase("segmentation");
+}
 } // namespace cly

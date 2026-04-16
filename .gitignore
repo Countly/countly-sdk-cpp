@@ -20,3 +20,7 @@ compile_commands.json
 CTestTestfile.cmake
 _deps
 cmake-build-debug/
+
+.DS_Store
+test_results_*.log
+*.db

@@ -1,8 +1,10 @@
+#include <chrono>
 #include <cstdlib>
 #include <deque>
 #include <iostream>
 #include <map>
 #include <string>
+#include <thread>
 
 #include "countly.hpp"
 #include "doctest.h"
@@ -13,16 +15,15 @@ using namespace test_utils;
 
 using namespace cly;
 
-void validateCrashParams(const std::string &title, const std::string &stackTrace, const bool fatal, const std::string &breadCrumbs, const std::map<std::string, std::string> &crashMetrics, const std::map<std::string, std::string> &segmentation) {
+void validateCrashParams(const std::string &title, const std::string &stackTrace, const bool fatal, const std::string &breadCrumbs, const std::map<std::string, std::string> &crashMetrics, const std::map<std::string, std::string> &segmentation, int idx = 0) {
   CHECK(!http_call_queue.empty());
-  HTTPCall http_call = http_call_queue.front();
+  HTTPCall http_call =   http_call_queue.at(1 + idx); // not front anymore because sbs is 0 now
   long long timestamp = getUnixTimestamp();
   long long timestampDiff = timestamp - std::stoll(http_call.data["timestamp"]);
   CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
   CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
   CHECK(timestampDiff >= 0);
   CHECK(timestampDiff <= 1000);
-
   nlohmann::json c = nlohmann::json::parse(http_call.data["crash"]);
   CHECK(c["_name"].get<std::string>() == title);
   CHECK(c["_error"].get<std::string>() == stackTrace);
@@ -41,18 +42,19 @@ void validateCrashParams(const std::string &title, const std::string &stackTrace
       CHECK(s[segment.first].get<std::string>() == segment.second);
     }
   }
-
-  http_call_queue.pop_front();
 }
 
 TEST_CASE("crash unit tests") {
   clearSDK();
+  http_call_queue.clear();
   Countly &countly = Countly::getInstance();
 
   countly.setHTTPClient(test_utils::fakeSendHTTP);
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   countly.SetPath(TEST_DATABASE_NAME);
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+  // Wait for the async SBS config fetch thread to complete
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
   SUBCASE("record crash without bread crumbs") {
     // clear the request queue, it contains session begin request
@@ -122,6 +124,6 @@ TEST_CASE("crash unit tests") {
     countly.processRQDebug();
 
     // validate crash request
-    validateCrashParams("Divided By Zero", "stackTrack", true, "first\nsecond\n", crashMetrics, segmentation);
+    validateCrashParams("Divided By Zero", "stackTrack", true, "first\nsecond\n", crashMetrics, segmentation, 1);
   }
 }

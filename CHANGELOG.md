@@ -1,4 +1,9 @@
 ## XX.XX.XX
+- ! Minor breaking change ! SDK Behavior Settings is now enabled by default. Changes made on SDK Manager > SDK Behavior Settings on your server will affect SDK behavior directly.
+
+- Added init config method "disableSDKBehaviorSettingsUpdates" to disable periodic SBS updates from the server.
+- Added init config method "setSDKBehaviorSettings" to provide server configuration in JSON format during initialization.
+
 - Fixed OpenSSL discovery in CMakeLists.txt to dynamically resolve the Homebrew prefix, supporting both Apple Silicon and Intel Macs.
 
 ## 23.2.4

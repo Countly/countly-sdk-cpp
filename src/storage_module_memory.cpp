@@ -106,6 +106,15 @@ void StorageModuleMemory::RQClearAll() {
   request_queue.clear();
 }
 
+void StorageModuleMemory::storeSDKBehaviorSettings(const std::string &sdk_behavior_settings) {
+  // For in-memory storage, it is already stored in memory inside the module.
+}
+
+std::string StorageModuleMemory::getSDKBehaviorSettings() {
+  // For in-memory storage, it is already stored in memory inside the module.
+  return "";
+}
+
 const std::shared_ptr<DataEntry> StorageModuleMemory::RQPeekFront() {
   std::shared_ptr<DataEntry> front = nullptr;
   if (!_is_initialized) {
