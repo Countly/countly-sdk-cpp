@@ -580,9 +580,7 @@ void Countly::_deleteThread() {
     std::lock_guard<std::mutex> lk(*mutex);
     stop_thread = true;
   }
-  if (configuration->immediateRequestOnStop) {
-    stop_cv.notify_one();
-  }
+  stop_cv.notify_one();
   if (thread && thread->joinable()) {
     try {
       thread->join();
@@ -1409,7 +1407,7 @@ void Countly::updateLoop() {
         {
           std::unique_lock<std::mutex> lk(*mutex);
           stop_cv.wait_for(lk, std::chrono::milliseconds(wait_milliseconds), [this] {
-            return stop_thread;
+            return stop_thread.load();
           });
           if (stop_thread) {
             stop_thread = false;
