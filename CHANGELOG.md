@@ -1,3 +1,6 @@
+## 26.1.1
+- Updated CMake minimum required version to use the range format `3.0...3.31` to suppress modern CMake policy warnings.
+
 ## 26.1.0
 - ! Minor breaking change ! SDK Behavior Settings is now enabled by default. Changes made on SDK Manager > SDK Behavior Settings on your server will affect SDK behavior directly.
 
