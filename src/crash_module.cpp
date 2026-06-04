@@ -36,14 +36,13 @@ CrashModule::CrashModule(std::shared_ptr<CountlyConfiguration> config, std::shar
 void CrashModule::addBreadcrumb(const std::string &value) {
   impl->_logger->log(LogLevel::INFO, "[Countly] [CrashModule] addBreadcrumb, value = [" + value + "]");
 
-  impl->_mutex->lock();
+  std::lock_guard<std::mutex> lk(*impl->_mutex);
   // if breadcrumb threshold is reached, remove oldest breadcrumb
   if (impl->_breadCrumbs.size() >= impl->_configuration->breadcrumbsThreshold) {
     impl->_breadCrumbs.pop_front();
   }
   // add new breadcrumb
   impl->_breadCrumbs.push_back(value);
-  impl->_mutex->unlock();
 }
 
 // function to record exception
@@ -81,8 +80,9 @@ void CrashModule::recordException(const std::string &title, const std::string &s
     impl->_logger->log(LogLevel::ERROR, "[Countly] [CrashModule] recordException, The crash metric '_app_version' can't be empty");
   }
 
-  // lock mutex to avoid concurrent access
-  impl->_mutex->lock();
+  // lock mutex to avoid concurrent access; lock_guard releases on scope exit,
+  // including when json construction / crash.dump() / addRequestToQueue throws.
+  std::lock_guard<std::mutex> lk(*impl->_mutex);
   // convert breadcrumbs vector to a string and add to json object
   std::ostringstream outstream;
   std::copy(impl->_breadCrumbs.begin(), impl->_breadCrumbs.end(), std::ostream_iterator<std::string>(outstream, "\n"));
@@ -101,8 +101,6 @@ void CrashModule::recordException(const std::string &title, const std::string &s
   // create a map with the crash json object as value and "crash" as key, and add the map to the request queue
   std::map<std::string, std::string> data = {{"crash", crash.dump()}};
   impl->_requestModule->addRequestToQueue(data);
-  // unlock mutex
-  impl->_mutex->unlock();
 }
 
 void CrashModule::setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider) { impl->_configProvider = std::move(provider); }

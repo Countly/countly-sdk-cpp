@@ -1,0 +1,32 @@
+# Build directory
+build/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Qt auto-generated
+*_autogen/
+moc_*
+ui_*
+qrc_*
+
+# Compiled binaries
+*.o
+*.obj
+*.exe
+*.out
+*.app
+
+# IDE files
+.vscode/
+.idea/
+*.user
+*.swp
+*~
+.DS_Store
+
+# Dev credentials — do not commit
+dev_config.hpp

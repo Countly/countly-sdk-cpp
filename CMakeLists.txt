@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.0...3.31)
 
 # Acquire countly version from constant
 file(READ ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/constants.hpp COUNTLY_HPP_CONTENTS)
@@ -119,6 +119,7 @@ if(COUNTLY_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/request.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/config.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/immediate_stop.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/mutex_exception_safety.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/sbs.cpp)
     
     target_compile_options(countly-tests PRIVATE -g)

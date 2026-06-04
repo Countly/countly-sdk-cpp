@@ -314,6 +314,14 @@ public:
   std::vector<std::string> debugReturnStateOfEQ();
 
   /**
+   * Injects a raw (possibly malformed) string directly into the in-memory event
+   * queue, bypassing serialization. Used only by the mutex exception-safety test
+   * to force a parse failure inside the locked section of updateSession().
+   * Warning: This method is for debugging purposes, and it is going to be removed in the future.
+   */
+  void debugInjectRawEvent(const std::string &raw);
+
+  /**
    * This function should not be used as it will be removed in a future release.
    * It is currently added as a temporary workaround.
    */
@@ -331,6 +339,8 @@ public:
 
   inline void clearRequestQueue() {
     if (is_sdk_initialized) {
+      // serialize storage access with the background processQueue thread
+      std::lock_guard<std::mutex> lk(*mutex);
       requestModule->clearRequestQueue();
     }
   }
