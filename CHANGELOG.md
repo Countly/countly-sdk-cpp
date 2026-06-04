@@ -1,5 +1,6 @@
 ## 26.1.1
 - Updated CMake minimum required version to use the range format with upper the end of `3.31`.
+- Hardened mutex handling against exceptions.
 
 ## 26.1.0
 - ! Minor breaking change ! SDK Behavior Settings is now enabled by default. Changes made on SDK Manager > SDK Behavior Settings on your server will affect SDK behavior directly.

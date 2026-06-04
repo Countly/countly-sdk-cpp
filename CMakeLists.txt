@@ -119,6 +119,7 @@ if(COUNTLY_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/request.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/config.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/immediate_stop.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/mutex_exception_safety.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/sbs.cpp)
     
     target_compile_options(countly-tests PRIVATE -g)

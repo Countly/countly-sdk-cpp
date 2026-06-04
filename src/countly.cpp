@@ -45,11 +45,12 @@ Countly &Countly::getInstance() {
 }
 
 #ifdef COUNTLY_BUILD_TESTS
-void Countly::halt() { 
-    if (_sharedInstance) {
-        _sharedInstance->stop();  // joins threads, releases mutex normally
-    }
-    _sharedInstance.reset(new Countly()); }
+void Countly::halt() {
+  if (_sharedInstance) {
+    _sharedInstance->stop();
+  }
+  _sharedInstance.reset(new Countly());
+}
 #endif
 
 /**
@@ -62,9 +63,8 @@ void Countly::setMaxRequestQueueSize(unsigned int requestQueueSize) {
     return;
   }
 
-  mutex->lock();
+  std::lock_guard<std::mutex> lk(*mutex);
   configuration->requestQueueThreshold = requestQueueSize;
-  mutex->unlock();
 }
 
 /**
@@ -73,9 +73,8 @@ void Countly::setMaxRequestQueueSize(unsigned int requestQueueSize) {
  * @param batchSize: max size of requests to process at a time
  */
 void Countly::setMaxRQProcessingBatchSize(unsigned int batchSize) {
-  mutex->lock();
+  std::lock_guard<std::mutex> lk(*mutex);
   configuration->maxProcessingBatchSize = batchSize;
-  mutex->unlock();
 }
 
 void Countly::alwaysUsePost(bool value) {
@@ -84,9 +83,8 @@ void Countly::alwaysUsePost(bool value) {
     return;
   }
 
-  mutex->lock();
+  std::lock_guard<std::mutex> lk(*mutex);
   configuration->forcePost = value;
-  mutex->unlock();
 }
 
 void Countly::setSalt(const std::string &value) {
@@ -95,9 +93,8 @@ void Countly::setSalt(const std::string &value) {
     return;
   }
 
-  mutex->lock();
+  std::lock_guard<std::mutex> lk(*mutex);
   configuration->salt = value;
-  mutex->unlock();
 }
 
 void Countly::setLogger(void (*fun)(LogLevel level, const std::string &message)) {
@@ -106,9 +103,8 @@ void Countly::setLogger(void (*fun)(LogLevel level, const std::string &message))
     return;
   }
 
-  mutex->lock();
+  std::lock_guard<std::mutex> lk(*mutex);
   logger->setLogger(fun);
-  mutex->unlock();
 }
 
 void Countly::setHTTPClient(HTTPClientFunction fun) {
@@ -117,9 +113,8 @@ void Countly::setHTTPClient(HTTPClientFunction fun) {
     return;
   }
 
-  mutex->lock();
+  std::lock_guard<std::mutex> lk(*mutex);
   configuration->http_client_function = fun;
-  mutex->unlock();
 }
 
 void Countly::setSha256(SHA256Function fun) {
@@ -128,9 +123,8 @@ void Countly::setSha256(SHA256Function fun) {
     return;
   }
 
-  mutex->lock();
+  std::lock_guard<std::mutex> lk(*mutex);
   configuration->sha256_function = fun;
-  mutex->unlock();
 }
 
 /**
@@ -142,9 +136,8 @@ void Countly::enableManualSessionControl() {
     return;
   }
 
-  mutex->lock();
+  std::lock_guard<std::mutex> lk(*mutex);
   configuration->manualSessionControl = true;
-  mutex->unlock();
 }
 
 /**
@@ -156,9 +149,8 @@ void Countly::disableAutoEventsOnUserProperties() {
     return;
   }
 
-  mutex->lock();
+  std::lock_guard<std::mutex> lk(*mutex);
   configuration->autoEventsOnUserProperties = false;
-  mutex->unlock();
 }
 
 void Countly::enableImmediateRequestOnStop() {
@@ -202,29 +194,31 @@ void Countly::setMetrics(const std::string &os, const std::string &os_version, c
 }
 
 void Countly::setUserDetails(const std::map<std::string, std::string> &value) {
-  mutex->lock();
+  // unique_lock so the mutex is released on scope exit, including on a throwing
+  // json/map/addRequestToQueue op; unlock/relock around the self-locking flushEvents().
+  std::unique_lock<std::mutex> lk(*mutex);
   session_params["user_details"] = value;
 
   if (!is_sdk_initialized) {
     log(LogLevel::ERROR, "[Countly] setUserDetails, This method can't be called before SDK initialization. Returning.");
-    mutex->unlock();
     return;
   }
 
   if (configuration->autoEventsOnUserProperties == true) {
-    mutex->unlock();
+    lk.unlock();
     flushEvents();
-    mutex->lock();
+    lk.lock();
   }
 
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"user_details", session_params["user_details"].dump()}};
 
   requestModule->addRequestToQueue(data);
-  mutex->unlock();
 }
 
 void Countly::setCustomUserDetails(const std::map<std::string, std::string> &value) {
-  mutex->lock();
+  // unique_lock so the mutex is released on scope exit, including on a throwing
+  // json/map/addRequestToQueue op; unlock/re-acquire around the self-locking flushEvents().
+  std::unique_lock<std::mutex> lk(*mutex);
 
   // Apply user property filter
   if (configurationModule) {
@@ -245,7 +239,6 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string> &val
 
       if (filteredValue.empty()) {
         log(LogLevel::DEBUG, "[Countly] setCustomUserDetails, All user properties were filtered out by SBS user property filter.");
-        mutex->unlock();
         return;
       }
       session_params["user_details"]["custom"] = filteredValue;
@@ -258,20 +251,17 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string> &val
 
   if (!is_sdk_initialized) {
     log(LogLevel::ERROR, "[Countly] setCustomUserDetails, This method can't be called before SDK initialization. Returning.");
-    mutex->unlock();
     return;
   }
 
   if (configuration->autoEventsOnUserProperties == true) {
-    mutex->unlock();
+    lk.unlock();
     flushEvents();
-    mutex->lock();
+    lk.lock();
   }
 
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"user_details", session_params["user_details"].dump()}};
   requestModule->addRequestToQueue(data);
-
-  mutex->unlock();
 }
 
 #pragma region User location
@@ -300,10 +290,11 @@ void Countly::setLocation(const std::string &countryCode, const std::string &cit
     return;
   }
   bool isClearingLocation = countryCode.empty() && city.empty() && gpsCoordinates.empty() && ipAddress.empty();
-  mutex->lock();
+  // unique_lock so the mutex is released on scope exit (incl. throwing json writes);
+  // explicit unlock before the self-locking _sendIndependantLocationRequest() below.
+  std::unique_lock<std::mutex> lk(*mutex);
   if (!isClearingLocation && configurationModule->isLocationTrackingEnabled() == false) {
     log(LogLevel::ERROR, "[Countly] setLocation, Location tracking is disabled in server configuration, can not set location.");
-    mutex->unlock();
     return;
   }
   log(LogLevel::INFO, "[Countly] setLocation, Setting location: countryCode = [" + countryCode + "], city = [" + city + "], gpsCoordinates = [" + gpsCoordinates + "], ipAddress = [" + ipAddress + "]");
@@ -317,7 +308,7 @@ void Countly::setLocation(const std::string &countryCode, const std::string &cit
   session_params["location"] = gpsCoordinates;
   session_params["country_code"] = countryCode;
 
-  mutex->unlock();
+  lk.unlock();
 
   if (is_sdk_initialized) {
     _sendIndependantLocationRequest();
@@ -325,7 +316,7 @@ void Countly::setLocation(const std::string &countryCode, const std::string &cit
 }
 
 void Countly::_sendIndependantLocationRequest() {
-  mutex->lock();
+  std::lock_guard<std::mutex> lk(*mutex);
   log(LogLevel::DEBUG, "[Countly] _sendIndependantLocationRequest, Start");
 
   /*
@@ -363,32 +354,30 @@ void Countly::_sendIndependantLocationRequest() {
   }
 
   requestModule->addRequestToQueue(data);
-
-  mutex->unlock();
 }
 
 #pragma endregion User location
 
 #pragma region Device Id
 void Countly::setDeviceID(const std::string &value, bool same_user) {
-  mutex->lock();
+  // unique_lock so the mutex is released on scope exit (incl. throwing json writes);
+  // explicit unlock before the self-locking _changeDeviceId* helpers below.
+  std::unique_lock<std::mutex> lk(*mutex);
   log(LogLevel::INFO, "[Countly] setDeviceID, Device ID change requested, new value = [" + value + "]");
 
   if (!session_params.contains("device_id")) {
     session_params["device_id"] = value;
     configuration->deviceId = value;
     log(LogLevel::DEBUG, "[Countly] setDeviceID, No previous device id, assigning initial device id");
-    mutex->unlock();
     return;
   }
 
   if (session_params["device_id"].get<std::string>() == value) {
     log(LogLevel::DEBUG, "[Countly] setDeviceID, New device id equals existing device id, ignoring.");
-    mutex->unlock();
     return;
   }
 
-  mutex->unlock();
+  lk.unlock();
   if (!is_sdk_initialized) {
     log(LogLevel::ERROR, "[Countly] setDeviceID, Device id can't be changed while the SDK has not been initialized.");
     return;
@@ -403,7 +392,7 @@ void Countly::setDeviceID(const std::string &value, bool same_user) {
 
 /* Change device ID with merge after SDK has been initialized.*/
 void Countly::_changeDeviceIdWithMerge(const std::string &value) {
-  mutex->lock();
+  std::lock_guard<std::mutex> lk(*mutex);
   log(LogLevel::DEBUG, "[Countly] _changeDeviceIdWithMerge, deviceId = [" + value + "]");
 
   session_params["old_device_id"] = session_params["device_id"];
@@ -421,7 +410,6 @@ void Countly::_changeDeviceIdWithMerge(const std::string &value) {
   requestModule->addRequestToQueue(data);
 
   session_params.erase("old_device_id");
-  mutex->unlock();
 }
 
 void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
@@ -433,10 +421,11 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
     endSession();
   }
 
-  mutex->lock();
-  session_params["device_id"] = value;
-  configuration->deviceId = value;
-  mutex->unlock();
+  {
+    std::lock_guard<std::mutex> lk(*mutex);
+    session_params["device_id"] = value;
+    configuration->deviceId = value;
+  }
 
   // start a new session for new user
   if (configuration->manualSessionControl == false) {
@@ -446,17 +435,18 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
 #pragma endregion Device Id
 
 void Countly::start(const std::string &app_key, const std::string &host, int port, bool start_thread) {
-  mutex->lock();
+  // unique_lock so the mutex is released on scope exit (incl. allocation/json
+  // throws while constructing modules); unlock/re-acquire around the self-locking
+  // configurationModule->fetch*/beginSession() calls below.
+  std::unique_lock<std::mutex> lk(*mutex);
   if (is_sdk_initialized) {
     log(LogLevel::ERROR, "[Countly] start, SDK has already been initialized, 'start' should not be called a second time!");
-    mutex->unlock();
     return;
   }
 
 #ifdef COUNTLY_USE_SQLITE
   if (configuration->databasePath == "" || configuration->databasePath == " ") {
     log(LogLevel::ERROR, "[Countly] start, Database path can not be empty or blank.");
-    mutex->unlock();
     return;
   }
 #endif
@@ -529,24 +519,23 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   is_sdk_initialized = result; // after this point SDK is initialized.
   if (!is_sdk_initialized) {
     log(LogLevel::ERROR, "[Countly] start, SDK initialization failed.");
-    mutex->unlock();
     return;
   }
 
   if (is_sdk_initialized) {
-    mutex->unlock();
+    lk.unlock();
     configurationModule->fetchConfigFromStorage();
     configurationModule->fetchConfigFromServer(session_params);
     configurationModule->startServerConfigUpdateTimer(session_params);
-    mutex->lock();
+    lk.lock();
   }
 
   if (!running) {
 
     if (configuration->manualSessionControl == false) {
-      mutex->unlock();
+      lk.unlock();
       beginSession();
-      mutex->lock();
+      lk.lock();
     }
 
     if (start_thread) {
@@ -561,7 +550,6 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
       }
     }
   }
-  mutex->unlock();
 }
 
 /**
@@ -678,13 +666,13 @@ void Countly::addEvent(const cly::Event &event) {
     }
   }
 
-  mutex->lock();
+  std::unique_lock<std::mutex> lk(*mutex);
 #ifndef COUNTLY_USE_SQLITE
   event_queue.push_back(filteredEvent.serialize());
 #else
   addEventToSqlite(filteredEvent);
 #endif
-  mutex->unlock();
+  lk.unlock();
   checkAndSendEventToRQ();
 }
 
@@ -695,16 +683,19 @@ void Countly::checkAndSendEventToRQ() {
   if (queueSize < 0) {
     return;
   }
-  mutex->lock();
+  // unique_lock so the mutex is released on scope exit, including when json::parse
+  // on a queued event or sendEventsToRQ throws; unlock/re-acquire around the
+  // self-locking fillEventsIntoJson().
+  std::unique_lock<std::mutex> lk(*mutex);
 #ifdef COUNTLY_USE_SQLITE
   if (queueSize >= configurationModule->getEventQueueSizeLimit()) {
     log(LogLevel::DEBUG, "[Countly] checkAndSendEventToRQ, Event queue threshold is reached");
     std::string event_ids;
 
     // fetch events up to the threshold from the database
-    mutex->unlock();
+    lk.unlock();
     fillEventsIntoJson(events, event_ids);
-    mutex->lock();
+    lk.lock();
     // send them to request queue
     sendEventsToRQ(events);
     // remove them from database
@@ -720,7 +711,6 @@ void Countly::checkAndSendEventToRQ() {
     event_queue.clear();
   }
 #endif
-  mutex->unlock();
 }
 
 void Countly::setMaxEvents(size_t value) {
@@ -730,7 +720,7 @@ void Countly::setMaxEvents(size_t value) {
 
 void Countly::setEventsToRQThreshold(int value) {
   log(LogLevel::DEBUG, "[Countly] setEventsToRQThreshold, Given threshold:[" + std::to_string(value) + "]");
-  mutex->lock();
+  std::unique_lock<std::mutex> lk(*mutex);
   if (value < 1) {
     log(LogLevel::WARNING, "[Countly] setEventsToRQThreshold, Threshold can not be less than 1. Setting it to 1 instead of:[" + std::to_string(value) + "]");
     value = 1;
@@ -742,7 +732,7 @@ void Countly::setEventsToRQThreshold(int value) {
   // set the value
   configuration->eventQueueThreshold = value;
   // if current queue size is greater than the new threshold, send events to RQ
-  mutex->unlock();
+  lk.unlock();
   checkAndSendEventToRQ();
 }
 
@@ -786,12 +776,12 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
 bool Countly::attemptSessionUpdateEQ() {
   // return false if event queue is empty
 #ifndef COUNTLY_USE_SQLITE
-  mutex->lock();
-  if (event_queue.empty()) {
-    mutex->unlock();
-    return false;
+  {
+    std::lock_guard<std::mutex> lk(*mutex);
+    if (event_queue.empty()) {
+      return false;
+    }
   }
-  mutex->unlock();
 #else
   int event_count = checkEQSize();
   if (event_count <= 0) {
@@ -808,6 +798,8 @@ bool Countly::attemptSessionUpdateEQ() {
 
 void Countly::clearEQInternal() {
 #ifndef COUNTLY_USE_SQLITE
+  // event_queue is guarded by mutex; the only caller (flushEvents) holds no lock here.
+  std::lock_guard<std::mutex> lk(*mutex);
   event_queue.clear();
 #else
   clearPersistentEQ();
@@ -849,6 +841,7 @@ std::vector<std::string> Countly::debugReturnStateOfEQ() {
     }
     sqlite3_close(database);
 #else
+    std::lock_guard<std::mutex> lk(*mutex);
     std::vector<std::string> v(event_queue.begin(), event_queue.end());
 #endif
     return v;
@@ -858,6 +851,16 @@ std::vector<std::string> Countly::debugReturnStateOfEQ() {
     log(LogLevel::FATAL, log_message.str());
   }
 }
+
+void Countly::debugInjectRawEvent(const std::string &raw) {
+  std::lock_guard<std::mutex> lk(*mutex);
+#ifndef COUNTLY_USE_SQLITE
+  event_queue.push_back(raw);
+#else
+  (void)raw;
+  log(LogLevel::WARNING, "[Countly] debugInjectRawEvent, not supported in SQLite builds.");
+#endif
+}
 #endif
 
 bool Countly::beginSession() {
@@ -865,15 +868,16 @@ bool Countly::beginSession() {
     log(LogLevel::WARNING, "[Countly] beginSession, SDK is not initialized.");
     return false;
   }
-  mutex->lock();
+  // unique_lock so the mutex is always released on scope exit, including the
+  // early returns below and any exception (e.g. a json type_error from a
+  // session_params access, or addRequestToQueue) thrown while it is held.
+  std::unique_lock<std::mutex> lk(*mutex);
   log(LogLevel::INFO, "[Countly] beginSession, Starting session");
   if (configurationModule->isSessionTrackingEnabled() == false) {
     log(LogLevel::ERROR, "[Countly] beginSession, Session tracking is disabled in server configuration, can not begin session.");
-    mutex->unlock();
     return false;
   }
   if (began_session == true) {
-    mutex->unlock();
     log(LogLevel::DEBUG, "[Countly] beginSession, Session is already active.");
     return true;
   }
@@ -913,12 +917,14 @@ bool Countly::beginSession() {
   session_params.erase("user_details");
   last_sent_session_request = Countly::getTimestamp();
   began_session = true;
-  mutex->unlock();
+  // snapshot guarded state before releasing the lock
+  bool shouldUpdateRemoteConfig = remote_config_enabled;
+  lk.unlock();
 
-  if (remote_config_enabled) {
+  if (shouldUpdateRemoteConfig) {
     updateRemoteConfig();
   }
-  return began_session;
+  return true;
 }
 
 /**
@@ -929,16 +935,19 @@ bool Countly::updateSession() {
     log(LogLevel::WARNING, "[Countly] updateSession, SDK is not initialized.");
     return false;
   }
+  // unique_lock so the mutex is always released on scope exit, including when an
+  // exception propagates out of a call made while the lock is held.
+  std::unique_lock<std::mutex> lk(*mutex, std::defer_lock);
   try {
     // Check if there was a session, if not try to start one
-    mutex->lock();
+    lk.lock();
     if (configurationModule->isSessionTrackingEnabled() == false) {
       log(LogLevel::ERROR, "[Countly] updateSession, Session tracking is disabled in server configuration, can not update session.");
-      mutex->unlock();
+      lk.unlock();
       return false;
     }
     if (began_session == false) {
-      mutex->unlock();
+      lk.unlock();
       if (configuration->manualSessionControl == true) {
         log(LogLevel::WARNING, "[Countly] updateSession, SDK is in manual session control mode and there is no active session. Please start a session first.");
         return false;
@@ -948,16 +957,16 @@ bool Countly::updateSession() {
         // if beginSession fails, we should not try to update session
         return false;
       }
-      mutex->lock();
+      lk.lock();
       began_session = true;
     }
 
     // events array
     nlohmann::json events = nlohmann::json::array();
     std::string event_ids;
-    mutex->unlock();
+    lk.unlock();
     bool no_events = checkEQSize() > 0 ? false : true;
-    mutex->lock();
+    lk.lock();
 
     if (!no_events) {
 #ifndef COUNTLY_USE_SQLITE
@@ -966,16 +975,16 @@ bool Countly::updateSession() {
       }
 #else
       // TODO: If database_path was empty there was return false here
-      mutex->unlock();
+      lk.unlock();
       fillEventsIntoJson(events, event_ids);
-      mutex->lock();
+      lk.lock();
 #endif
     } else {
       log(LogLevel::DEBUG, "[Countly] updateSession, EQ empty.");
     }
-    mutex->unlock();
+    lk.unlock();
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
-    mutex->lock();
+    lk.lock();
 
     // report session duration if it is greater than the configured session duration value
     if (duration.count() >= configurationModule->getSessionUpdateInterval()) {
@@ -1006,19 +1015,22 @@ bool Countly::updateSession() {
     log_message << "[Countly] updateSession, error: " << e.what();
     log(LogLevel::FATAL, log_message.str());
   }
-  mutex->unlock();
+  // lk releases the mutex on scope exit if it is still held.
   return true;
 }
 
 void Countly::packEvents() {
+  // unique_lock so the mutex is always released on scope exit, including when an
+  // exception propagates out of a call made while the lock is held.
+  std::unique_lock<std::mutex> lk(*mutex, std::defer_lock);
   try {
-    mutex->lock();
+    lk.lock();
     // events array
     nlohmann::json events = nlohmann::json::array();
     std::string event_ids;
-    mutex->unlock();
+    lk.unlock();
     bool no_events = checkEQSize() > 0 ? false : true;
-    mutex->lock();
+    lk.lock();
 
     if (!no_events) {
 #ifndef COUNTLY_USE_SQLITE
@@ -1027,9 +1039,9 @@ void Countly::packEvents() {
       }
 #else
       // TODO: If database_path was empty there was return false here
-      mutex->unlock();
+      lk.unlock();
       fillEventsIntoJson(events, event_ids);
-      mutex->lock();
+      lk.lock();
 #endif
     } else {
       log(LogLevel::DEBUG, "[Countly] packEvents, EQ empty.");
@@ -1054,7 +1066,7 @@ void Countly::packEvents() {
     log_message << "[Countly] packEvents, error: " << e.what();
     log(LogLevel::FATAL, log_message.str());
   }
-  mutex->unlock();
+  // lk releases the mutex on scope exit if it is still held.
 }
 
 void Countly::sendEventsToRQ(const nlohmann::json &events) {
@@ -1081,12 +1093,14 @@ bool Countly::endSession() {
   const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
   const auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration(now));
 
-  mutex->lock();
+  // lock_guard so the mutex is released on scope exit, including the early
+  // return below and any exception (e.g. a json type_error from a session_params
+  // access, or addRequestToQueue) thrown while it is held.
+  std::lock_guard<std::mutex> lk(*mutex);
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"session_duration", std::to_string(duration.count())}, {"timestamp", std::to_string(timestamp.count())}, {"end_session", "1"}};
 
   if (is_being_disposed) {
     // if SDK is being destroyed, don't attempt to send the end-session request.
-    mutex->unlock();
     return false;
   }
 
@@ -1094,7 +1108,6 @@ bool Countly::endSession() {
 
   last_sent_session_request = now;
   began_session = false;
-  mutex->unlock();
   return true;
 }
 
@@ -1124,7 +1137,11 @@ int Countly::checkRQSize() {
     return request_count;
   }
 
-  request_count = static_cast<int>(requestModule->RQSize());
+  {
+    // serialize storage access with processQueue/addRequestToQueue
+    std::lock_guard<std::mutex> lk(*mutex);
+    request_count = static_cast<int>(requestModule->RQSize());
+  }
   return request_count;
 }
 
@@ -1132,9 +1149,8 @@ int Countly::checkRQSize() {
 int Countly::checkMemoryEQSize() {
   log(LogLevel::DEBUG, "[Countly] checkMemoryEQSize, Checking event queue size in memory.");
   int result = 0;
-  mutex->lock();
+  std::lock_guard<std::mutex> lk(*mutex);
   result = static_cast<int>(event_queue.size());
-  mutex->unlock();
   return result;
 }
 #endif
@@ -1169,9 +1185,11 @@ void Countly::removeEventWithId(const std::string &event_ids) {
 }
 
 void Countly::fillEventsIntoJson(nlohmann::json &events, std::string &event_ids) {
-  mutex->lock();
+  // lock_guard so the mutex is released on every exit path, including the early
+  // return below and any exception (e.g. nlohmann::json::parse on a corrupt
+  // stored row at the loop below) thrown while it is held.
+  std::lock_guard<std::mutex> lk(*mutex);
   if (database_path.empty()) {
-    mutex->unlock();
     log(LogLevel::FATAL, "[Countly] fillEventsIntoJson, SQLite database path is not set.");
     event_ids = "";
     return;
@@ -1220,21 +1238,19 @@ void Countly::fillEventsIntoJson(nlohmann::json &events, std::string &event_ids)
     log(LogLevel::ERROR, "[Countly] fillEventsIntoJson, Could not open database.");
   }
   sqlite3_close(database);
-  mutex->unlock();
 }
 
 int Countly::checkPersistentEQSize() {
   int result = -1;
-  mutex->lock();
+  std::unique_lock<std::mutex> lk(*mutex);
   if (database_path.empty()) {
-    mutex->unlock();
     log(LogLevel::FATAL, "[Countly] checkPersistentEQSize, SQLite database path is not set");
     return result;
   }
 
   sqlite3 *database;
   int return_value = sqlite3_open(database_path.c_str(), &database);
-  mutex->unlock();
+  lk.unlock();
 
   if (return_value == SQLITE_OK) {
     char *error_message;
@@ -1391,9 +1407,8 @@ std::string Countly::calculateChecksum(const std::string &salt, const std::strin
 }
 
 std::chrono::system_clock::duration Countly::getSessionDuration(std::chrono::system_clock::time_point now) {
-  mutex->lock();
+  std::lock_guard<std::mutex> lk(*mutex);
   std::chrono::system_clock::duration duration = now - last_sent_session_request;
-  mutex->unlock();
   return duration;
 }
 
@@ -1449,26 +1464,17 @@ void Countly::updateLoop() {
       running = false;
     }
   } catch (const std::exception &e) {
-    bool acquired = mutex->try_lock();
     running = false;
     log(LogLevel::ERROR, std::string("[Countly][updateLoop] exception in update loop: ") + e.what());
-    if (acquired) {
-      mutex->unlock();
-    }
   } catch (...) {
-    bool acquired = mutex->try_lock();
     running = false;
     log(LogLevel::FATAL, "[Countly][updateLoop] unknown non-std::exception caught, stopping update loop");
-    if (acquired) {
-      mutex->unlock();
-    }
   }
 }
 
 void Countly::enableRemoteConfig() {
-  mutex->lock();
+  std::lock_guard<std::mutex> lk(*mutex);
   remote_config_enabled = true;
-  mutex->unlock();
 }
 
 void Countly::_fetchRemoteConfig(const std::map<std::string, std::string> &data) {
@@ -1478,11 +1484,10 @@ void Countly::_fetchRemoteConfig(const std::map<std::string, std::string> &data)
   }
 
   HTTPResponse response = requestModule->sendHTTP("/o/sdk", requestBuilder->serializeData(data));
-  mutex->lock();
+  std::lock_guard<std::mutex> lk(*mutex);
   if (response.success) {
     remote_config = response.data;
   }
-  mutex->unlock();
 }
 
 void Countly::updateRemoteConfig() {
@@ -1490,16 +1495,15 @@ void Countly::updateRemoteConfig() {
     log(LogLevel::WARNING, "[Countly] updateRemoteConfig, SDK is not initialized.");
     return;
   }
-  mutex->lock();
+  std::unique_lock<std::mutex> lk(*mutex);
   if (!session_params["app_key"].is_string() || !session_params["device_id"].is_string()) {
 
     log(LogLevel::ERROR, "[Countly] updateRemoteConfig, Error updating remote config, app key or device id is missing");
-    mutex->unlock();
     return;
   }
   std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
 
-  mutex->unlock();
+  lk.unlock();
 
   // Fetch remote config asynchronously
   std::thread _thread(&Countly::_fetchRemoteConfig, this, data);
@@ -1507,9 +1511,8 @@ void Countly::updateRemoteConfig() {
 }
 
 nlohmann::json Countly::getRemoteConfigValue(const std::string &key) {
-  mutex->lock();
+  std::lock_guard<std::mutex> lk(*mutex);
   nlohmann::json value = remote_config[key];
-  mutex->unlock();
   return value;
 }
 
@@ -1520,13 +1523,12 @@ void Countly::_updateRemoteConfigWithSpecificValues(const std::map<std::string, 
   }
   
   HTTPResponse response = requestModule->sendHTTP("/o/sdk", requestBuilder->serializeData(data));
-  mutex->lock();
+  std::lock_guard<std::mutex> lk(*mutex);
   if (response.success) {
     for (auto it = response.data.begin(); it != response.data.end(); ++it) {
       remote_config[it.key()] = it.value();
     }
   }
-  mutex->unlock();
 }
 
 void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
@@ -1534,7 +1536,7 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
     log(LogLevel::WARNING, "[Countly] updateRemoteConfigFor, SDK is not initialized.");
     return;
   }
-  mutex->lock();
+  std::unique_lock<std::mutex> lk(*mutex);
   std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
 
   {
@@ -1544,7 +1546,7 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
     }
     data["keys"] = keys_json.dump();
   }
-  mutex->unlock();
+  lk.unlock();
 
   // Fetch remote config asynchronously
   std::thread _thread(&Countly::_updateRemoteConfigWithSpecificValues, this, data);
@@ -1556,7 +1558,7 @@ void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
     log(LogLevel::WARNING, "[Countly] updateRemoteConfigExcept, SDK is not initialized.");
     return;
   }
-  mutex->lock();
+  std::unique_lock<std::mutex> lk(*mutex);
   std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
 
   {
@@ -1566,7 +1568,7 @@ void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
     }
     data["omit_keys"] = keys_json.dump();
   }
-  mutex->unlock();
+  lk.unlock();
 
   // Fetch remote config asynchronously
   std::thread _thread(&Countly::_updateRemoteConfigWithSpecificValues, this, data);
