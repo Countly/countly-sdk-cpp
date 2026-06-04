@@ -122,79 +122,89 @@ void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &
 void RequestModule::clearRequestQueue() { impl->_storageModule->RQClearAll(); }
 
 void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
-  mutex->lock();
+  {
+    // lock_guard so the mutex is released on every exit path of this block,
+    // including early returns and any exception thrown while it is held.
+    std::lock_guard<std::mutex> lk(*mutex);
 
-  if (std::shared_ptr<ConfigurationProvider> config = _configProvider.lock()) {
-    if (config->isTrackingEnabled() == false) {
-      impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] processQueue: Tracking is disabled. Not processing request queue.");
-      mutex->unlock();
+    if (std::shared_ptr<ConfigurationProvider> config = _configProvider.lock()) {
+      if (config->isTrackingEnabled() == false) {
+        impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] processQueue: Tracking is disabled. Not processing request queue.");
+        return;
+      }
+      if (config->isNetworkingEnabled() == false) {
+        impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] processQueue: Networking is disabled. Not processing request queue.");
+        return;
+      }
+    } else {
+      impl->_logger->log(LogLevel::WARNING, "[Countly] [RequestModule] processQueue: ConfigurationProvider unavailable, skipping queue processing.");
       return;
     }
-    if (config->isNetworkingEnabled() == false) {
-      impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] processQueue: Networking is disabled. Not processing request queue.");
-      mutex->unlock();
+
+    // making sure that no other thread is processing the queue
+    if (impl->is_queue_being_processed) {
       return;
     }
-  } else {
-    impl->_logger->log(LogLevel::WARNING, "[Countly] [RequestModule] processQueue: ConfigurationProvider unavailable, skipping queue processing.");
-    mutex->unlock();
-    return;
-  }
 
-  // making sure that no other thread is processing the queue
-  if (impl->is_queue_being_processed) {
-    mutex->unlock();
-    return;
+    // if this is the only thread, mark that processing is happening
+    impl->is_queue_being_processed = true;
   }
-
-  // if this is the only thread, mark that processing is happening
-  impl->is_queue_being_processed = true;
-  mutex->unlock();
 
   // this counter is used to make sure that we don't get stuck in an infinite/long loop of request processing
   int processedRequestsCounter = 0;
 
-  while (true) {
-    mutex->lock();
-    impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] processQueue: Processing the request queue."));
-    if (impl->_storageModule->RQCount() == 0) {
-      impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] processQueue: Queue is empty."));
+  // From here on the processing flag is set, so it MUST be cleared on every exit
+  // path. If an exception propagates out (e.g. from sendHTTP or a storage op),
+  // reset the flag before rethrowing, otherwise the queue would be permanently
+  // blocked (every later call would early-return at the is_queue_being_processed
+  // guard above) for the rest of the SDK's lifetime.
+  try {
+    while (true) {
+      std::shared_ptr<DataEntry> data;
+      {
+        std::lock_guard<std::mutex> lk(*mutex);
+        impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] processQueue: Processing the request queue."));
+        if (impl->_storageModule->RQCount() == 0) {
+          impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] processQueue: Queue is empty."));
 
-      // stop sending requests once the queue is empty
-      mutex->unlock();
-      break;
+          // stop sending requests once the queue is empty
+          break;
+        }
+
+        data = impl->_storageModule->RQPeekFront();
+      }
+      HTTPResponse response = sendHTTP("/i", data->getData());
+
+      {
+        std::lock_guard<std::mutex> lk(*mutex);
+        if (!response.success) {
+          impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] processQueue: Failed to deliver to server, will try again later."));
+          // if the request was not a success, abort sending and try again in the future
+          break;
+        }
+
+        // we pop the front only if it is still the same request
+        // the queue might have changed while we were sending the request
+        impl->_storageModule->RQRemoveFront(data);
+        processedRequestsCounter++;
+
+        if (processedRequestsCounter > impl->_configuration->maxProcessingBatchSize) {
+          impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] processQueue: Batch limit has been reached, will do next batch later."));
+          break;
+        }
+      }
     }
-
-    std::shared_ptr<DataEntry> data = impl->_storageModule->RQPeekFront();
-    mutex->unlock();
-    HTTPResponse response = sendHTTP("/i", data->getData());
-
-    mutex->lock();
-    if (!response.success) {
-      impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] processQueue: Failed to deliver to server, will try again later."));
-      // if the request was not a success, abort sending and try again in the future
-      mutex->unlock();
-      break;
-    }
-
-    // we pop the front only if it is still the same request
-    // the queue might have changed while we were sending the request
-    impl->_storageModule->RQRemoveFront(data);
-    processedRequestsCounter++;
-
-    if (processedRequestsCounter > impl->_configuration->maxProcessingBatchSize) {
-      impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] processQueue: Batch limit has been reached, will do next batch later."));
-      mutex->unlock();
-      break;
-    }
-
-    mutex->unlock();
+  } catch (...) {
+    std::lock_guard<std::mutex> lk(*mutex);
+    // mark that no thread is processing the request queue, then let the
+    // exception continue propagating to the update loop's handler.
+    impl->is_queue_being_processed = false;
+    throw;
   }
 
-  mutex->lock();
+  std::lock_guard<std::mutex> lk(*mutex);
   // mark that no thread is processing the request queue
   impl->is_queue_being_processed = false;
-  mutex->unlock();
 }
 
 HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
