@@ -41,6 +41,7 @@ public:
   bool isCrashReportingEnabled() const override;
 
   unsigned int getRequestQueueSizeLimit() const override;
+  SDKLimits getLimits() const override;
   unsigned int getEventQueueSizeLimit();
   unsigned int getSessionUpdateInterval();
 

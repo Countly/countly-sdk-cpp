@@ -1,3 +1,4 @@
+#include "countly/internal_limits.hpp"
 #include "countly/storage_module_db.hpp"
 #include "countly/storage_module_memory.hpp"
 #include <chrono>
@@ -163,6 +164,60 @@ void Countly::enableImmediateRequestOnStop() {
   configuration->immediateRequestOnStop = true;
 }
 
+void Countly::setMaxKeyLength(unsigned int value) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] setMaxKeyLength, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+  std::lock_guard<std::mutex> lk(*mutex);
+  configuration->maxKeyLength = value;
+}
+
+void Countly::setMaxValueSize(unsigned int value) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] setMaxValueSize, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+  std::lock_guard<std::mutex> lk(*mutex);
+  configuration->maxValueSize = value;
+}
+
+void Countly::setMaxSegmentationValues(unsigned int value) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] setMaxSegmentationValues, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+  std::lock_guard<std::mutex> lk(*mutex);
+  configuration->maxSegmentationValues = value;
+}
+
+void Countly::setMaxBreadcrumbCount(unsigned int value) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] setMaxBreadcrumbCount, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+  std::lock_guard<std::mutex> lk(*mutex);
+  configuration->breadcrumbsThreshold = value;
+}
+
+void Countly::setMaxStackTraceLinesPerThread(unsigned int value) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] setMaxStackTraceLinesPerThread, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+  std::lock_guard<std::mutex> lk(*mutex);
+  configuration->maxStackTraceLinesPerThread = value;
+}
+
+void Countly::setMaxStackTraceLineLength(unsigned int value) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] setMaxStackTraceLineLength, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+  std::lock_guard<std::mutex> lk(*mutex);
+  configuration->maxStackTraceLineLength = value;
+}
+
 void Countly::setMetrics(const std::string &os, const std::string &os_version, const std::string &device, const std::string &resolution, const std::string &carrier, const std::string &app_version) {
   if (is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] setMetrics, This method can't be called after SDK initialization. Returning.");
@@ -197,7 +252,14 @@ void Countly::setUserDetails(const std::map<std::string, std::string> &value) {
   // unique_lock so the mutex is released on scope exit, including on a throwing
   // json/map/addRequestToQueue op; unlock/relock around the self-locking flushEvents().
   std::unique_lock<std::mutex> lk(*mutex);
-  session_params["user_details"] = value;
+  SDKLimits lim = configurationModule ? configurationModule->getLimits()
+                                      : SDKLimits{COUNTLY_MAX_KEY_LENGTH_DEFAULT, COUNTLY_MAX_VALUE_SIZE_DEFAULT, COUNTLY_MAX_SEGMENTATION_VALUES_DEFAULT, COUNTLY_MAX_BREADCRUMB_COUNT_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINES_PER_THREAD_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINE_LENGTH_DEFAULT};
+  std::map<std::string, std::string> limitedDetails;
+  for (const auto &kv : value) {
+    unsigned int cap = (kv.first == "picture") ? COUNTLY_MAX_VALUE_SIZE_PICTURE : lim.maxValueSize;
+    limitedDetails[kv.first] = cly::limits::truncateString(kv.second, cap);
+  }
+  session_params["user_details"] = limitedDetails;
 
   if (!is_sdk_initialized) {
     log(LogLevel::ERROR, "[Countly] setUserDetails, This method can't be called before SDK initialization. Returning.");
@@ -220,11 +282,13 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string> &val
   // json/map/addRequestToQueue op; unlock/re-acquire around the self-locking flushEvents().
   std::unique_lock<std::mutex> lk(*mutex);
 
-  // Apply user property filter
+  // Determine the post-filter custom property map first, then apply limits.
+  std::map<std::string, std::string> customValue;
+  SDKLimits lim{COUNTLY_MAX_KEY_LENGTH_DEFAULT, COUNTLY_MAX_VALUE_SIZE_DEFAULT, COUNTLY_MAX_SEGMENTATION_VALUES_DEFAULT, COUNTLY_MAX_BREADCRUMB_COUNT_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINES_PER_THREAD_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINE_LENGTH_DEFAULT};
   if (configurationModule) {
+    lim = configurationModule->getLimits();
     auto upFilter = configurationModule->getUserPropertyFilterList();
     if (!upFilter.filterList.empty()) {
-      std::map<std::string, std::string> filteredValue;
       for (const auto &kv : value) {
         bool allowed;
         if (upFilter.isWhitelist) {
@@ -233,21 +297,27 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string> &val
           allowed = (upFilter.filterList.find(kv.first) == upFilter.filterList.end());
         }
         if (allowed) {
-          filteredValue[kv.first] = kv.second;
+          customValue[kv.first] = kv.second;
         }
       }
-
-      if (filteredValue.empty()) {
+      if (customValue.empty()) {
         log(LogLevel::DEBUG, "[Countly] setCustomUserDetails, All user properties were filtered out by SBS user property filter.");
         return;
       }
-      session_params["user_details"]["custom"] = filteredValue;
     } else {
-      session_params["user_details"]["custom"] = value;
+      customValue = value;
     }
   } else {
-    session_params["user_details"]["custom"] = value;
+    customValue = value;
   }
+
+  // Apply SDK internal limits: truncate keys/values. No count cap for user
+  // properties (that would be the out-of-scope 'upcl').
+  std::map<std::string, std::string> limitedCustom;
+  for (const auto &kv : customValue) {
+    limitedCustom[cly::limits::truncateString(kv.first, lim.maxKeyLength)] = cly::limits::truncateString(kv.second, lim.maxValueSize);
+  }
+  session_params["user_details"]["custom"] = limitedCustom;
 
   if (!is_sdk_initialized) {
     log(LogLevel::ERROR, "[Countly] setCustomUserDetails, This method can't be called before SDK initialization. Returning.");
@@ -664,6 +734,13 @@ void Countly::addEvent(const cly::Event &event) {
     } catch (const std::exception &e) {
       log(LogLevel::ERROR, "[Countly] addEvent, error applying segmentation filter: [" + std::string(e.what()) + "]");
     }
+  }
+
+  // Apply SDK internal limits to developer-supplied events only. Internal
+  // [CLY]_* events are limited at their own module boundary (e.g. views).
+  if (!isInternalEvent) {
+    SDKLimits limits = configurationModule->getLimits();
+    filteredEvent.applyLimits(limits.maxKeyLength, limits.maxValueSize, limits.maxSegmentationValues);
   }
 
   std::unique_lock<std::mutex> lk(*mutex);

@@ -1,4 +1,5 @@
 #include "countly/crash_module.hpp"
+#include "countly/internal_limits.hpp"
 #include "countly/request_module.hpp"
 
 #include <algorithm>
@@ -34,15 +35,21 @@ CrashModule::CrashModule(std::shared_ptr<CountlyConfiguration> config, std::shar
 
 // function to add breadcrumb
 void CrashModule::addBreadcrumb(const std::string &value) {
-  impl->_logger->log(LogLevel::INFO, "[Countly] [CrashModule] addBreadcrumb, value = [" + value + "]");
+  SDKLimits lim{COUNTLY_MAX_KEY_LENGTH_DEFAULT, COUNTLY_MAX_VALUE_SIZE_DEFAULT, COUNTLY_MAX_SEGMENTATION_VALUES_DEFAULT, COUNTLY_MAX_BREADCRUMB_COUNT_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINES_PER_THREAD_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINE_LENGTH_DEFAULT};
+  if (std::shared_ptr<ConfigurationProvider> config = impl->_configProvider.lock()) {
+    lim = config->getLimits();
+  }
+
+  std::string limited = cly::limits::truncateString(value, lim.maxValueSize);
+  impl->_logger->log(LogLevel::INFO, "[Countly] [CrashModule] addBreadcrumb, value = [" + limited + "]");
 
   std::lock_guard<std::mutex> lk(*impl->_mutex);
-  // if breadcrumb threshold is reached, remove oldest breadcrumb
-  if (impl->_breadCrumbs.size() >= impl->_configuration->breadcrumbsThreshold) {
+  // if breadcrumb count limit is reached, remove oldest breadcrumb
+  if (impl->_breadCrumbs.size() >= lim.maxBreadcrumbCount) {
     impl->_breadCrumbs.pop_front();
   }
   // add new breadcrumb
-  impl->_breadCrumbs.push_back(value);
+  impl->_breadCrumbs.push_back(limited);
 }
 
 // function to record exception
@@ -50,15 +57,21 @@ void CrashModule::recordException(const std::string &title, const std::string &s
 
   impl->_logger->log(LogLevel::INFO, cly::utils::format_string("[Countly] [CrashModule] recordException, title = [%s], stackTrace = [%s]", title.c_str(), stackTrace.c_str()));
 
+  SDKLimits lim{COUNTLY_MAX_KEY_LENGTH_DEFAULT, COUNTLY_MAX_VALUE_SIZE_DEFAULT, COUNTLY_MAX_SEGMENTATION_VALUES_DEFAULT, COUNTLY_MAX_BREADCRUMB_COUNT_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINES_PER_THREAD_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINE_LENGTH_DEFAULT};
   if (std::shared_ptr<ConfigurationProvider> config = impl->_configProvider.lock()) {
     if (config->isCrashReportingEnabled() == false) {
       impl->_logger->log(LogLevel::DEBUG, "[Countly] [CrashModule] recordException, Crash reporting is disabled. Not recording exception.");
       return;
     }
+    lim = config->getLimits();
   } else {
     impl->_logger->log(LogLevel::WARNING, "[Countly] [CrashModule] recordException, ConfigurationProvider unavailable.");
     return;
   }
+
+  std::string limitedTitle = cly::limits::truncateString(title, lim.maxStackTraceLineLength);
+  std::string limitedTrace = cly::limits::truncateStackTrace(stackTrace, lim.maxStackTraceLinesPerThread, lim.maxStackTraceLineLength);
+  std::map<std::string, std::string> limitedSegmentation = cly::limits::applySegmentationLimits(segmentation, lim);
 
   if (title.empty()) {
     impl->_logger->log(LogLevel::WARNING, "[Countly] [CrashModule] recordException, The parameter 'title' can't be empty");
@@ -89,11 +102,11 @@ void CrashModule::recordException(const std::string &title, const std::string &s
 
   // create json objects for crash metrics and segmentation
   nlohmann::json crash(crashMetrics);
-  nlohmann::json segments(segmentation);
+  nlohmann::json segments(limitedSegmentation);
 
   // add relevant fields to the crash json object
-  crash["_name"] = title;
-  crash["_error"] = stackTrace;
+  crash["_name"] = limitedTitle;
+  crash["_error"] = limitedTrace;
   crash["_logs"] = outstream.str();
   crash["_custom"] = segments;
   crash["_nonfatal"] = !fatal;

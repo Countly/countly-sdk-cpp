@@ -1,3 +1,6 @@
+## X.X.X
+- ! Minor breaking change ! Added SDK internal limits enforcement (max key length, value size, segmentation values, breadcrumb count, stack-trace lines per thread, stack-trace line length) across events, views, crashes, and user properties. Limits use config defaults overridable by server SDK Behavior Settings, and can be set via `setMaxKeyLength`, `setMaxValueSize`, `setMaxSegmentationValues`, `setMaxBreadcrumbCount`, `setMaxStackTraceLinesPerThread`, `setMaxStackTraceLineLength` during init.
+
 ## 26.1.1
 - Updated CMake minimum required version to use the range format with upper the end of `3.31`.
 - Hardened mutex handling against exceptions.

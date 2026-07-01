@@ -60,6 +60,15 @@ struct CountlyConfiguration {
   unsigned int breadcrumbsThreshold = 100;
 
   /**
+   * SDK internal limits (defaults; overridable at runtime by SDK Behavior Settings).
+   */
+  unsigned int maxKeyLength = COUNTLY_MAX_KEY_LENGTH_DEFAULT;
+  unsigned int maxValueSize = COUNTLY_MAX_VALUE_SIZE_DEFAULT;
+  unsigned int maxSegmentationValues = COUNTLY_MAX_SEGMENTATION_VALUES_DEFAULT;
+  unsigned int maxStackTraceLinesPerThread = COUNTLY_MAX_STACK_TRACE_LINES_PER_THREAD_DEFAULT;
+  unsigned int maxStackTraceLineLength = COUNTLY_MAX_STACK_TRACE_LINE_LENGTH_DEFAULT;
+
+  /**
    * Set to send all requests made to the Countly server using HTTP POST.
    */
   bool forcePost = false;

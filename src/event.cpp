@@ -1,4 +1,5 @@
 #include "countly/event.hpp"
+#include "countly/internal_limits.hpp"
 #include <ctime>
 
 namespace cly {
@@ -70,5 +71,31 @@ void Event::removeSegmentation(const std::string &key) {
 
 void Event::clearSegmentation() {
   object.erase("segmentation");
+}
+
+void Event::applyLimits(unsigned int maxKeyLength, unsigned int maxValueSize, unsigned int maxSegmentationValues) {
+  auto keyIt = object.find("key");
+  if (keyIt != object.end() && keyIt->is_string()) {
+    *keyIt = cly::limits::truncateString(keyIt->get<std::string>(), maxKeyLength);
+  }
+
+  auto segIt = object.find("segmentation");
+  if (segIt != object.end() && segIt->is_object()) {
+    nlohmann::json limited = nlohmann::json::object();
+    unsigned int kept = 0;
+    for (auto it = segIt->begin(); it != segIt->end(); ++it) {
+      if (kept >= maxSegmentationValues) {
+        break;
+      }
+      std::string newKey = cly::limits::truncateString(it.key(), maxKeyLength);
+      if (it.value().is_string()) {
+        limited[newKey] = cly::limits::truncateString(it.value().get<std::string>(), maxValueSize);
+      } else {
+        limited[newKey] = it.value();
+      }
+      ++kept;
+    }
+    object["segmentation"] = limited;
+  }
 }
 } // namespace cly

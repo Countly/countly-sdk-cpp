@@ -85,6 +85,13 @@ public:
   std::atomic<unsigned int> sessionUpdateInterval{0};
   std::atomic<unsigned int> serverConfigUpdateInterval{4};
 
+  std::atomic<unsigned int> maxKeyLength{COUNTLY_MAX_KEY_LENGTH_DEFAULT};
+  std::atomic<unsigned int> maxValueSize{COUNTLY_MAX_VALUE_SIZE_DEFAULT};
+  std::atomic<unsigned int> maxSegmentationValues{COUNTLY_MAX_SEGMENTATION_VALUES_DEFAULT};
+  std::atomic<unsigned int> maxBreadcrumbCount{COUNTLY_MAX_BREADCRUMB_COUNT_DEFAULT};
+  std::atomic<unsigned int> maxStackTraceLinesPerThread{COUNTLY_MAX_STACK_TRACE_LINES_PER_THREAD_DEFAULT};
+  std::atomic<unsigned int> maxStackTraceLineLength{COUNTLY_MAX_STACK_TRACE_LINE_LENGTH_DEFAULT};
+
   mutable std::mutex sbsMutex;
   std::thread configFetchThread;
 
@@ -184,6 +191,13 @@ public:
   void _initializeConfigParameters() {
     requestQueueSizeLimit.store(_configuration->requestQueueThreshold, std::memory_order_release);
     sessionUpdateInterval.store(_configuration->sessionDuration, std::memory_order_release);
+
+    maxKeyLength.store(_configuration->maxKeyLength, std::memory_order_release);
+    maxValueSize.store(_configuration->maxValueSize, std::memory_order_release);
+    maxSegmentationValues.store(_configuration->maxSegmentationValues, std::memory_order_release);
+    maxBreadcrumbCount.store(_configuration->breadcrumbsThreshold, std::memory_order_release);
+    maxStackTraceLinesPerThread.store(_configuration->maxStackTraceLinesPerThread, std::memory_order_release);
+    maxStackTraceLineLength.store(_configuration->maxStackTraceLineLength, std::memory_order_release);
   }
 
   nlohmann::json _processSDKBehaviorSettings(const std::string &settings) {
@@ -266,6 +280,17 @@ public:
       populateListFilter(segmentationFilter, KEY_SEGMENTATION_BLACKLIST, KEY_SEGMENTATION_WHITELIST, parseArray);
       populateListFilter(eventSegmentationFilter, KEY_EVENT_SEGMENTATION_BLACKLIST, KEY_EVENT_SEGMENTATION_WHITELIST, parseMap);
     }
+
+    auto readLimit = [this](const char *key, unsigned int def) {
+      unsigned int v = getUInt(key, def);
+      return v < 1 ? def : v;
+    };
+    maxKeyLength.store(readLimit(KEY_LIMIT_KEY_LENGTH, _configuration->maxKeyLength), std::memory_order_release);
+    maxValueSize.store(readLimit(KEY_LIMIT_VALUE_SIZE, _configuration->maxValueSize), std::memory_order_release);
+    maxSegmentationValues.store(readLimit(KEY_LIMIT_SEG_VALUES, _configuration->maxSegmentationValues), std::memory_order_release);
+    maxBreadcrumbCount.store(readLimit(KEY_LIMIT_BREADCRUMB, _configuration->breadcrumbsThreshold), std::memory_order_release);
+    maxStackTraceLinesPerThread.store(readLimit(KEY_LIMIT_TRACE_LINE, _configuration->maxStackTraceLinesPerThread), std::memory_order_release);
+    maxStackTraceLineLength.store(readLimit(KEY_LIMIT_TRACE_LENGTH, _configuration->maxStackTraceLineLength), std::memory_order_release);
 
     nlohmann::json changedSettings;
     if (locationTrackingCurrent != locationTrackingEnabledVal) {
@@ -474,6 +499,17 @@ bool ConfigurationModule::isCustomEventTrackingEnabled() { return impl->customEv
 bool ConfigurationModule::isCrashReportingEnabled() const { return impl->crashReportingEnabled.load(std::memory_order_acquire); }
 
 unsigned int ConfigurationModule::getRequestQueueSizeLimit() const { return impl->requestQueueSizeLimit.load(std::memory_order_acquire); }
+
+SDKLimits ConfigurationModule::getLimits() const {
+  SDKLimits lim;
+  lim.maxKeyLength = impl->maxKeyLength.load(std::memory_order_acquire);
+  lim.maxValueSize = impl->maxValueSize.load(std::memory_order_acquire);
+  lim.maxSegmentationValues = impl->maxSegmentationValues.load(std::memory_order_acquire);
+  lim.maxBreadcrumbCount = impl->maxBreadcrumbCount.load(std::memory_order_acquire);
+  lim.maxStackTraceLinesPerThread = impl->maxStackTraceLinesPerThread.load(std::memory_order_acquire);
+  lim.maxStackTraceLineLength = impl->maxStackTraceLineLength.load(std::memory_order_acquire);
+  return lim;
+}
 
 unsigned int ConfigurationModule::getEventQueueSizeLimit() {
     // this is because we permit EQ size to change after initialization

@@ -179,6 +179,13 @@ public:
    */
   void setEventsToRQThreshold(int value);
 
+  void setMaxKeyLength(unsigned int value);
+  void setMaxValueSize(unsigned int value);
+  void setMaxSegmentationValues(unsigned int value);
+  void setMaxBreadcrumbCount(unsigned int value);
+  void setMaxStackTraceLinesPerThread(unsigned int value);
+  void setMaxStackTraceLineLength(unsigned int value);
+
   void flushEvents(std::chrono::seconds timeout = std::chrono::seconds(30));
 
   bool beginSession();
