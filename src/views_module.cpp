@@ -1,5 +1,7 @@
 #include "countly/views_module.hpp"
 
+#include "countly/internal_limits.hpp"
+
 #include <chrono>
 
 #define CLY_VIEW_KEY "[CLY]_view"
@@ -74,17 +76,25 @@ public:
   ~ViewModuleImpl() { _logger.reset(); }
 
   std::string _openView(const std::string &name, const std::map<std::string, std::string> &segmentation) {
+    SDKLimits lim{COUNTLY_MAX_KEY_LENGTH_DEFAULT, COUNTLY_MAX_VALUE_SIZE_DEFAULT, COUNTLY_MAX_SEGMENTATION_VALUES_DEFAULT, COUNTLY_MAX_BREADCRUMB_COUNT_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINES_PER_THREAD_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINE_LENGTH_DEFAULT};
     if (std::shared_ptr<ConfigurationProvider> config = _configProvider.lock()) {
       if (config->isViewTrackingEnabled() == false) {
         _logger->log(LogLevel::DEBUG, "[Countly] [ViewsModule] _openView, View tracking is disabled. Not opening view.");
         return "";
       }
+      lim = config->getLimits();
     } else {
       _logger->log(LogLevel::WARNING, "[Countly] [ViewsModule] _openView, ConfigurationProvider unavailable.");
       return "";
     }
+
+    // A view name is a "key" per the guide -> maxKeyLength. Developer segmentation
+    // is limited before internal keys (visit/start/_idv/name) are merged.
+    std::string limitedName = cly::limits::truncateString(name, lim.maxKeyLength);
+    std::map<std::string, std::string> limitedSeg = cly::limits::applySegmentationLimits(segmentation, lim);
+
     ViewModuleImpl::ViewInfo *v = new ViewModuleImpl::ViewInfo();
-    v->name = name;
+    v->name = limitedName;
     v->viewId = cly::utils::generateEventID();
     v->startTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch());
 
@@ -92,7 +102,7 @@ public:
 
     _viewsStartTime[ptr->viewId] = ptr;
 
-    _recordView(ptr, segmentation, true);
+    _recordView(ptr, limitedSeg, true);
     return ptr->viewId;
   }
 
