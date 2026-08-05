@@ -122,7 +122,8 @@ if(COUNTLY_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/mutex_exception_safety.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/sbs.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/internal_limits.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/internal_limits_integration.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/internal_limits_integration.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/multi_instance.cpp)
     
     target_compile_options(countly-tests PRIVATE -g)
     target_compile_definitions(countly-tests PRIVATE COUNTLY_BUILD_TESTS)

@@ -11,6 +11,7 @@
 #include <random>
 #include <sstream>
 #include <string>
+#include <thread>
 
 #define COUNTLY_SDK_NAME "cpp-native-unknown"
 #define COUNTLY_SDK_VERSION "26.1.1"
@@ -34,8 +35,6 @@ struct HTTPResponse {
 using HTTPClientFunction = std::function<HTTPResponse(bool, const std::string &, const std::string &)>;
 using SHA256Function = std::function<std::string(const std::string &)>;
 namespace utils {
-const std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
-const std::uniform_int_distribution<int> distribution(1, INT_MAX);
 
 /**
  * Formats the given arguments into a string buffer.
@@ -68,13 +67,21 @@ static std::string mapToString(const std::map<std::string, std::string> &m) {
   return std::to_string(lenght);
 }
 /**
- * Generate a random UUID.
+ * Generate an event/view ID.
  *
- * @return a string object holding a UUID.
+ * The engine is thread_local and is *advanced* across calls. An earlier version
+ * bound a copy of a const engine on each call, which meant every ID in the
+ * process shared one random component; on platforms with a coarse system_clock
+ * (Windows, ~15ms) the timestamp did not move either, so IDs generated inside
+ * one tick were identical.
+ *
+ * @return a string object holding the ID.
  */
-static std::string generateEventID() {
-  auto dice = std::bind(distribution, generator);
-  int random = dice();
+inline std::string generateEventID() {
+  static thread_local std::mt19937 engine(static_cast<std::mt19937::result_type>(std::chrono::system_clock::now().time_since_epoch().count() ^ static_cast<long long>(std::hash<std::thread::id>()(std::this_thread::get_id()))));
+  static thread_local std::uniform_int_distribution<int> distribution(1, INT_MAX);
+
+  const int random = distribution(engine);
 
   std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
   const auto timestamp = now.time_since_epoch();

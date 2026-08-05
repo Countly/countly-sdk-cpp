@@ -382,7 +382,7 @@ public:
   }
 
   void _stopTimer() {
-    _logger->log(LogLevel::WARNING, "[Countly] [ConfigurationModule] stopTimer, stopping server config update timer thread.");
+    _logger->log(LogLevel::INFO, "[Countly] [ConfigurationModule] stopTimer, stopping server config update timer thread.");
     stopConfigThread.store(true, std::memory_order_release);
     configUpdateCv.notify_all();
 

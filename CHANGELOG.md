@@ -1,6 +1,13 @@
 ## X.X.X
 - ! Minor breaking change ! Added SDK internal limits enforcement (max key length, value size, segmentation values, breadcrumb count, stack-trace lines per thread, stack-trace line length) across events, views, crashes, and user properties. Limits use config defaults overridable by server SDK Behavior Settings, and can be set via `setMaxKeyLength`, `setMaxValueSize`, `setMaxSegmentationValues`, `setMaxBreadcrumbCount`, `setMaxStackTraceLinesPerThread`, `setMaxStackTraceLineLength` during init.
 
+- Added multi-instance support: several `Countly` instances can now run in one process, each with its own app key, queues, storage, and threads. Instances can be owned by the integrator, or created and looked up by name with `createInstance`, `getInstance(name)`, `findInstance`, `hasInstance`, `destroyInstance` and `destroyAllInstances`.
+- ! Minor breaking change ! When built with SQLite, each instance requires its own database path. A second instance claiming a path already in use logs an error and does not initialize.
+- Fixed the libcurl global lifecycle: `curl_global_init` now runs once per process, and cleanup no longer runs when an instance is destroyed, which could tear down networking underneath another live instance. Added `shutdownNetworking()` for hosts that load and unload the SDK without exiting.
+- Fixed non-unique event and view IDs: the random component of generated IDs was constant for the lifetime of the process, and on platforms with a coarse `system_clock` (Windows, ~15ms) the timestamp component did not change either, so IDs generated within one tick were identical.
+- Remote config fetches now run on owned threads that are joined by `stop()` and by destruction, instead of being detached. Consecutive remote config calls block until the previous fetch completes.
+- `stop()` now also stops periodic SDK Behavior Settings updates.
+
 ## 26.1.1
 - Updated CMake minimum required version to use the range format with upper the end of `3.31`.
 - Hardened mutex handling against exceptions.

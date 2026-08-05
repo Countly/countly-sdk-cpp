@@ -14,6 +14,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include <deque>
 
@@ -39,14 +40,72 @@ public:
 
   virtual ~Countly();
 
-  // Returns the singleton instance of Countly
+  // Returns the default instance, creating it on first use.
   static Countly &getInstance();
 
-  // Do not implicitly generate the copy constructor, this is a singleton.
+  /**
+   * Returns the instance registered under 'name', creating an uninitialized one
+   * and logging a WARNING if that name is not registered yet. The empty name is
+   * the default instance, so getInstance("") == getInstance().
+   *
+   * The returned reference is valid until that instance is destroyed by
+   * destroyInstance(), destroyAllInstances() or halt().
+   */
+  static Countly &getInstance(const std::string &name);
+
+  /**
+   * Creates and returns the instance registered under 'name'. If that name is
+   * already registered, returns the existing instance and logs a WARNING.
+   */
+  static Countly &createInstance(const std::string &name);
+
+  /**
+   * Returns the instance registered under 'name', or nullptr if there is none.
+   * Unlike getInstance(name) this never creates anything, and unlike
+   * hasInstance() followed by getInstance() it is a single lookup, so no other
+   * thread can destroy the instance in between.
+   */
+  static Countly *findInstance(const std::string &name);
+
+  /**
+   * @return true if an instance is registered under 'name'.
+   */
+  static bool hasInstance(const std::string &name);
+
+  /**
+   * Destroys the instance registered under 'name'. Joins its threads, ends its
+   * session and frees its database path claim. A no-op if the name is not
+   * registered. Any reference or pointer to that instance dangles afterwards.
+   */
+  static void destroyInstance(const std::string &name);
+
+  /**
+   * Destroys every registered instance, in reverse creation order.
+   */
+  static void destroyAllInstances();
+
+  /**
+   * Releases process-wide networking state (libcurl's global data). Optional:
+   * process exit does this automatically. Call it only after destroying every
+   * instance, and only in a host that loads and unloads the SDK without exiting
+   * -- a plugin host using dlopen/dlclose, for example. Logs an error and does
+   * nothing if any instance is still live.
+   *
+   * A no-op on builds that do not use libcurl (Windows/WinHTTP,
+   * COUNTLY_USE_CUSTOM_HTTP).
+   */
+  static void shutdownNetworking();
+
+  // Do not implicitly generate the copy constructor, instances are not copyable.
   Countly(const Countly &) = delete;
 
-  // Do not implicitly generate the copy assignment operator, this is a singleton.
+  // Do not implicitly generate the copy assignment operator.
   void operator=(const Countly &) = delete;
+
+  // Not movable either: modules hold `CountlyDelegates *this` and background
+  // threads capture `this`, so relocating an instance is unsound.
+  Countly(Countly &&) = delete;
+  Countly &operator=(Countly &&) = delete;
 
   void alwaysUsePost(bool value);
 
@@ -355,9 +414,33 @@ public:
   inline const CountlyConfiguration &getConfiguration() { return *configuration.get(); }
 
   static void halt();
+
+  static size_t debugClaimedPathCount();
+
+  static int debugLiveInstanceCount();
 #endif
 
 private:
+  /**
+   * Copies the default instance's logger callback onto a freshly created
+   * instance. Without this, a WARNING logged on a brand-new instance is
+   * swallowed: LoggerModule::log() no-ops when no callback is set.
+   */
+  static void inheritDefaultLogger(Countly &instance);
+
+  /**
+   * Gives back this instance's database path claim. A no-op when no claim is
+   * held, and compiled to nothing on non-SQLite builds.
+   */
+  void releaseDatabasePathClaim();
+
+  /**
+   * Joins and clears every remote-config fetch thread. Safe to call repeatedly
+   * and safe to call when none are running. Must not be called while the
+   * instance mutex is held -- the fetch threads take it.
+   */
+  void joinRemoteConfigThreads();
+
   void _deleteThread();
   void _sendIndependantLocationRequest();
   void log(LogLevel level, const std::string &message);
@@ -391,6 +474,11 @@ private:
   nlohmann::json session_params;
 
   std::unique_ptr<std::thread> thread;
+
+  // Remote-config fetches run on owned threads rather than detached ones: a
+  // detached thread captures `this` and can outlive the instance.
+  std::mutex remote_config_thread_mutex;
+  std::vector<std::thread> remote_config_threads;
   std::unique_ptr<cly::CrashModule> crash_module;
   std::unique_ptr<cly::ViewsModule> views_module;
 
@@ -414,6 +502,9 @@ private:
   std::deque<std::string> event_queue;
 #else
   std::string database_path;
+  // The normalized database path this instance has claimed in the process-wide
+  // registry, empty when it holds no claim.
+  std::string claimed_database_path;
 #endif
 
   bool remote_config_enabled = false;

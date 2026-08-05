@@ -110,7 +110,7 @@ static long long getUnixTimestamp() {
   return timestamp.count();
 }
 
-static HTTPResponse fakeSendHTTP(bool use_post, const std::string &url, const std::string &data) {
+static HTTPResponse fakeSendHTTPInto(ThreadSafeHTTPCallQueue &queue, bool use_post, const std::string &url, const std::string &data) {
   HTTPCall http_call({use_post, url, {}});
 
   std::string::size_type startIndex = 0;
@@ -135,7 +135,7 @@ static HTTPResponse fakeSendHTTP(bool use_post, const std::string &url, const st
     }
   }
 
-  http_call_queue.push_back(http_call);
+  queue.push_back(http_call);
 
   HTTPResponse response{false, nlohmann::json::object()};
 
@@ -169,6 +169,10 @@ static HTTPResponse fakeSendHTTP(bool use_post, const std::string &url, const st
 
   return response;
 }
+
+// Every existing test drives HTTP through the one global queue; multi-instance
+// tests pass their own queue instead so each instance can be inspected alone.
+static HTTPResponse fakeSendHTTP(bool use_post, const std::string &url, const std::string &data) { return fakeSendHTTPInto(http_call_queue, use_post, url, data); }
 
 // Search http_call_queue for a request containing a specific key=value pair
 static bool httpQueueContains(const std::string &key, const std::string &value) {
@@ -227,6 +231,90 @@ static void initCountlyWithFakeNetworking(bool clearInitialNetworkingState, cly:
     http_call_queue.clear();     // cl+ear local HTTP request queue.
   }
 }
+
+/**
+ * Owns one Countly instance together with its own HTTP capture queue and its
+ * own database file, so a test can assert that two instances never see each
+ * other's data.
+ *
+ * Not copyable or movable: the HTTP client lambda captures `this`.
+ */
+struct InstanceFixture {
+  ThreadSafeHTTPCallQueue calls;
+  std::shared_ptr<cly::Countly> sdk;
+  std::string appKey;
+  std::string dbPath;
+
+  InstanceFixture(const std::string &app_key, const std::string &db_path, const std::string &device_id = COUNTLY_TEST_DEVICE_ID) : appKey(app_key), dbPath(db_path) {
+    remove(dbPath.c_str());
+    sdk = std::make_shared<cly::Countly>();
+    sdk->setHTTPClient([this](bool use_post, const std::string &url, const std::string &data) { return fakeSendHTTPInto(calls, use_post, url, data); });
+    sdk->setDeviceID(device_id);
+    sdk->SetPath(dbPath);
+    sdk->start(appKey, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+    // The SBS config fetch runs on its own thread; give it time to land so it
+    // does not interleave with the assertions.
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+  }
+
+  ~InstanceFixture() {
+    sdk.reset();
+    remove(dbPath.c_str());
+  }
+
+  InstanceFixture(const InstanceFixture &) = delete;
+  InstanceFixture &operator=(const InstanceFixture &) = delete;
+
+  /**
+   * checkEQSize() returns -1 before the SDK is initialized in both the SQLite
+   * and the in-memory build (src/countly.cpp:1196-1206), which makes it a
+   * reliable proxy for "did start() succeed".
+   */
+  bool initialized() const { return sdk && sdk->checkEQSize() >= 0; }
+
+  /** Drains the request queue into `calls`. */
+  void flush() { sdk->processRQDebug(); }
+
+  /** Drops the request queue and everything captured so far. */
+  void clearCalls() {
+    sdk->clearRequestQueue();
+    calls.clear();
+  }
+
+  bool sawKeyValue(const std::string &key, const std::string &value) {
+    const size_t count = calls.size();
+    for (size_t index = 0; index < count; index++) {
+      HTTPCall call = calls.at(index);
+      std::map<std::string, std::string>::const_iterator found = call.data.find(key);
+      if (found != call.data.end() && found->second == value) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool sawEvent(const std::string &event_key) {
+    const size_t count = calls.size();
+    for (size_t index = 0; index < count; index++) {
+      HTTPCall call = calls.at(index);
+      std::map<std::string, std::string>::const_iterator found = call.data.find("events");
+      if (found == call.data.end()) {
+        continue;
+      }
+      try {
+        nlohmann::json events = nlohmann::json::parse(found->second);
+        for (nlohmann::json::const_iterator event = events.begin(); event != events.end(); ++event) {
+          if ((*event)["key"].get<std::string>() == event_key) {
+            return true;
+          }
+        }
+      } catch (const nlohmann::json::exception &) {
+        // Malformed events JSON -- skip this entry
+      }
+    }
+    return false;
+  }
+};
 } // namespace test_utils
 
 #endif

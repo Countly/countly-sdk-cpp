@@ -39,6 +39,24 @@ public:
   long long RQSize();
   void setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider); // try injecting
 
+  /**
+   * Process-wide network initialisation. Idempotent, and a no-op unless the SDK
+   * is built against libcurl.
+   */
+  static void initGlobalNetworking();
+
+  /**
+   * Process-wide network teardown. Idempotent, and a no-op unless the SDK is
+   * built against libcurl. Must not be called while any instance is live --
+   * Countly::shutdownNetworking() enforces that.
+   */
+  static void releaseGlobalNetworking();
+
+#ifdef COUNTLY_BUILD_TESTS
+  static int globalNetworkingInitCount();
+  static bool globalNetworkingReleased();
+#endif
+
 private:
   class RequestModuleImpl;
   std::unique_ptr<RequestModuleImpl> impl;
