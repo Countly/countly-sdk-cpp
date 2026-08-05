@@ -5,8 +5,8 @@
 - ! Minor breaking change ! When built with SQLite, each instance requires its own database path. A second instance claiming a path already in use logs an error and does not initialize.
 - Fixed the libcurl global lifecycle: `curl_global_init` now runs once per process, and cleanup no longer runs when an instance is destroyed, which could tear down networking underneath another live instance. Added `shutdownNetworking()` for hosts that load and unload the SDK without exiting.
 - Fixed non-unique event and view IDs: the random component of generated IDs was constant for the lifetime of the process, and on platforms with a coarse `system_clock` (Windows, ~15ms) the timestamp component did not change either, so IDs generated within one tick were identical.
-- Remote config fetches now run on owned threads that are joined by `stop()` and by destruction, instead of being detached. Consecutive remote config calls block until the previous fetch completes.
-- `stop()` now also stops periodic SDK Behavior Settings updates.
+- Remote config fetches now run on an owned thread that is joined when the SDK is destroyed, instead of being detached, which could leave a fetch running after the objects it used were gone. Only one fetch runs at a time per instance: a call made while a fetch is in flight is logged and ignored rather than queued, so `updateRemoteConfig`, `updateRemoteConfigFor` and `updateRemoteConfigExcept` never block the calling thread. `stop()` is unchanged and still returns without waiting for network activity.
+- Fixed a lost wakeup when stopping the periodic SDK Behavior Settings timer: the stop flag was set without holding the mutex the timer thread waits on, so the notification could be missed and the joining thread could block for up to the full four-hour update interval.
 
 ## 26.1.1
 - Updated CMake minimum required version to use the range format with upper the end of `3.31`.

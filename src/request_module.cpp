@@ -128,14 +128,27 @@ CurlGlobal &curlGlobal() {
   static CurlGlobal instance;
   return instance;
 }
+
+/**
+ * How many times initGlobalNetworking() was asked to initialise, as opposed to
+ * how many times curl actually was. The gap between the two is the whole point
+ * of CurlGlobal, so both numbers are needed to assert that deduplication works
+ * -- the actual count is 1 by construction and proves nothing on its own.
+ */
+std::atomic<int> networking_init_requests(0);
 } // namespace
 
-void RequestModule::initGlobalNetworking() { curlGlobal(); }
+void RequestModule::initGlobalNetworking() {
+  networking_init_requests.fetch_add(1);
+  curlGlobal();
+}
 
 void RequestModule::releaseGlobalNetworking() { curlGlobal().release(); }
 
 #ifdef COUNTLY_BUILD_TESTS
 int RequestModule::globalNetworkingInitCount() { return curlGlobal().initCount(); }
+
+int RequestModule::globalNetworkingInitRequests() { return networking_init_requests.load(); }
 
 bool RequestModule::globalNetworkingReleased() { return curlGlobal().released(); }
 #endif

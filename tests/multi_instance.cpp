@@ -143,11 +143,15 @@ TEST_CASE("curl global state is initialised once and survives instance destructi
   clearSDK();
   InstanceFixture a("APP_KEY_A", "mi-curl-a.db");
   REQUIRE(a.initialized());
-  CHECK(cly::RequestModule::globalNetworkingInitCount() == 1);
 
   {
     InstanceFixture b("APP_KEY_B", "mi-curl-b.db");
     REQUIRE(b.initialized());
+
+    // The point of CurlGlobal is the gap between these two numbers: several
+    // requests to initialise, exactly one initialisation. Asserting the actual
+    // count alone would be vacuous -- it is 1 by construction.
+    CHECK(cly::RequestModule::globalNetworkingInitRequests() >= 2);
     CHECK(cly::RequestModule::globalNetworkingInitCount() == 1);
   }
 
@@ -155,6 +159,56 @@ TEST_CASE("curl global state is initialised once and survives instance destructi
   CHECK(cly::RequestModule::globalNetworkingReleased() == false);
   CHECK(a.initialized());
   CHECK(cly::RequestModule::globalNetworkingInitCount() == 1);
+}
+
+TEST_CASE("a second remote config fetch is dropped rather than blocking the caller") {
+  clearSDK();
+  static std::atomic<int> fetches_started(0);
+  static std::atomic<bool> release_fetch(false);
+  fetches_started.store(0);
+  release_fetch.store(false);
+
+  std::shared_ptr<cly::Countly> sdk = std::make_shared<cly::Countly>();
+  sdk->setHTTPClient([](bool use_post, const std::string &url, const std::string &data) {
+    (void)use_post;
+    (void)url;
+    cly::HTTPResponse response;
+    response.success = true;
+    response.data = nlohmann::json::object();
+    if (data.find("fetch_remote_config") != std::string::npos) {
+      fetches_started.fetch_add(1);
+      while (!release_fetch.load()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+      }
+    }
+    return response;
+  });
+  sdk->setDeviceID(COUNTLY_TEST_DEVICE_ID);
+  sdk->SetPath("mi-rc-drop.db");
+  sdk->disableSDKBehaviorSettingsUpdates();
+  sdk->enableImmediateRequestOnStop();
+  sdk->enableRemoteConfig();
+  sdk->start("APP_KEY_RC2", COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+  REQUIRE(sdk->checkEQSize() == 0);
+
+  sdk->updateRemoteConfig();
+  // Wait for the first fetch to be genuinely in flight and parked.
+  for (int i = 0; i < 200 && fetches_started.load() == 0; i++) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  REQUIRE(fetches_started.load() == 1);
+
+  // The second call must return immediately instead of waiting for the first.
+  const std::chrono::steady_clock::time_point before = std::chrono::steady_clock::now();
+  sdk->updateRemoteConfig();
+  const long long elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - before).count();
+
+  CHECK(elapsed_ms < 200);            // did not block on the parked fetch
+  CHECK(fetches_started.load() == 1); // and did not start a second one
+
+  release_fetch.store(true);
+  sdk.reset();
+  remove("mi-rc-drop.db");
 }
 
 TEST_CASE("named instances are distinct objects and are found by name") {

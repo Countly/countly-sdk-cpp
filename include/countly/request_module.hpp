@@ -40,24 +40,31 @@ public:
   void setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider); // try injecting
 
   /**
-   * Process-wide network initialisation. Idempotent, and a no-op unless the SDK
-   * is built against libcurl.
+   * Process-wide network initialisation. Idempotent and harmless to call at any
+   * time; a no-op unless the SDK is built against libcurl.
    */
   static void initGlobalNetworking();
 
-  /**
-   * Process-wide network teardown. Idempotent, and a no-op unless the SDK is
-   * built against libcurl. Must not be called while any instance is live --
-   * Countly::shutdownNetworking() enforces that.
-   */
-  static void releaseGlobalNetworking();
-
 #ifdef COUNTLY_BUILD_TESTS
+  /** Times curl_global_init actually ran. Structurally at most one. */
   static int globalNetworkingInitCount();
+  /** Times initGlobalNetworking() was called, i.e. how much was deduplicated. */
+  static int globalNetworkingInitRequests();
   static bool globalNetworkingReleased();
 #endif
 
 private:
+  // Tearing networking down is only safe once no instance is live, and only
+  // Countly::shutdownNetworking() knows that. Keeping this private stops an
+  // integrator reaching past the check.
+  friend class Countly;
+
+  /**
+   * Process-wide network teardown. Idempotent, and a no-op unless the SDK is
+   * built against libcurl.
+   */
+  static void releaseGlobalNetworking();
+
   class RequestModuleImpl;
   std::unique_ptr<RequestModuleImpl> impl;
   std::weak_ptr<ConfigurationProvider> _configProvider;

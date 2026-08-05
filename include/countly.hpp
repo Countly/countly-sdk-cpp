@@ -435,11 +435,24 @@ private:
   void releaseDatabasePathClaim();
 
   /**
-   * Joins and clears every remote-config fetch thread. Safe to call repeatedly
-   * and safe to call when none are running. Must not be called while the
-   * instance mutex is held -- the fetch threads take it.
+   * Joins the remote-config fetch thread if one exists. Safe to call repeatedly
+   * and safe to call when none is running. Must not be called while the instance
+   * mutex is held -- the fetch thread takes it.
    */
-  void joinRemoteConfigThreads();
+  void joinRemoteConfigThread();
+
+  /**
+   * Starts a remote-config fetch on the single owned fetch thread. Never blocks
+   * the caller: if a fetch is already in flight this logs a warning and returns
+   * false rather than waiting, so a call from a UI thread cannot stall on an
+   * HTTP timeout.
+   *
+   * @param member: the fetch body to run
+   * @param data: request parameters, copied into the thread
+   * @param caller: public method name, used in log messages
+   * @return true if a fetch was started
+   */
+  bool startRemoteConfigThread(void (Countly::*member)(const std::map<std::string, std::string> &), const std::map<std::string, std::string> &data, const char *caller);
 
   void _deleteThread();
   void _sendIndependantLocationRequest();
@@ -475,10 +488,12 @@ private:
 
   std::unique_ptr<std::thread> thread;
 
-  // Remote-config fetches run on owned threads rather than detached ones: a
-  // detached thread captures `this` and can outlive the instance.
+  // A remote-config fetch runs on an owned thread rather than a detached one: a
+  // detached thread captures `this` and can outlive the instance. At most one
+  // fetch is in flight, so a single thread is all that is ever needed.
   std::mutex remote_config_thread_mutex;
-  std::vector<std::thread> remote_config_threads;
+  std::thread remote_config_thread;
+  std::atomic<bool> remote_config_fetch_running{false};
   std::unique_ptr<cly::CrashModule> crash_module;
   std::unique_ptr<cly::ViewsModule> views_module;
 
