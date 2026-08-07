@@ -5,6 +5,7 @@
 #include <cassert>
 #include <chrono>
 #include <climits>
+#include <ctime>
 #include <functional>
 #include <map>
 #include <memory>
@@ -52,6 +53,36 @@ template <typename... Args> static std::string format_string(const std::string &
   std::string str(buf.get());
 
   return str;
+}
+
+/**
+ * Thread-safe replacements for std::localtime and std::gmtime.
+ *
+ * Both of those return a pointer into a single process-wide std::tm, so two
+ * threads calling them concurrently race, and a caller can end up copying the
+ * struct another thread has just overwritten -- including the other function's
+ * result, since localtime and gmtime share that one buffer. With more than one
+ * SDK instance this needs no threads of the integrator's own: every instance
+ * runs its own update loop, and each one builds requests.
+ */
+inline std::tm localTime(std::time_t time) {
+  std::tm result = std::tm();
+#if defined(_WIN32) && (defined(_MSC_VER) || defined(MINGW_HAS_SECURE_API))
+  localtime_s(&result, &time);
+#else
+  localtime_r(&time, &result);
+#endif
+  return result;
+}
+
+inline std::tm gmTime(std::time_t time) {
+  std::tm result = std::tm();
+#if defined(_WIN32) && (defined(_MSC_VER) || defined(MINGW_HAS_SECURE_API))
+  gmtime_s(&result, &time);
+#else
+  gmtime_r(&time, &result);
+#endif
+  return result;
 }
 
 /**

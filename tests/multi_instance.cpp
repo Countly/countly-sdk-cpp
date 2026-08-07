@@ -1,8 +1,11 @@
+#include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <ctime>
 #include <set>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "doctest.h"
 
@@ -62,6 +65,38 @@ TEST_CASE("generateEventID varies its random component") {
   }
   CHECK(random_parts.size() > 1);
   CHECK(ids.size() == 1000);
+}
+
+TEST_CASE("localTime and gmTime are safe to call from several threads") {
+  // Event::setTimestamp and RequestBuilder::buildRequest used std::localtime and
+  // std::gmtime, which return a pointer into one process-wide std::tm. Two
+  // threads racing there could copy a struct the other had already overwritten,
+  // and because localtime and gmtime share the buffer a "local" tm could come
+  // back holding GMT fields -- a wrong tz/dow/hour on the wire. Every instance
+  // runs its own update loop, so more than one instance is enough to hit it.
+  const std::time_t fixed_time = 1700000000;
+  const std::tm expected_local = utils::localTime(fixed_time);
+  const std::tm expected_gm = utils::gmTime(fixed_time);
+
+  std::atomic<int> mismatches(0);
+  std::vector<std::thread> workers;
+  for (int t = 0; t < 8; t++) {
+    const bool use_local = (t % 2) == 0;
+    workers.emplace_back([use_local, fixed_time, &expected_local, &expected_gm, &mismatches]() {
+      for (int i = 0; i < 2000; i++) {
+        const std::tm actual = use_local ? utils::localTime(fixed_time) : utils::gmTime(fixed_time);
+        const std::tm &expected = use_local ? expected_local : expected_gm;
+        if (actual.tm_hour != expected.tm_hour || actual.tm_min != expected.tm_min || actual.tm_wday != expected.tm_wday || actual.tm_mday != expected.tm_mday) {
+          mismatches.fetch_add(1);
+        }
+      }
+    });
+  }
+  for (std::thread &worker : workers) {
+    worker.join();
+  }
+
+  CHECK(mismatches.load() == 0);
 }
 
 TEST_CASE("two instances produce distinct view IDs for the same view name") {
