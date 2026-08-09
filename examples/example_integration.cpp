@@ -218,14 +218,9 @@ static Countly *secondaryInstance() {
   return second;
 }
 
-// Hammers both instances from several threads at once. Each instance has its own
-// lock, so the two do not contend with each other; within one instance the calls
-// below are internally synchronised.
-//
-// Views are deliberately driven from a single thread per instance: ViewsModule
-// keeps its open-view map without a lock of its own, so concurrent openView /
-// closeView calls on the *same* instance are not safe. Two threads driving views
-// on two *different* instances are, since the modules are per instance.
+// Hammers both instances from several threads at once. Every call below is
+// internally synchronised, and each instance has its own lock, so the two do not
+// contend with each other either.
 static void stressBothInstances(int threadsPerInstance, int iterations) {
   Countly *second = secondaryInstance();
   if (second == nullptr) {
@@ -256,6 +251,11 @@ static void stressBothInstances(int threadsPerInstance, int iterations) {
 
           target->crash().addBreadcrumb(label + "-" + std::to_string(w) + "-" + std::to_string(i));
 
+          const std::string viewId = target->views().openView("stress view " + label);
+          if (!viewId.empty()) {
+            target->views().closeViewWithID(viewId);
+          }
+
           if (i % 5 == 0) {
             target->updateSession();
           }
@@ -264,16 +264,6 @@ static void stressBothInstances(int threadsPerInstance, int iterations) {
         }
       });
     }
-
-    // One view thread per instance, see the note above.
-    workers.emplace_back([target, label, iterations]() {
-      for (int i = 0; i < iterations; i++) {
-        const std::string viewId = target->views().openView("stress view " + label);
-        if (!viewId.empty()) {
-          target->views().closeViewWithID(viewId);
-        }
-      }
-    });
   }
 
   for (std::thread &worker : workers) {

@@ -318,25 +318,31 @@ TEST_CASE("shutdownNetworking refuses while an instance is live") {
   CHECK(a.initialized());
 }
 
-TEST_CASE("a remote config fetch thread is joined by destruction") {
+TEST_CASE("destruction does not wait for an in-flight remote config fetch") {
   clearSDK();
+  static std::atomic<bool> fetch_entered(false);
   static std::atomic<bool> fetch_completed(false);
+  static std::atomic<bool> release_fetch(false);
+  fetch_entered.store(false);
   fetch_completed.store(false);
+  release_fetch.store(false);
 
   std::shared_ptr<cly::Countly> sdk = std::make_shared<cly::Countly>();
-  // A slow client: if the fetch thread is detached, destruction returns before
-  // the store below runs, which is exactly the bug this asserts against.
+  // The fetch parks until this test releases it, so it is guaranteed to still be
+  // in flight while the instance is destroyed.
   sdk->setHTTPClient([](bool use_post, const std::string &url, const std::string &data) {
     (void)use_post;
     (void)url;
     cly::HTTPResponse response;
     response.success = true;
     response.data = nlohmann::json::object();
-    // Only the remote-config fetch is slowed down. The SDK Behavior Settings
-    // fetch also targets /o/sdk (with method=sc), and delaying that one too
-    // would let the SBS thread set the flag and make this test meaningless.
+    // Only the remote-config fetch is held. The SDK Behavior Settings fetch also
+    // targets /o/sdk (with method=sc) and must not be blocked.
     if (data.find("fetch_remote_config") != std::string::npos) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(250));
+      fetch_entered.store(true);
+      while (!release_fetch.load()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+      }
       fetch_completed.store(true);
     }
     return response;
@@ -344,21 +350,37 @@ TEST_CASE("a remote config fetch thread is joined by destruction") {
   sdk->setDeviceID(COUNTLY_TEST_DEVICE_ID);
   sdk->SetPath("mi-remote-config.db");
   sdk->disableSDKBehaviorSettingsUpdates(); // no periodic SBS thread in this test
-  // Without this, ~Countly blocks for up to COUNTLY_KEEPALIVE_INTERVAL (3s)
-  // joining the update loop, and that incidental wait is long enough for a
-  // *detached* fetch thread to finish -- which would make this test pass
-  // whether the thread is owned or not. With it, destruction returns promptly,
-  // so only an owned-and-joined thread can have set the flag.
+  // Without this, ~Countly waits up to COUNTLY_KEEPALIVE_INTERVAL (3s) for the
+  // update loop, which would hide the wait this test is measuring.
   sdk->enableImmediateRequestOnStop();
   sdk->enableRemoteConfig();
   sdk->start("APP_KEY_RC", COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
   REQUIRE(sdk->checkEQSize() == 0);
 
-  fetch_completed.store(false);
   sdk->updateRemoteConfig();
-  sdk.reset(); // must join the fetch thread
+  for (int i = 0; i < 400 && !fetch_entered.load(); i++) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  REQUIRE(fetch_entered.load()); // the fetch is parked in the HTTP client
 
+  const std::chrono::steady_clock::time_point before = std::chrono::steady_clock::now();
+  sdk.reset();
+  const long long elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - before).count();
+
+  // Destruction must not wait for the HTTP round trip.
+  CHECK(elapsed_ms < 500);
+  CHECK(fetch_completed.load() == false);
+
+  // Let the fetch finish. It writes its result into a store it owns a reference
+  // to, so completing after its instance is gone must be harmless -- run under
+  // ASan or TSan this is what proves there is no use-after-free.
+  release_fetch.store(true);
+  for (int i = 0; i < 400 && !fetch_completed.load(); i++) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
   CHECK(fetch_completed.load() == true);
+  // Give the detached thread a moment to run its epilogue before the test ends.
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
   remove("mi-remote-config.db");
 }
 

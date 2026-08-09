@@ -1,9 +1,12 @@
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <deque>
 #include <iostream>
 #include <map>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "doctest.h"
 
@@ -188,4 +191,48 @@ TEST_CASE("event request unit tests") {
     nlohmann::json events = nlohmann::json::parse(http_call.data["events"]);
     CHECK(events.size() == 100);
   }
+}
+
+/**
+ * endSession() used to read began_session before taking the instance mutex and
+ * clear it after, so two concurrent calls could both see an active session and
+ * both queue an end_session request. stop() on one thread while another changes
+ * the device id is enough to get there.
+ */
+TEST_CASE("concurrent endSession calls end the session only once") {
+  clearSDK();
+  Countly &countly = Countly::getInstance();
+  // A client that never succeeds, so the update loop cannot remove the queued
+  // requests this test is counting.
+  countly.setHTTPClient([](bool use_post, const std::string &url, const std::string &data) {
+    (void)use_post;
+    (void)url;
+    (void)data;
+    HTTPResponse response{false, nlohmann::json::object()};
+    return response;
+  });
+  countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+  countly.SetPath(TEST_DATABASE_NAME);
+  countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+
+  const int rq_before = countly.checkRQSize(); // holds the begin_session request
+  REQUIRE(rq_before >= 0);
+
+  std::vector<std::thread> workers;
+  std::atomic<int> ended(0);
+  for (int t = 0; t < 4; t++) {
+    workers.emplace_back([&countly, &ended]() {
+      if (countly.endSession()) {
+        ended.fetch_add(1);
+      }
+    });
+  }
+  for (std::thread &worker : workers) {
+    worker.join();
+  }
+
+  // All four calls report success (three of them because there was nothing left
+  // to end), but exactly one end_session request may be queued.
+  CHECK(ended.load() == 4);
+  CHECK(countly.checkRQSize() == rq_before + 1);
 }

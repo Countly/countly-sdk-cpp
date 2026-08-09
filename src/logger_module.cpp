@@ -4,6 +4,17 @@
 #include <memory>
 #include <mutex>
 namespace cly {
+namespace {
+/**
+ * True while this thread is inside the integrator's log callback.
+ *
+ * Not per instance on purpose: re-entry has to be detected wherever it comes
+ * from, and a callback registered on two instances could otherwise bounce between
+ * them.
+ */
+thread_local bool inside_log_callback = false;
+} // namespace
+
 class LoggerModule::LoggerModuleImpl {
 public:
   LoggerModuleImpl() {}
@@ -38,6 +49,15 @@ void LoggerModule::log(LogLevel level, const std::string &message) {
     return;
   }
 
+  // This thread is already inside the callback, which has called back into the
+  // SDK. Almost every SDK method logs, so delivering this message would re-enter
+  // the callback, which would call in again: unbounded recursion ending in a
+  // stack overflow. Dropping it is what makes calling the SDK from a log callback
+  // survivable.
+  if (inside_log_callback) {
+    return;
+  }
+
   // Copy the callback under the lock and invoke it outside: the callback belongs
   // to the integrator and may call back into the SDK, which would re-enter this
   // function and deadlock on a non-recursive mutex.
@@ -48,7 +68,14 @@ void LoggerModule::log(LogLevel level, const std::string &message) {
   }
 
   if (callback != nullptr) {
+    // Cleared however the callback exits, including by throwing.
+    struct FlagGuard {
+      ~FlagGuard() { inside_log_callback = false; }
+    } guard;
+    inside_log_callback = true;
     callback(level, message);
   }
 }
+
+bool LoggerModule::isInsideCallback() { return inside_log_callback; }
 } // namespace cly

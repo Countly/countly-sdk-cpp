@@ -30,6 +30,7 @@
 #include <countly/configuration_module.hpp>
 #include <countly/configuration_provider.hpp>
 #include <countly/crash_module.hpp>
+#include <countly/remote_config_store.hpp>
 #include <countly/request_builder.hpp>
 #include <countly/request_module.hpp>
 
@@ -435,24 +436,22 @@ private:
   void releaseDatabasePathClaim();
 
   /**
-   * Joins the remote-config fetch thread if one exists. Safe to call repeatedly
-   * and safe to call when none is running. Must not be called while the instance
-   * mutex is held -- the fetch thread takes it.
-   */
-  void joinRemoteConfigThread();
-
-  /**
-   * Starts a remote-config fetch on the single owned fetch thread. Never blocks
-   * the caller: if a fetch is already in flight this logs a warning and returns
-   * false rather than waiting, so a call from a UI thread cannot stall on an
-   * HTTP timeout.
+   * Starts a remote-config fetch on a detached thread. Never blocks: neither the
+   * caller (a UI thread must not stall on an HTTP timeout) nor destruction. At
+   * most one fetch is in flight per instance; a call made while one is running is
+   * logged and dropped.
    *
-   * @param member: the fetch body to run
+   * The thread body captures no reference to this object -- only shared_ptrs to
+   * the modules and the value store it needs -- so it stays valid however long it
+   * outlives the instance.
+   *
    * @param data: request parameters, copied into the thread
+   * @param merge: true merges the response into the stored values, false replaces
+   *               them wholesale
    * @param caller: public method name, used in log messages
    * @return true if a fetch was started
    */
-  bool startRemoteConfigThread(void (Countly::*member)(const std::map<std::string, std::string> &), const std::map<std::string, std::string> &data, const char *caller);
+  bool startRemoteConfigFetch(const std::map<std::string, std::string> &data, bool merge, const char *caller);
 
   void _deleteThread();
   void _sendIndependantLocationRequest();
@@ -460,14 +459,6 @@ private:
 #ifdef COUNTLY_USE_SQLITE
   bool createEventTableSchema();
 #endif
-
-  /**
-   * Helper methods to fetch remote config from the server.
-   */
-#pragma region Remote_Config_Helper_Methods
-  void _fetchRemoteConfig(const std::map<std::string, std::string> &data);
-  void _updateRemoteConfigWithSpecificValues(const std::map<std::string, std::string> &data);
-#pragma endregion Remote_Config_Helper_Methods
 
   void _changeDeviceIdWithMerge(const std::string &value);
 
@@ -488,12 +479,14 @@ private:
 
   std::unique_ptr<std::thread> thread;
 
-  // A remote-config fetch runs on an owned thread rather than a detached one: a
-  // detached thread captures `this` and can outlive the instance. At most one
-  // fetch is in flight, so a single thread is all that is ever needed.
-  std::mutex remote_config_thread_mutex;
-  std::thread remote_config_thread;
-  std::atomic<bool> remote_config_fetch_running{false};
+  // Remote config values, and the in-flight flag for the fetch that writes them.
+  //
+  // Held behind a shared_ptr because the fetch thread is detached: destruction
+  // must not wait for an HTTP round trip, so the thread can outlive this object
+  // and therefore must not touch it. Everything the fetch needs is reached
+  // through shared_ptrs it holds itself, this store included.
+  std::shared_ptr<cly::RemoteConfigStore> remote_config_store = std::make_shared<cly::RemoteConfigStore>();
+
   std::unique_ptr<cly::CrashModule> crash_module;
   std::unique_ptr<cly::ViewsModule> views_module;
 
@@ -523,7 +516,6 @@ private:
 #endif
 
   bool remote_config_enabled = false;
-  nlohmann::json remote_config;
 };
 } // namespace cly
 #endif
