@@ -241,7 +241,7 @@ TEST_CASE("views opened and closed from several threads at once") {
   std::vector<std::thread> workers;
 
   for (int t = 0; t < thread_count; t++) {
-    workers.emplace_back([&ct, &ids_mutex, &view_ids, t]() {
+    workers.emplace_back([&ct, &ids_mutex, &view_ids, t, views_per_thread]() {
       for (int i = 0; i < views_per_thread; i++) {
         const std::string viewId = ct.views().openView("view " + std::to_string(t));
         {

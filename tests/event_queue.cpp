@@ -387,7 +387,7 @@ TEST_CASE("concurrent recording does not lose queue writes") {
 
   std::vector<std::thread> workers;
   for (int t = 0; t < thread_count; t++) {
-    workers.emplace_back([&countly, t]() {
+    workers.emplace_back([&countly, t, per_thread]() {
       for (int i = 0; i < per_thread; i++) {
         countly.addEvent(cly::Event("concurrent_event_" + std::to_string(t), 1));
         // Exercises the request queue on the same database file.
