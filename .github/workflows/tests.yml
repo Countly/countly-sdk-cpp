@@ -18,10 +18,8 @@ jobs:
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04, macos-15, windows-2022]
         sqlite: [OFF, ON]
-        exclude:
-          # Windows has no system sqlite3.lib
-          - os: windows-2022
-            sqlite: ON
+        # Windows + SQLite is now supported: the vendored amalgamation is
+        # compiled into the library, no system sqlite3.lib needed.
 
     steps:
       - name: Checkout code
@@ -199,6 +197,39 @@ jobs:
         run: |
           cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=ON \
             -DBUILD_SHARED_LIBS=OFF -DCOUNTLY_USE_CUSTOM_HTTP=ON \
+            -B build .
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.31"
+
+      - name: Build
+        run: cd build && make ./countly-tests
+
+      - name: Run tests
+        run: cd build && ./countly-tests
+
+  # ──────────────────────────────────────────────
+  # System SQLite (COUNTLY_USE_SYSTEM_SQLITE escape hatch)
+  # ──────────────────────────────────────────────
+  system-sqlite:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libsqlite3-dev
+
+      - name: Configure with system SQLite
+        run: |
+          cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=ON \
+            -DCOUNTLY_USE_SYSTEM_SQLITE=ON \
             -B build .
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.31"
