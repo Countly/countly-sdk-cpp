@@ -3,6 +3,7 @@
 #include "countly/internal_limits.hpp"
 
 #include <chrono>
+#include <mutex>
 
 #define CLY_VIEW_KEY "[CLY]_view"
 
@@ -16,11 +17,16 @@ class ViewsModule::ViewModuleImpl {
   };
 
 private:
+  // Guards _isFirstView and _viewsStartTime. Views are opened and closed from
+  // whichever thread the integrator uses, and nothing else in the SDK
+  // serialises those calls, so the module has to do it itself.
+  std::mutex _views_mutex;
   bool _isFirstView = true;
   std::map<std::string, std::shared_ptr<ViewInfo>> _viewsStartTime;
 
   cly::CountlyDelegates *_cly;
 
+  // Call with _views_mutex held.
   std::shared_ptr<ViewInfo> findViewByName(const std::string &name) {
     for (auto &x : _viewsStartTime) {
       if (x.second->name == name) {
@@ -30,14 +36,24 @@ private:
 
     return nullptr;
   }
-  void _recordView(std::shared_ptr<ViewInfo> v, const std::map<std::string, std::string> &segmentation, bool isOpenView) {
+
+  /**
+   * Call with _views_mutex NOT held. This calls back into Countly::addEvent,
+   * which takes the instance mutex and can invoke the integrator's log callback,
+   * and that callback is free to call back into this module. Holding the view
+   * lock across it would risk a deadlock, so the shared state is read and
+   * updated before this runs and the outcome is passed in.
+   *
+   * @param isFirstView: only meaningful when isOpenView is true
+   */
+  void _recordView(std::shared_ptr<ViewInfo> v, const std::map<std::string, std::string> &segmentation, bool isOpenView, bool isFirstView = false) {
     double duration = 0;
     std::map<std::string, std::string> viewSegments;
 
     if (isOpenView) {
       viewSegments["visit"] = "1";
 
-      if (_isFirstView) {
+      if (isFirstView) {
         viewSegments["start"] = "1";
       }
 
@@ -61,11 +77,6 @@ private:
     viewSegments["name"] = v->name;
 
     _cly->RecordEvent(CLY_VIEW_KEY, viewSegments, 1, 0, duration);
-    if (isOpenView) {
-      _isFirstView = false;
-    } else {
-      _viewsStartTime.erase(v->viewId);
-    }
   }
 
 public:
@@ -100,9 +111,17 @@ public:
 
     std::shared_ptr<ViewModuleImpl::ViewInfo> ptr(v);
 
-    _viewsStartTime[ptr->viewId] = ptr;
+    bool isFirstView = false;
+    {
+      std::lock_guard<std::mutex> lk(_views_mutex);
+      _viewsStartTime[ptr->viewId] = ptr;
+      // Claimed under the lock, so 'start' goes on exactly one view even when
+      // two threads open their first view at the same time.
+      isFirstView = _isFirstView;
+      _isFirstView = false;
+    }
 
-    _recordView(ptr, limitedSeg, true);
+    _recordView(ptr, limitedSeg, true, isFirstView);
     return ptr->viewId;
   }
 
@@ -116,7 +135,17 @@ public:
       _logger->log(LogLevel::WARNING, "[Countly] [ViewsModule] _closeViewWithName, ConfigurationProvider unavailable.");
       return;
     }
-    std::shared_ptr<ViewModuleImpl::ViewInfo> v = findViewByName(name);
+    // The view is taken out of the map under the lock, so two threads closing
+    // the same view cannot both record it.
+    std::shared_ptr<ViewModuleImpl::ViewInfo> v;
+    {
+      std::lock_guard<std::mutex> lk(_views_mutex);
+      v = findViewByName(name);
+      if (v != nullptr) {
+        _viewsStartTime.erase(v->viewId);
+      }
+    }
+
     if (v == nullptr) {
       _logger->log(cly::LogLevel::WARNING, cly::utils::format_string("[Countly] [ViewsModule] _closeViewWithName, Couldn't find "
                                                                      "view with name = [%s]",
@@ -137,14 +166,24 @@ public:
       return;
     }
 
-    if (_viewsStartTime.find(viewId) == _viewsStartTime.end()) {
+    std::shared_ptr<ViewModuleImpl::ViewInfo> v;
+    {
+      std::lock_guard<std::mutex> lk(_views_mutex);
+      std::map<std::string, std::shared_ptr<ViewInfo>>::iterator it = _viewsStartTime.find(viewId);
+      if (it != _viewsStartTime.end()) {
+        v = it->second;
+        _viewsStartTime.erase(it);
+      }
+    }
+
+    if (v == nullptr) {
       _logger->log(cly::LogLevel::WARNING, cly::utils::format_string("[Countly] [ViewsModule] _closeViewWithID, Couldn't find "
                                                                      "view with viewId = [%s]",
                                                                      viewId.c_str()));
       return;
     }
 
-    _recordView(_viewsStartTime[viewId], {}, false);
+    _recordView(v, {}, false);
   }
 };
 

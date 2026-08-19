@@ -4,6 +4,8 @@
 #include <iostream>
 #include <map>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "doctest.h"
 
@@ -351,4 +353,57 @@ TEST_CASE("Tests that saving user details trigger flushing EQ"){
     nlohmann::json customUserDetailsJson = nlohmann::json::parse(customUserDetails.data["user_details"]);
     CHECK(customUserDetailsJson["custom"]["custom_key"] == "custom_value");
   }
+}
+/**
+ * Both queues are written from whatever thread the integrator records on, plus
+ * the SDK's own update loop. On SQLite builds every operation opens its own
+ * connection, so a write that overlaps a read used to fail with SQLITE_BUSY and
+ * the event or request was dropped with only an ERROR log (no busy timeout was
+ * set). This asserts that nothing is lost when several threads record at once.
+ */
+TEST_CASE("concurrent recording does not lose queue writes") {
+  clearSDK();
+  Countly &countly = Countly::getInstance();
+  // A client that never succeeds. start() runs the update loop regardless of its
+  // start_thread argument, and a delivered request is removed from the queue, so
+  // without this the counts below would depend on how many loop passes happened.
+  countly.setHTTPClient([](bool use_post, const std::string &url, const std::string &data) {
+    (void)use_post;
+    (void)url;
+    (void)data;
+    HTTPResponse response{false, nlohmann::json::object()};
+    return response;
+  });
+  countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+  countly.SetPath(TEST_DATABASE_NAME);
+  countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+  // Keep every event in the event queue so it can all be counted.
+  countly.setEventsToRQThreshold(10000);
+
+  const int thread_count = 6;
+  const int per_thread = 40;
+  const int rq_before = countly.checkRQSize();
+  REQUIRE(rq_before >= 0);
+
+  std::vector<std::thread> workers;
+  for (int t = 0; t < thread_count; t++) {
+    workers.emplace_back([&countly, t, per_thread]() {
+      for (int i = 0; i < per_thread; i++) {
+        countly.addEvent(cly::Event("concurrent_event_" + std::to_string(t), 1));
+        // Exercises the request queue on the same database file.
+        std::map<std::string, std::string> crashMetrics = {{"_app_version", "1.0"}, {"_os", "test"}};
+        countly.crash().recordException("boom", "line1\nline2", false, crashMetrics, {});
+        // Reads the event queue while the other threads write it. On SQLite this
+        // is the overlap that produced the dropped writes: the size check drops
+        // the instance mutex before querying.
+        countly.checkEQSize();
+      }
+    });
+  }
+  for (std::thread &worker : workers) {
+    worker.join();
+  }
+
+  CHECK(countly.checkEQSize() == thread_count * per_thread);
+  CHECK(countly.checkRQSize() == rq_before + thread_count * per_thread);
 }

@@ -28,8 +28,11 @@ std::string RequestBuilder::buildRequest(const std::map<std::string, std::string
   const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
 
   std::time_t time = std::chrono::system_clock::to_time_t(now);
-  std::tm local_tm = *std::localtime(&time);
-  std::tm gm_tm = *std::gmtime(&time);
+  // Not std::localtime/std::gmtime: they share one process-wide std::tm, so a
+  // concurrent request build (each instance has its own update loop) can leave
+  // local_tm holding GMT fields and silently corrupt tz/dow/hour.
+  std::tm local_tm = cly::utils::localTime(time);
+  std::tm gm_tm = cly::utils::gmTime(time);
 
   int tz_offset_minutes = (local_tm.tm_hour - gm_tm.tm_hour) * 60 + (local_tm.tm_min - gm_tm.tm_min);
   // Adjust for day boundary crossings

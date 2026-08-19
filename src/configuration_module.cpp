@@ -383,7 +383,16 @@ public:
 
   void _stopTimer() {
     _logger->log(LogLevel::WARNING, "[Countly] [ConfigurationModule] stopTimer, stopping server config update timer thread.");
-    stopConfigThread.store(true, std::memory_order_release);
+
+    {
+      // The flag has to be mutated under the same mutex the waiter evaluates it
+      // under. Storing it outside and then notifying can land in the window
+      // between the waiter checking the predicate and actually blocking, in
+      // which case the notification is lost -- and the wait deadline is four
+      // hours, so join() below would block for that long.
+      std::lock_guard<std::mutex> lk(configUpdateMutex);
+      stopConfigThread.store(true, std::memory_order_release);
+    }
     configUpdateCv.notify_all();
 
     if (configUpdateThread.joinable()) {

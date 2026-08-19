@@ -1,6 +1,7 @@
 #include "countly/request_module.hpp"
 #include "countly/request_builder.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <deque>
 #include <iomanip>
@@ -18,6 +19,12 @@
 #else
 #include "curl/curl.h"
 #endif
+#endif
+
+#if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
+#define COUNTLY_HAS_CURL 1
+#else
+#define COUNTLY_HAS_CURL 0
 #endif
 
 namespace cly {
@@ -75,22 +82,86 @@ public:
   }
 };
 
+namespace {
+/**
+ * Process-wide libcurl initialisation.
+ *
+ * libcurl's global init/cleanup pair is process-wide, and curl_global_cleanup()
+ * must not run while another thread is using curl. Calling it when one SDK
+ * instance is destroyed would tear networking down under every other live
+ * instance, so cleanup happens exactly once: either at process exit (this is a
+ * function-local static) or when the integrator calls
+ * Countly::shutdownNetworking().
+ *
+ * The counters are maintained even on builds without curl so the tests mean the
+ * same thing on every platform.
+ */
+class CurlGlobal {
+public:
+  CurlGlobal() {
+#if COUNTLY_HAS_CURL
+    curl_global_init(CURL_GLOBAL_ALL);
+#endif
+    _init_count.fetch_add(1);
+  }
+
+  ~CurlGlobal() { release(); }
+
+  void release() {
+    if (_released.exchange(true)) {
+      return;
+    }
+#if COUNTLY_HAS_CURL
+    curl_global_cleanup();
+#endif
+  }
+
+  int initCount() const { return _init_count.load(); }
+  bool released() const { return _released.load(); }
+
+private:
+  std::atomic<int> _init_count{0};
+  std::atomic<bool> _released{false};
+};
+
+CurlGlobal &curlGlobal() {
+  static CurlGlobal instance;
+  return instance;
+}
+
+/**
+ * How many times initGlobalNetworking() was asked to initialise, as opposed to
+ * how many times curl actually was. The gap between the two is the whole point
+ * of CurlGlobal, so both numbers are needed to assert that deduplication works
+ * -- the actual count is 1 by construction and proves nothing on its own.
+ */
+std::atomic<int> networking_init_requests(0);
+} // namespace
+
+void RequestModule::initGlobalNetworking() {
+  networking_init_requests.fetch_add(1);
+  curlGlobal();
+}
+
+void RequestModule::releaseGlobalNetworking() { curlGlobal().release(); }
+
+#ifdef COUNTLY_BUILD_TESTS
+int RequestModule::globalNetworkingInitCount() { return curlGlobal().initCount(); }
+
+int RequestModule::globalNetworkingInitRequests() { return networking_init_requests.load(); }
+
+bool RequestModule::globalNetworkingReleased() { return curlGlobal().released(); }
+#endif
+
 RequestModule::RequestModule(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule) {
   impl.reset(new RequestModuleImpl(config, logger, requestBuilder, storageModule));
 
   impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] Initialized"));
 
-#if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
-  curl_global_init(CURL_GLOBAL_ALL);
-#endif
+  initGlobalNetworking();
 }
 
-RequestModule::~RequestModule() {
-  impl.reset();
-#if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
-  curl_global_cleanup();
-#endif
-}
+RequestModule::~RequestModule() { impl.reset(); }
 
 static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n_bytes, std::string *body) {
   size_t data_size = byte_size * n_bytes;

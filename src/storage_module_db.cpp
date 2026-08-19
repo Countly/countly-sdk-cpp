@@ -3,6 +3,7 @@
 #include "countly/countly_configuration.hpp"
 #include "countly/logger_module.hpp"
 #ifdef COUNTLY_USE_SQLITE
+#include "countly/sqlite_utils.hpp"
 #include "sqlite3.h"
 #endif
 #include <sstream>
@@ -53,7 +54,7 @@ void StorageModuleDB::vacuumDatabase() {
     sqlite3 *database;
     int return_value;
     char *error_message;
-    return_value = sqlite3_open(_configuration->databasePath.c_str(), &database);
+    return_value = cly::utils::openDatabase(_configuration->databasePath, &database);
     if (return_value == SQLITE_OK) {
       return_value = sqlite3_exec(database, "VACUUM", nullptr, nullptr, &error_message);
       if (return_value != SQLITE_OK) {
@@ -86,7 +87,7 @@ bool StorageModuleDB::createSchema(const char tableName[], const char keyColumnN
     char *error_message;
 
     // Open the SQLite database
-    return_value = sqlite3_open(_configuration->databasePath.c_str(), &database);
+    return_value = cly::utils::openDatabase(_configuration->databasePath, &database);
     if (return_value == SQLITE_OK) {
       // Create the table if it does not exist
       std::ostringstream sql_statement_stream;
@@ -136,7 +137,7 @@ void StorageModuleDB::RQRemoveFront() {
     int return_value;
     char *error_message;
     // Open the SQLite database
-    return_value = sqlite3_open(_configuration->databasePath.c_str(), &database);
+    return_value = cly::utils::openDatabase(_configuration->databasePath, &database);
     if (return_value == SQLITE_OK) { // Check if the SQL statement execution is successful
       // Remove the first entry in the requests table
       std::ostringstream sql_statement_stream;
@@ -184,7 +185,7 @@ void StorageModuleDB::RQRemoveFront(std::shared_ptr<DataEntry> request) {
     int return_value;
     char *error_message;
     // Open the SQLite database
-    return_value = sqlite3_open(_configuration->databasePath.c_str(), &database);
+    return_value = cly::utils::openDatabase(_configuration->databasePath, &database);
     if (return_value == SQLITE_OK) {
       // Build SQL statement to remove request from database
       std::ostringstream sql_statement_stream;
@@ -229,7 +230,7 @@ long long StorageModuleDB::RQCount() {
     char *error_message;
 
     // Open the SQLite database
-    return_value = sqlite3_open(_configuration->databasePath.c_str(), &database);
+    return_value = cly::utils::openDatabase(_configuration->databasePath, &database);
     if (return_value == SQLITE_OK) {
       // Define the SQL statement for counting the number of rows in the requests table
       std::ostringstream sql_statement_stream;
@@ -282,7 +283,7 @@ std::vector<std::shared_ptr<DataEntry>> StorageModuleDB::RQPeekAll() {
     char *error_message;
 
     // Open the database
-    return_value = sqlite3_open(_configuration->databasePath.c_str(), &database);
+    return_value = cly::utils::openDatabase(_configuration->databasePath, &database);
     if (return_value == SQLITE_OK) {
       std::ostringstream sql_statement_stream;
       sql_statement_stream << "SELECT * FROM " << REQUESTS_TABLE_NAME << " ORDER BY " << REQUESTS_TABLE_REQUEST_ID << " ASC;";
@@ -344,7 +345,7 @@ void StorageModuleDB::RQInsertAtEnd(const std::string &request) {
     char *error_message;
 
     // Opens the database connection
-    return_value = sqlite3_open(_configuration->databasePath.c_str(), &database);
+    return_value = cly::utils::openDatabase(_configuration->databasePath, &database);
     if (return_value == SQLITE_OK) {
       // Prepares the SQL statement for inserting the request into the database
       std::ostringstream sql_statement_stream;
@@ -381,7 +382,7 @@ void StorageModuleDB::RQClearAll() {
     int return_value;
     char *error_message;
     // Open database connection
-    return_value = sqlite3_open(_configuration->databasePath.c_str(), &database);
+    return_value = cly::utils::openDatabase(_configuration->databasePath, &database);
     if (return_value == SQLITE_OK) {
       std::ostringstream sql_statement_stream;
       sql_statement_stream << "DELETE FROM " << REQUESTS_TABLE_NAME << ";";
@@ -422,7 +423,7 @@ const std::shared_ptr<DataEntry> StorageModuleDB::RQPeekFront() {
     char *error_message;
 
     // Open the SQLite database
-    return_value = sqlite3_open(_configuration->databasePath.c_str(), &database);
+    return_value = cly::utils::openDatabase(_configuration->databasePath, &database);
     if (return_value == SQLITE_OK) {
       // Construct an SQL statement to retrieve the first row of the requests table
       std::ostringstream sql_statement_stream;
@@ -480,7 +481,7 @@ void StorageModuleDB::storeSDKBehaviorSettings(const std::string &sdk_behavior_s
     sqlite3 *db = nullptr;
     sqlite3_stmt *stmt = nullptr;
 
-    if (sqlite3_open(_configuration->databasePath.c_str(), &db) != SQLITE_OK) {
+    if (cly::utils::openDatabase(_configuration->databasePath, &db) != SQLITE_OK) {
       _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] storeSDKBehaviorSettings, Failed to open database");
       return;
     }
@@ -522,7 +523,7 @@ std::string StorageModuleDB::getSDKBehaviorSettings() {
     sqlite3_stmt *stmt = nullptr;
     std::string result;
 
-    if (sqlite3_open(_configuration->databasePath.c_str(), &db) != SQLITE_OK) {
+    if (cly::utils::openDatabase(_configuration->databasePath, &db) != SQLITE_OK) {
       _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] getSDKBehaviorSettings, Failed to open database");
       return "";
     }

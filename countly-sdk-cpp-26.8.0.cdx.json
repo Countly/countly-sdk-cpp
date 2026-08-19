@@ -1,0 +1,239 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:dd63718d-246f-4f50-b5e0-e18f98c41ca3",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-08-19T05:33:08Z",
+    "supplier": {
+      "name": "Countly",
+      "url": [
+        "https://countly.com"
+      ]
+    },
+    "component": {
+      "bom-ref": "countly-sdk-cpp",
+      "type": "library",
+      "name": "countly-sdk-cpp",
+      "group": "countly",
+      "version": "26.8.0",
+      "purl": "pkg:github/countly/countly-sdk-cpp@26.8.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/Countly/countly-sdk-cpp"
+        }
+      ]
+    },
+    "properties": [
+      {
+        "name": "countly:sbom-type",
+        "value": "superset source SBOM: optional-scope components are gated by CMake options; system libraries carry no version because the consumer's build resolves them"
+      }
+    ]
+  },
+  "components": [
+    {
+      "bom-ref": "nlohmann-json",
+      "type": "library",
+      "name": "json",
+      "group": "nlohmann",
+      "version": "v3.12.0",
+      "purl": "pkg:github/nlohmann/json@55f93686c01528224f448c19128836e7df245f72",
+      "scope": "required",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "countly:origin",
+          "value": "vendored git submodule (vendor/json)"
+        },
+        {
+          "name": "countly:condition",
+          "value": "always included; header-only, part of the SDK's public API surface"
+        },
+        {
+          "name": "countly:pinned-commit",
+          "value": "55f93686c01528224f448c19128836e7df245f72"
+        }
+      ]
+    },
+    {
+      "bom-ref": "sqlite3",
+      "type": "library",
+      "name": "sqlite",
+      "group": "sqlite",
+      "version": "3.53.4",
+      "purl": "pkg:generic/sqlite@3.53.4?download_url=https://sqlite.org",
+      "cpe": "cpe:2.3:a:sqlite:sqlite:3.53.4:*:*:*:*:*:*:*",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "id": "blessing"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "countly:origin",
+          "value": "official sqlite.org amalgamation vendored in vendor/sqlite3, compiled into the library"
+        },
+        {
+          "name": "countly:cmake-option",
+          "value": "COUNTLY_USE_SQLITE=ON (with COUNTLY_USE_SYSTEM_SQLITE=OFF, the default)"
+        },
+        {
+          "name": "countly:condition",
+          "value": "compiled in only when COUNTLY_USE_SQLITE=ON and COUNTLY_USE_SYSTEM_SQLITE=OFF"
+        },
+        {
+          "name": "countly:compile-flags",
+          "value": "SQLITE_OMIT_LOAD_EXTENSION SQLITE_OMIT_DEPRECATED SQLITE_DEFAULT_MEMSTATUS=0; FTS/RTree/Geopoly/RBU/ICU not enabled"
+        }
+      ]
+    },
+    {
+      "bom-ref": "sqlite3-system",
+      "type": "library",
+      "name": "sqlite (system)",
+      "purl": "pkg:generic/sqlite",
+      "scope": "optional",
+      "properties": [
+        {
+          "name": "countly:origin",
+          "value": "system library, resolved at consumer build time (find_package(SQLite3))"
+        },
+        {
+          "name": "countly:cmake-option",
+          "value": "COUNTLY_USE_SQLITE=ON with COUNTLY_USE_SYSTEM_SQLITE=ON"
+        },
+        {
+          "name": "countly:condition",
+          "value": "linked instead of the vendored amalgamation when COUNTLY_USE_SYSTEM_SQLITE=ON; version is determined by the consumer's environment"
+        }
+      ]
+    },
+    {
+      "bom-ref": "openssl",
+      "type": "library",
+      "name": "openssl",
+      "purl": "pkg:generic/openssl",
+      "scope": "optional",
+      "properties": [
+        {
+          "name": "countly:origin",
+          "value": "system library, resolved at consumer build time (find_package(OpenSSL))"
+        },
+        {
+          "name": "countly:cmake-option",
+          "value": "COUNTLY_USE_CUSTOM_SHA256=OFF (default)"
+        },
+        {
+          "name": "countly:condition",
+          "value": "linked unless the consumer supplies a custom SHA-256 implementation; version is determined by the consumer's environment"
+        }
+      ]
+    },
+    {
+      "bom-ref": "libcurl",
+      "type": "library",
+      "name": "curl",
+      "purl": "pkg:generic/curl",
+      "scope": "optional",
+      "properties": [
+        {
+          "name": "countly:origin",
+          "value": "system library, resolved at consumer build time (find_package(CURL))"
+        },
+        {
+          "name": "countly:cmake-option",
+          "value": "COUNTLY_USE_CUSTOM_HTTP=OFF (default)"
+        },
+        {
+          "name": "countly:condition",
+          "value": "linked on non-Windows platforms unless the consumer supplies a custom HTTP function; version is determined by the consumer's environment"
+        }
+      ]
+    },
+    {
+      "bom-ref": "winhttp",
+      "type": "library",
+      "name": "WinHTTP",
+      "scope": "optional",
+      "properties": [
+        {
+          "name": "countly:origin",
+          "value": "Windows operating-system component"
+        },
+        {
+          "name": "countly:cmake-option",
+          "value": "COUNTLY_USE_CUSTOM_HTTP=OFF (default)"
+        },
+        {
+          "name": "countly:condition",
+          "value": "used on Windows unless the consumer supplies a custom HTTP function"
+        }
+      ]
+    },
+    {
+      "bom-ref": "doctest",
+      "type": "library",
+      "name": "doctest",
+      "group": "doctest",
+      "version": "v2.5.3",
+      "purl": "pkg:github/doctest/doctest@2d0a9359a60c51affe2a9bebb1be1dca47868151",
+      "scope": "excluded",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "countly:origin",
+          "value": "vendored git submodule (vendor/doctest)"
+        },
+        {
+          "name": "countly:cmake-option",
+          "value": "COUNTLY_BUILD_TESTS=ON"
+        },
+        {
+          "name": "countly:condition",
+          "value": "test framework only; never part of the shipped library"
+        },
+        {
+          "name": "countly:pinned-commit",
+          "value": "2d0a9359a60c51affe2a9bebb1be1dca47868151"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "countly-sdk-cpp",
+      "dependsOn": [
+        "nlohmann-json",
+        "sqlite3",
+        "sqlite3-system",
+        "openssl",
+        "libcurl",
+        "winhttp"
+      ]
+    }
+  ]
+}

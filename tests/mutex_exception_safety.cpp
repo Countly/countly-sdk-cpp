@@ -2,6 +2,7 @@
 #include "doctest.h"
 #include "nlohmann/json.hpp"
 #include "test_utils.hpp"
+#include <atomic>
 #include <chrono>
 #include <future>
 #include <thread>
@@ -125,4 +126,66 @@ TEST_CASE("mutex exception safety - throwing HTTP client keeps stop() responsive
   bool returned = fut.wait_for(std::chrono::seconds(5)) == std::future_status::ready;
   REQUIRE(returned);
   fut.get();
+}
+
+/**
+ * Calling the SDK from inside the log callback used to hang or recurse without
+ * bound: the SDK invokes that callback from places that hold the instance mutex,
+ * and almost every SDK method logs, so a callback that calls in again re-enters
+ * the callback. Now log messages raised inside the callback are dropped, and the
+ * queue-size getters answer instead of taking the mutex.
+ *
+ * Wrapped in std::async so a regression fails on the timeout instead of wedging
+ * the test binary.
+ */
+TEST_CASE("the SDK can be called from the log callback") {
+  clearSDK();
+  static std::atomic<int> callback_invocations(0);
+  static std::atomic<int> rq_non_negative(0);
+  static std::atomic<int> eq_refusals(0);
+  static Countly *target = nullptr;
+  callback_invocations.store(0);
+  rq_non_negative.store(0);
+  eq_refusals.store(0);
+
+  Countly &ct = Countly::getInstance();
+  target = &ct;
+  // No recursion guard of its own on purpose: the SDK has to be the one that
+  // stops the recursion.
+  ct.setLogger([](LogLevel level, const std::string &message) {
+    (void)level;
+    (void)message;
+    if (target == nullptr) {
+      return;
+    }
+    callback_invocations.fetch_add(1);
+    if (target->checkRQSize() >= 0) {
+      rq_non_negative.fetch_add(1);
+    }
+    if (target->checkEQSize() < 0) {
+      eq_refusals.fetch_add(1);
+    }
+  });
+  ct.setHTTPClient(test_utils::fakeSendHTTP);
+  ct.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+  ct.SetPath(TEST_DATABASE_NAME);
+  ct.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+
+  auto fut = std::async(std::launch::async, [&ct]() {
+    for (int i = 0; i < 20; i++) {
+      ct.addEvent(cly::Event("callback_event", 1));
+    }
+  });
+  const bool returned = fut.wait_for(std::chrono::seconds(10)) == std::future_status::ready;
+  REQUIRE(returned); // a deadlock or a stack overflow would show up here
+  fut.get();
+
+  CHECK(callback_invocations.load() > 0);
+  // checkRQSize does not take the instance mutex, so it can serve these calls.
+  CHECK(rq_non_negative.load() > 0);
+  // checkEQSize cannot, and reports "cannot determine" rather than deadlocking.
+  CHECK(eq_refusals.load() > 0);
+
+  target = nullptr;
+  ct.setLogger(nullptr);
 }

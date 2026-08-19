@@ -1,13 +1,16 @@
 #include "countly/internal_limits.hpp"
+#include "countly/path_utils.hpp"
 #include "countly/storage_module_db.hpp"
 #include "countly/storage_module_memory.hpp"
 #include <chrono>
 #include <iomanip>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <string>
 #include <system_error>
 #include <thread>
+#include <vector>
 
 #ifndef COUNTLY_USE_CUSTOM_SHA256
 #include "openssl/sha.h"
@@ -16,11 +19,98 @@
 #include "countly.hpp"
 
 #ifdef COUNTLY_USE_SQLITE
+#include "countly/sqlite_utils.hpp"
 #include "sqlite3.h"
 #endif
 
 namespace cly {
+
+namespace {
+/**
+ * Number of live Countly objects in this process, registry-held and
+ * integrator-owned alike. shutdownNetworking() refuses to tear down networking
+ * while this is non-zero.
+ */
+std::atomic<int> live_instance_count(0);
+
+/**
+ * Serialises instance construction and destruction against
+ * shutdownNetworking(), so that no instance can come into existence between
+ * that function reading the count and releasing networking.
+ *
+ * Lock order: this is acquired *inside* the registry's instance mutex, because
+ * Countly() is constructed while the registry holds it. shutdownNetworking()
+ * must therefore finish with the registry before acquiring this.
+ */
+std::mutex networking_lifecycle_mutex;
+
+/**
+ * Number of remote-config fetches running on detached threads across the whole
+ * process. shutdownNetworking() refuses while this is non-zero: such a thread can
+ * outlive the instance that started it, and releasing libcurl underneath one
+ * would crash it.
+ */
+std::atomic<int> inflight_remote_config_fetches(0);
+
+/**
+ * Everything a remote-config fetch needs, each piece owned by the fetch itself.
+ *
+ * The fetch runs detached, so it may still be in an HTTP call after the Countly
+ * instance that started it is destroyed. Holding shared_ptrs -- and no pointer to
+ * the instance -- is what makes that safe: nothing the body touches can be freed
+ * while the body runs.
+ *
+ * Note which module is absent. ConfigurationModule keeps a raw CountlyDelegates
+ * pointer and calls through it from its SBS timer, so a reference held here would
+ * postpone its destruction past ~Countly and leave that timer running against a
+ * destroyed instance. Its one contribution, the networking-enabled check, is made
+ * before the thread starts instead.
+ */
+struct RemoteConfigFetch {
+  std::shared_ptr<RequestModule> requestModule;
+  std::shared_ptr<RequestBuilder> requestBuilder;
+  std::shared_ptr<LoggerModule> logger;
+  std::shared_ptr<RemoteConfigStore> store;
+  std::map<std::string, std::string> data;
+  // true merges the response into the stored values, false replaces them.
+  bool merge = false;
+};
+
+/**
+ * Body of a detached remote-config fetch. A free function rather than a Countly
+ * member precisely so it cannot reach the instance.
+ */
+void runRemoteConfigFetch(std::shared_ptr<RemoteConfigFetch> fetch) {
+  // Clear the in-flight flag and the process counter however this exits.
+  struct Guard {
+    std::shared_ptr<RemoteConfigFetch> fetch;
+    ~Guard() {
+      fetch->store->fetch_running.store(false);
+      inflight_remote_config_fetches.fetch_sub(1);
+    }
+  } guard{fetch};
+
+  const HTTPResponse response = fetch->requestModule->sendHTTP("/o/sdk", fetch->requestBuilder->serializeData(fetch->data));
+  if (!response.success) {
+    return;
+  }
+
+  std::lock_guard<std::mutex> lk(fetch->store->mutex);
+  if (fetch->merge) {
+    for (auto it = response.data.begin(); it != response.data.end(); ++it) {
+      fetch->store->values[it.key()] = it.value();
+    }
+  } else {
+    fetch->store->values = response.data;
+  }
+}
+} // namespace
+
 Countly::Countly() {
+  {
+    std::lock_guard<std::mutex> lk(networking_lifecycle_mutex);
+    live_instance_count.fetch_add(1);
+  }
   crash_module = nullptr;
   views_module = nullptr;
   logger.reset(new cly::LoggerModule());
@@ -29,29 +119,278 @@ Countly::Countly() {
 
 Countly::~Countly() {
   is_being_disposed = true;
+  // Deliberately does not wait for an in-flight remote-config fetch: that would
+  // make destruction block for an HTTP round trip. The fetch runs detached and
+  // holds its own references to everything it touches, so it stays valid on its
+  // own. The SBS timer is joined by configurationModule.reset() below.
   stop();
+  releaseDatabasePathClaim();
   crash_module.reset();
   views_module.reset();
   configurationModule.reset();
   logger.reset();
+  {
+    std::lock_guard<std::mutex> lk(networking_lifecycle_mutex);
+    live_instance_count.fetch_sub(1);
+  }
 }
 
-std::unique_ptr<Countly> _sharedInstance;
-Countly &Countly::getInstance() {
-  if (_sharedInstance.get() == nullptr) {
-    _sharedInstance.reset(new Countly());
+namespace {
+
+const char *const DEFAULT_INSTANCE_NAME = "";
+
+/**
+ * Lock-free fast path for the default instance.
+ *
+ * getInstance() is the hottest entry point in the SDK -- the sample and the Qt
+ * demo call it at every call site rather than caching the reference -- and it
+ * used to be a null check and a dereference. Routing it through the registry
+ * would have cost a mutex, a linear scan and two atomic refcount operations on
+ * every call, which is a tax on integrators who never asked for a second
+ * instance. This pointer is published under the registry lock when the default
+ * instance is created and cleared when it is destroyed.
+ */
+std::atomic<Countly *> default_instance_cache(nullptr);
+
+/**
+ * Process-wide state shared by every Countly instance:
+ *   - the named-instance table, including the unnamed default instance
+ *   - the set of claimed SQLite database paths
+ *
+ * Reached only through registry(), so initialisation is thread-safe by way of
+ * C++11 function-local statics.
+ *
+ * The constructor calls RequestModule::initGlobalNetworking() so libcurl's
+ * global guard finishes construction *before* this registry and is therefore
+ * destroyed *after* it. That matters at process exit: the registry destroys its
+ * remaining instances, and ~Countly still needs networking for endSession().
+ */
+class InstanceRegistry {
+public:
+  InstanceRegistry() { RequestModule::initGlobalNetworking(); }
+
+  ~InstanceRegistry() { clear(); }
+
+  /**
+   * Returns the instance registered under 'name', creating it if absent.
+   * *created_out reports whether this call created it.
+   */
+  /**
+   * Returns a raw pointer rather than a shared_ptr on purpose. Handing ownership
+   * out would mean destroyInstance() could return while another thread still
+   * held a reference, leaving the instance -- and its database path claim --
+   * alive after the call that was supposed to free it. The registry is the sole
+   * owner; the returned pointer is valid until that entry is destroyed, which is
+   * exactly the lifetime the public API documents.
+   */
+  Countly *getOrCreate(const std::string &name, bool *created_out) {
+    std::lock_guard<std::mutex> lk(_instances_mutex);
+    for (size_t index = 0; index < _instances.size(); index++) {
+      if (_instances[index].first == name) {
+        if (created_out != nullptr) {
+          *created_out = false;
+        }
+        return _instances[index].second.get();
+      }
+    }
+
+    // Countly() takes networking_lifecycle_mutex, so the lock order here is
+    // instances -> networking. Nothing may acquire them the other way round.
+    std::shared_ptr<Countly> fresh(new Countly());
+    _instances.push_back(std::make_pair(name, fresh));
+    if (created_out != nullptr) {
+      *created_out = true;
+    }
+    if (name.empty()) {
+      default_instance_cache.store(fresh.get(), std::memory_order_release);
+    }
+    return fresh.get();
   }
 
-  return *_sharedInstance.get();
+  Countly *find(const std::string &name) {
+    std::lock_guard<std::mutex> lk(_instances_mutex);
+    for (size_t index = 0; index < _instances.size(); index++) {
+      if (_instances[index].first == name) {
+        return _instances[index].second.get();
+      }
+    }
+    return nullptr;
+  }
+
+  /**
+   * Unregisters 'name' and hands its instance back so the caller can let it drop
+   * *outside* the lock. ~Countly calls releasePath(), so destroying while
+   * _instances_mutex is held would be a latent self-deadlock.
+   */
+  std::shared_ptr<Countly> detach(const std::string &name) {
+    std::lock_guard<std::mutex> lk(_instances_mutex);
+    for (std::vector<std::pair<std::string, std::shared_ptr<Countly>>>::iterator it = _instances.begin(); it != _instances.end(); ++it) {
+      if (it->first == name) {
+        std::shared_ptr<Countly> found = it->second;
+        _instances.erase(it);
+        if (name.empty()) {
+          default_instance_cache.store(nullptr, std::memory_order_release);
+        }
+        return found;
+      }
+    }
+    return std::shared_ptr<Countly>();
+  }
+
+  /** Destroys every instance in reverse creation order, outside the lock. */
+  void clear() {
+    std::vector<std::shared_ptr<Countly>> doomed;
+    {
+      std::lock_guard<std::mutex> lk(_instances_mutex);
+      default_instance_cache.store(nullptr, std::memory_order_release);
+      for (size_t index = _instances.size(); index > 0; index--) {
+        doomed.push_back(_instances[index - 1].second);
+      }
+      _instances.clear();
+    }
+    for (size_t index = 0; index < doomed.size(); index++) {
+      doomed[index].reset(); // ~Countly runs here, with no registry lock held
+    }
+  }
+
+  /** @return false if the path is already claimed by a live instance. */
+  bool tryClaimPath(const std::string &normalized) {
+    std::lock_guard<std::mutex> lk(_paths_mutex);
+    return _claimed_paths.insert(normalized).second;
+  }
+
+  void releasePath(const std::string &normalized) {
+    std::lock_guard<std::mutex> lk(_paths_mutex);
+    _claimed_paths.erase(normalized);
+  }
+
+  size_t claimedPathCount() {
+    std::lock_guard<std::mutex> lk(_paths_mutex);
+    return _claimed_paths.size();
+  }
+
+private:
+  // Two mutexes, never nested in the other direction: _paths_mutex is always the
+  // innermost lock, because start() claims a path while holding the instance's
+  // own mutex.
+  std::mutex _instances_mutex;
+  std::vector<std::pair<std::string, std::shared_ptr<Countly>>> _instances;
+  std::mutex _paths_mutex;
+  std::set<std::string> _claimed_paths;
+};
+
+InstanceRegistry &registry() {
+  static InstanceRegistry instance;
+  return instance;
+}
+
+} // namespace
+
+void Countly::inheritDefaultLogger(Countly &instance) {
+  Countly *defaultInstance = registry().find(DEFAULT_INSTANCE_NAME);
+  if (defaultInstance == nullptr || defaultInstance == &instance) {
+    return;
+  }
+  // LoggerModule serialises this against a concurrent setLogger().
+  LoggerFunction callback = defaultInstance->logger->getLogger();
+  if (callback != nullptr) {
+    instance.logger->setLogger(callback);
+  }
+}
+
+void Countly::releaseDatabasePathClaim() {
+#ifdef COUNTLY_USE_SQLITE
+  if (!claimed_database_path.empty()) {
+    registry().releasePath(claimed_database_path);
+    claimed_database_path.clear();
+  }
+#endif
+}
+
+Countly &Countly::getInstance() {
+  // Lock-free once the default instance exists, which is the overwhelmingly
+  // common case. Only the very first call, or the first after halt() or
+  // destroyInstance(""), pays for the registry lookup.
+  Countly *cached = default_instance_cache.load(std::memory_order_acquire);
+  if (cached != nullptr) {
+    return *cached;
+  }
+  return getInstance(DEFAULT_INSTANCE_NAME);
+}
+
+Countly &Countly::getInstance(const std::string &name) {
+  bool created = false;
+  Countly *instance = registry().getOrCreate(name, &created);
+  if (created && !name.empty()) {
+    inheritDefaultLogger(*instance);
+    instance->log(LogLevel::WARNING, "[Countly] getInstance, creating a new, uninitialized instance named '" + name + "'; if you expected an existing instance, check the name.");
+  }
+  return *instance;
+}
+
+Countly &Countly::createInstance(const std::string &name) {
+  bool created = false;
+  Countly *instance = registry().getOrCreate(name, &created);
+  if (created) {
+    inheritDefaultLogger(*instance);
+  } else {
+    instance->log(LogLevel::WARNING, "[Countly] createInstance, an instance named '" + name + "' already exists; returning the existing one.");
+  }
+  return *instance;
+}
+
+Countly *Countly::findInstance(const std::string &name) { return registry().find(name); }
+
+bool Countly::hasInstance(const std::string &name) { return findInstance(name) != nullptr; }
+
+void Countly::destroyInstance(const std::string &name) {
+  std::shared_ptr<Countly> doomed = registry().detach(name);
+  doomed.reset(); // ~Countly runs here, with no registry lock held
+}
+
+void Countly::destroyAllInstances() { registry().clear(); }
+
+void Countly::shutdownNetworking() {
+  // Resolve the log target before taking networking_lifecycle_mutex. Countly()
+  // is constructed while the registry holds its instance mutex and then takes
+  // the networking mutex, so acquiring them in the opposite order here would
+  // deadlock. Finish with the registry first, then lock.
+  Countly *defaultInstance = registry().find(DEFAULT_INSTANCE_NAME);
+
+  int live = 0;
+  int fetches = 0;
+  {
+    // Held across the check and the release so no instance can be constructed
+    // in between and have networking torn down underneath it.
+    std::lock_guard<std::mutex> lk(networking_lifecycle_mutex);
+    live = live_instance_count.load();
+    // A remote-config fetch is detached and may outlive the instance that started
+    // it, so an instance count of zero is not on its own proof that nobody is
+    // inside libcurl.
+    fetches = inflight_remote_config_fetches.load();
+    if (live == 0 && fetches == 0) {
+      RequestModule::releaseGlobalNetworking();
+    }
+  }
+
+  if (defaultInstance != nullptr) {
+    if (live > 0) {
+      defaultInstance->log(LogLevel::ERROR, "[Countly] shutdownNetworking, " + std::to_string(live) + " instance(s) are still live; refusing to tear down networking.");
+    } else if (fetches > 0) {
+      defaultInstance->log(LogLevel::ERROR, "[Countly] shutdownNetworking, " + std::to_string(fetches) + " remote config fetch(es) are still in flight; refusing to tear down networking.");
+    }
+  }
 }
 
 #ifdef COUNTLY_BUILD_TESTS
 void Countly::halt() {
-  if (_sharedInstance) {
-    _sharedInstance->stop();
-  }
-  _sharedInstance.reset(new Countly());
+  destroyAllInstances();
+  getInstance(); // leave a fresh default instance behind, as the old halt() did
 }
+
+size_t Countly::debugClaimedPathCount() { return registry().claimedPathCount(); }
+
+int Countly::debugLiveInstanceCount() { return live_instance_count.load(); }
 #endif
 
 /**
@@ -519,6 +858,18 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
     log(LogLevel::ERROR, "[Countly] start, Database path can not be empty or blank.");
     return;
   }
+
+  // One instance per database file. Two instances sharing one file would eat
+  // each other's queues, and because rows in the `events` table carry no
+  // app_key, one instance would pack the other's events into a request stamped
+  // with the wrong key.
+  const std::string normalized_database_path = cly::utils::normalizeDatabasePath(configuration->databasePath);
+  if (!registry().tryClaimPath(normalized_database_path)) {
+    log(LogLevel::ERROR, "[Countly] start, Database path '" + configuration->databasePath +
+                             "' is already in use by another Countly instance in this process. Note that stop() does not free the path: an instance keeps its claim until it is destroyed. SDK will not be initialized.");
+    return;
+  }
+  claimed_database_path = normalized_database_path;
 #endif
 
   log(LogLevel::INFO, "[Countly] start, Initializing SDK");
@@ -589,6 +940,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   is_sdk_initialized = result; // after this point SDK is initialized.
   if (!is_sdk_initialized) {
     log(LogLevel::ERROR, "[Countly] start, SDK initialization failed.");
+    releaseDatabasePathClaim();
     return;
   }
 
@@ -630,7 +982,49 @@ void Countly::startOnCloud(const std::string &app_key) {
   this->start(app_key, "https://cloud.count.ly", 443);
 }
 
+bool Countly::startRemoteConfigFetch(const std::map<std::string, std::string> &data, bool merge, const char *caller) {
+  // Checked here rather than on the fetch thread: see RemoteConfigFetch on why it
+  // must not hold the configuration module.
+  if (configurationModule->isNetworkingEnabled() == false) {
+    log(LogLevel::ERROR, std::string("[Countly] ") + caller + ", Error fetching remote config, networking is disabled in SBS");
+    return false;
+  }
+
+  // exchange, not load-then-store: two threads calling updateRemoteConfig at the
+  // same moment must not both get through.
+  if (remote_config_store->fetch_running.exchange(true)) {
+    log(LogLevel::WARNING, std::string("[Countly] ") + caller + ", a remote config fetch is already in flight; ignoring this call.");
+    return false;
+  }
+
+  std::shared_ptr<RemoteConfigFetch> fetch(new RemoteConfigFetch());
+  fetch->requestModule = requestModule;
+  fetch->requestBuilder = requestBuilder;
+  fetch->logger = logger;
+  fetch->store = remote_config_store;
+  fetch->data = data;
+  fetch->merge = merge;
+
+  inflight_remote_config_fetches.fetch_add(1);
+  try {
+    // Detached on purpose: nothing may wait for an HTTP round trip, least of all
+    // ~Countly. The body holds `fetch` and therefore everything it touches.
+    std::thread(runRemoteConfigFetch, fetch).detach();
+  } catch (const std::system_error &e) {
+    inflight_remote_config_fetches.fetch_sub(1);
+    remote_config_store->fetch_running.store(false);
+    log(LogLevel::ERROR, std::string("[Countly] ") + caller + ", could not create remote config thread: " + e.what());
+    return false;
+  }
+  return true;
+}
+
 void Countly::stop() {
+  // Deliberately unchanged from before multi-instance support. Joining the SDK
+  // Behavior Settings timer or an in-flight remote-config fetch here would make
+  // stop() block where it previously returned at once, and integrators call it
+  // on the UI thread at shutdown (see examples/qt_demo). Both joins belong in
+  // ~Countly, which is where the lifetime problem they solve actually arises.
   _deleteThread();
   if (configuration->manualSessionControl == false) {
     endSession();
@@ -894,7 +1288,7 @@ std::vector<std::string> Countly::debugReturnStateOfEQ() {
     char **table;
     char *error_message;
 
-    return_value = sqlite3_open(configuration->databasePath.c_str(), &database);
+    return_value = cly::utils::openDatabase(configuration->databasePath, &database);
     if (return_value == SQLITE_OK) {
       std::ostringstream sql_statement_stream;
       sql_statement_stream << "SELECT * FROM events ORDER BY evtid ASC;";
@@ -926,6 +1320,9 @@ std::vector<std::string> Countly::debugReturnStateOfEQ() {
     std::ostringstream log_message;
     log_message << "[Countly] debugReturnStateOfEQ, error: " << e.what();
     log(LogLevel::FATAL, log_message.str());
+    // Without this the function falls off its end and the returned vector is
+    // indeterminate.
+    return std::vector<std::string>();
   }
 }
 
@@ -1147,6 +1544,15 @@ void Countly::packEvents() {
 }
 
 void Countly::sendEventsToRQ(const nlohmann::json &events) {
+  // Every caller decides to send based on an event queue size it read earlier,
+  // outside the lock. Another thread can drain the queue in between, and then
+  // there is nothing to send: queueing an "events=[]" request would spend a
+  // request on nothing.
+  if (events.empty()) {
+    log(LogLevel::DEBUG, "[Countly] sendEventsToRQ, No events to send.");
+    return;
+  }
+
   log(LogLevel::DEBUG, "[Countly] sendEventsToRQ, Sending events to RQ.");
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"events", events.dump()}};
   requestModule->addRequestToQueue(data);
@@ -1162,18 +1568,26 @@ bool Countly::endSession() {
     log(LogLevel::ERROR, "[Countly] endSession, Session tracking is disabled in server configuration, can not end session.");
     return false;
   }
+  const std::chrono::system_clock::time_point now = Countly::getTimestamp();
+  const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
+
+  // lock_guard so the mutex is released on scope exit, including the early
+  // returns below and any exception (e.g. a json type_error from a session_params
+  // access, or addRequestToQueue) thrown while it is held.
+  //
+  // The began_session check belongs inside this lock, together with the write
+  // that clears it: read outside, two concurrent calls could both see an active
+  // session and both queue an end_session request. stop() on one thread and a
+  // device id change on another is enough to get there.
+  std::lock_guard<std::mutex> lk(*mutex);
   if (began_session == false) {
     log(LogLevel::DEBUG, "[Countly] endSession, There is no active session to end.");
     return true;
   }
-  const std::chrono::system_clock::time_point now = Countly::getTimestamp();
-  const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
-  const auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration(now));
 
-  // lock_guard so the mutex is released on scope exit, including the early
-  // return below and any exception (e.g. a json type_error from a session_params
-  // access, or addRequestToQueue) thrown while it is held.
-  std::lock_guard<std::mutex> lk(*mutex);
+  // getSessionDuration() takes this same mutex, so compute it inline here.
+  const auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - last_sent_session_request);
+
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"session_duration", std::to_string(duration.count())}, {"timestamp", std::to_string(timestamp.count())}, {"end_session", "1"}};
 
   if (is_being_disposed) {
@@ -1198,6 +1612,14 @@ int Countly::checkEQSize() {
     return event_count;
   }
 
+  // The event queue is guarded by the instance mutex, which the SDK holds while
+  // it invokes the log callback, so answering a call made from inside that
+  // callback would deadlock. -1 is the same "cannot determine" answer this
+  // returns before initialization. checkRQSize() has no such restriction.
+  if (LoggerModule::isInsideCallback()) {
+    return event_count;
+  }
+
 #ifdef COUNTLY_USE_SQLITE
   event_count = checkPersistentEQSize();
 #else
@@ -1214,17 +1636,24 @@ int Countly::checkRQSize() {
     return request_count;
   }
 
-  {
-    // serialize storage access with processQueue/addRequestToQueue
-    std::lock_guard<std::mutex> lk(*mutex);
-    request_count = static_cast<int>(requestModule->RQSize());
-  }
+  // Deliberately does not take the instance mutex. The storage modules serialise
+  // their own access -- the in-memory one with its own lock, the SQLite one
+  // through its per-operation connection and busy timeout -- so the count is safe
+  // to read without it. Taking it here would deadlock any integrator who calls
+  // this from their log callback, which the SDK invokes from places that hold it.
+  request_count = static_cast<int>(requestModule->RQSize());
   return request_count;
 }
 
 #ifndef COUNTLY_USE_SQLITE
 int Countly::checkMemoryEQSize() {
   log(LogLevel::DEBUG, "[Countly] checkMemoryEQSize, Checking event queue size in memory.");
+  // See checkEQSize(): locking here would deadlock a call made from inside the
+  // integrator's log callback.
+  if (LoggerModule::isInsideCallback()) {
+    return -1;
+  }
+
   int result = 0;
   std::lock_guard<std::mutex> lk(*mutex);
   result = static_cast<int>(event_queue.size());
@@ -1237,12 +1666,21 @@ int Countly::checkMemoryEQSize() {
 void Countly::removeEventWithId(const std::string &event_ids) {
   // TODO: Check if we should check database_path set or not
   log(LogLevel::DEBUG, "[Countly] removeEventWithId, Removing events from storage: [" + event_ids + "]");
+
+  // fillEventsIntoJson() hands back ")" rather than "()" when it found no rows,
+  // and either one builds a malformed "... evtid IN )" statement. Nothing to
+  // delete in that case anyway.
+  if (event_ids.empty() || event_ids.find_first_of("0123456789") == std::string::npos) {
+    log(LogLevel::DEBUG, "[Countly] removeEventWithId, No event ids given, nothing to remove.");
+    return;
+  }
+
   sqlite3 *database;
   int return_value;
   char *error_message;
 
   // we attempt to clear the events in the database only if there were any events collected previously
-  return_value = sqlite3_open(database_path.c_str(), &database);
+  return_value = cly::utils::openDatabase(database_path, &database);
   if (return_value == SQLITE_OK) {
     std::ostringstream sql_statement_stream;
     sql_statement_stream << "DELETE FROM events WHERE evtid IN " << event_ids << ';';
@@ -1279,7 +1717,7 @@ void Countly::fillEventsIntoJson(nlohmann::json &events, std::string &event_ids)
   char *error_message;
 
   // open database
-  return_value = sqlite3_open(database_path.c_str(), &database);
+  return_value = cly::utils::openDatabase(database_path, &database);
   // if database opened successfully
   if (return_value == SQLITE_OK) {
 
@@ -1319,6 +1757,12 @@ void Countly::fillEventsIntoJson(nlohmann::json &events, std::string &event_ids)
 
 int Countly::checkPersistentEQSize() {
   int result = -1;
+  // See checkEQSize(): locking here would deadlock a call made from inside the
+  // integrator's log callback.
+  if (LoggerModule::isInsideCallback()) {
+    return result;
+  }
+
   std::unique_lock<std::mutex> lk(*mutex);
   if (database_path.empty()) {
     log(LogLevel::FATAL, "[Countly] checkPersistentEQSize, SQLite database path is not set");
@@ -1326,7 +1770,7 @@ int Countly::checkPersistentEQSize() {
   }
 
   sqlite3 *database;
-  int return_value = sqlite3_open(database_path.c_str(), &database);
+  int return_value = cly::utils::openDatabase(database_path, &database);
   lk.unlock();
 
   if (return_value == SQLITE_OK) {
@@ -1361,7 +1805,7 @@ void Countly::addEventToSqlite(const cly::Event &event) {
     int return_value;
     char *error_message;
 
-    return_value = sqlite3_open(database_path.c_str(), &database);
+    return_value = cly::utils::openDatabase(database_path, &database);
     if (return_value == SQLITE_OK) {
       std::ostringstream sql_statement_stream;
       // TODO Investigate if we need to escape single quotes in serialized event
@@ -1370,7 +1814,9 @@ void Countly::addEventToSqlite(const cly::Event &event) {
 
       return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
       if (return_value != SQLITE_OK) {
-        log(LogLevel::ERROR, error_message);
+        // Say which operation failed: this event is being dropped, and a bare
+        // "database is locked" gives no hint of what was lost.
+        log(LogLevel::ERROR, "[Countly] addEventToSqlite, Event was not stored, SQLite error: " + std::string(error_message));
         sqlite3_free(error_message);
       }
     }
@@ -1388,7 +1834,7 @@ void Countly::clearPersistentEQ() {
   int return_value;
   char *error_message;
 
-  return_value = sqlite3_open(database_path.c_str(), &database);
+  return_value = cly::utils::openDatabase(database_path, &database);
   if (return_value == SQLITE_OK) {
     return_value = sqlite3_exec(database, "DELETE FROM events;", nullptr, nullptr, &error_message);
     if (return_value != SQLITE_OK) {
@@ -1426,7 +1872,7 @@ bool Countly::createEventTableSchema() {
 
     database_path = configuration->databasePath;
 
-    return_value = sqlite3_open(database_path.c_str(), &database);
+    return_value = cly::utils::openDatabase(database_path, &database);
     if (return_value == SQLITE_OK) {
       return_value = sqlite3_exec(database, "CREATE TABLE IF NOT EXISTS events (evtid INTEGER PRIMARY KEY, event TEXT)", nullptr, nullptr, &error_message);
       if (return_value != SQLITE_OK) {
@@ -1446,6 +1892,10 @@ bool Countly::createEventTableSchema() {
     std::ostringstream log_message;
     log_message << "[Countly] createEventTableSchema, error: " << e.what();
     log(LogLevel::FATAL, log_message.str());
+    // Without this the function falls off its end and hands an indeterminate
+    // value to is_sdk_initialized, so a database error could leave the SDK
+    // reporting itself as initialized.
+    return false;
   }
 }
 #endif
@@ -1554,19 +2004,6 @@ void Countly::enableRemoteConfig() {
   remote_config_enabled = true;
 }
 
-void Countly::_fetchRemoteConfig(const std::map<std::string, std::string> &data) {
-  if (configurationModule->isNetworkingEnabled() == false) {
-    log(LogLevel::ERROR, "[Countly] _fetchRemoteConfig, Error fetching remote config, networking is disabled in SBS");
-    return;
-  }
-
-  HTTPResponse response = requestModule->sendHTTP("/o/sdk", requestBuilder->serializeData(data));
-  std::lock_guard<std::mutex> lk(*mutex);
-  if (response.success) {
-    remote_config = response.data;
-  }
-}
-
 void Countly::updateRemoteConfig() {
   if (!is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] updateRemoteConfig, SDK is not initialized.");
@@ -1582,30 +2019,17 @@ void Countly::updateRemoteConfig() {
 
   lk.unlock();
 
-  // Fetch remote config asynchronously
-  std::thread _thread(&Countly::_fetchRemoteConfig, this, data);
-  _thread.detach();
+  // Asynchronous and detached: neither this call nor destruction waits for it.
+  // Replaces the stored values wholesale, since this fetches all of them.
+  startRemoteConfigFetch(data, false, "updateRemoteConfig");
 }
 
 nlohmann::json Countly::getRemoteConfigValue(const std::string &key) {
-  std::lock_guard<std::mutex> lk(*mutex);
-  nlohmann::json value = remote_config[key];
+  // The store's own mutex, not the instance mutex: the fetch that writes these
+  // values may outlive the instance, so the two cannot share a lock.
+  std::lock_guard<std::mutex> lk(remote_config_store->mutex);
+  nlohmann::json value = remote_config_store->values[key];
   return value;
-}
-
-void Countly::_updateRemoteConfigWithSpecificValues(const std::map<std::string, std::string> &data) {
-  if (configurationModule->isNetworkingEnabled() == false) {
-    log(LogLevel::ERROR, "[Countly] _updateRemoteConfigWithSpecificValues, Error fetching remote config, networking is disabled in SBS");
-    return;
-  }
-  
-  HTTPResponse response = requestModule->sendHTTP("/o/sdk", requestBuilder->serializeData(data));
-  std::lock_guard<std::mutex> lk(*mutex);
-  if (response.success) {
-    for (auto it = response.data.begin(); it != response.data.end(); ++it) {
-      remote_config[it.key()] = it.value();
-    }
-  }
 }
 
 void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
@@ -1625,9 +2049,9 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
   }
   lk.unlock();
 
-  // Fetch remote config asynchronously
-  std::thread _thread(&Countly::_updateRemoteConfigWithSpecificValues, this, data);
-  _thread.detach();
+  // Asynchronous and detached: neither this call nor destruction waits for it.
+  // Merges into the stored values, since this fetches only some of them.
+  startRemoteConfigFetch(data, true, "updateRemoteConfigFor");
 }
 
 void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
@@ -1647,8 +2071,8 @@ void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
   }
   lk.unlock();
 
-  // Fetch remote config asynchronously
-  std::thread _thread(&Countly::_updateRemoteConfigWithSpecificValues, this, data);
-  _thread.detach();
+  // Asynchronous and detached: neither this call nor destruction waits for it.
+  // Merges into the stored values, since this fetches only some of them.
+  startRemoteConfigFetch(data, true, "updateRemoteConfigExcept");
 }
 } // namespace cly

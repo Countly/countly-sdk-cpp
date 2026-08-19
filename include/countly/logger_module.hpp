@@ -34,6 +34,17 @@ public:
    */
   void log(LogLevel level, const std::string &message);
 
+  /**
+   * @return true when the calling thread is currently inside the integrator's log
+   * callback.
+   *
+   * The SDK invokes that callback from places that hold the instance mutex, so a
+   * method which takes that mutex cannot serve a call made from inside the
+   * callback -- it would deadlock. Methods that have a "cannot determine" return
+   * value check this and use it instead of locking.
+   */
+  static bool isInsideCallback();
+
 private:
   class LoggerModuleImpl;
   std::unique_ptr<LoggerModuleImpl> impl;
