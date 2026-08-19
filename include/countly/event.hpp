@@ -35,6 +35,9 @@ public:
 
   void clearSegmentation();
 
+  // Enforce SDK internal limits on this event's key and developer segmentation.
+  void applyLimits(unsigned int maxKeyLength, unsigned int maxValueSize, unsigned int maxSegmentationValues);
+
 private:
   nlohmann::json object;
   bool timer_running;

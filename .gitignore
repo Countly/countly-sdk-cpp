@@ -24,3 +24,6 @@ cmake-build-debug/
 .DS_Store
 test_results_*.log
 *.db
+
+# generated SBOMs (the release workflow attaches these to GitHub releases)
+*.cdx.json

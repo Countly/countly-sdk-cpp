@@ -5,18 +5,27 @@
 #include <cassert>
 #include <chrono>
 #include <climits>
+#include <ctime>
 #include <functional>
 #include <map>
 #include <memory>
 #include <random>
 #include <sstream>
 #include <string>
+#include <thread>
 
 #define COUNTLY_SDK_NAME "cpp-native-unknown"
-#define COUNTLY_SDK_VERSION "26.1.1"
+#define COUNTLY_SDK_VERSION "26.8.0"
 #define COUNTLY_POST_THRESHOLD 2000
 #define COUNTLY_KEEPALIVE_INTERVAL 3000
 #define COUNTLY_MAX_EVENTS_DEFAULT 200
+#define COUNTLY_MAX_KEY_LENGTH_DEFAULT 128
+#define COUNTLY_MAX_VALUE_SIZE_DEFAULT 256
+#define COUNTLY_MAX_SEGMENTATION_VALUES_DEFAULT 100
+#define COUNTLY_MAX_BREADCRUMB_COUNT_DEFAULT 100
+#define COUNTLY_MAX_STACK_TRACE_LINES_PER_THREAD_DEFAULT 30
+#define COUNTLY_MAX_STACK_TRACE_LINE_LENGTH_DEFAULT 200
+#define COUNTLY_MAX_VALUE_SIZE_PICTURE 4096
 
 namespace cly {
 struct HTTPResponse {
@@ -27,8 +36,6 @@ struct HTTPResponse {
 using HTTPClientFunction = std::function<HTTPResponse(bool, const std::string &, const std::string &)>;
 using SHA256Function = std::function<std::string(const std::string &)>;
 namespace utils {
-const std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
-const std::uniform_int_distribution<int> distribution(1, INT_MAX);
 
 /**
  * Formats the given arguments into a string buffer.
@@ -49,6 +56,36 @@ template <typename... Args> static std::string format_string(const std::string &
 }
 
 /**
+ * Thread-safe replacements for std::localtime and std::gmtime.
+ *
+ * Both of those return a pointer into a single process-wide std::tm, so two
+ * threads calling them concurrently race, and a caller can end up copying the
+ * struct another thread has just overwritten -- including the other function's
+ * result, since localtime and gmtime share that one buffer. With more than one
+ * SDK instance this needs no threads of the integrator's own: every instance
+ * runs its own update loop, and each one builds requests.
+ */
+inline std::tm localTime(std::time_t time) {
+  std::tm result = std::tm();
+#if defined(_WIN32) && (defined(_MSC_VER) || defined(MINGW_HAS_SECURE_API))
+  localtime_s(&result, &time);
+#else
+  localtime_r(&time, &result);
+#endif
+  return result;
+}
+
+inline std::tm gmTime(std::time_t time) {
+  std::tm result = std::tm();
+#if defined(_WIN32) && (defined(_MSC_VER) || defined(MINGW_HAS_SECURE_API))
+  gmtime_s(&result, &time);
+#else
+  gmtime_r(&time, &result);
+#endif
+  return result;
+}
+
+/**
  * Gives a string representation of the size of a map.
  *
  * @param m a map containing key-value pairs
@@ -61,13 +98,21 @@ static std::string mapToString(const std::map<std::string, std::string> &m) {
   return std::to_string(lenght);
 }
 /**
- * Generate a random UUID.
+ * Generate an event/view ID.
  *
- * @return a string object holding a UUID.
+ * The engine is thread_local and is *advanced* across calls. An earlier version
+ * bound a copy of a const engine on each call, which meant every ID in the
+ * process shared one random component; on platforms with a coarse system_clock
+ * (Windows, ~15ms) the timestamp did not move either, so IDs generated inside
+ * one tick were identical.
+ *
+ * @return a string object holding the ID.
  */
-static std::string generateEventID() {
-  auto dice = std::bind(distribution, generator);
-  int random = dice();
+inline std::string generateEventID() {
+  static thread_local std::mt19937 engine(static_cast<std::mt19937::result_type>(std::chrono::system_clock::now().time_since_epoch().count() ^ static_cast<long long>(std::hash<std::thread::id>()(std::this_thread::get_id()))));
+  static thread_local std::uniform_int_distribution<int> distribution(1, INT_MAX);
+
+  const int random = distribution(engine);
 
   std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
   const auto timestamp = now.time_since_epoch();

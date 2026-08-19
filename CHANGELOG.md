@@ -1,3 +1,24 @@
+## 26.8.0
+- ! Minor breaking change ! The SDK now enforces internal limits on recorded data (key length, value size, segmentation entry count, breadcrumb count, stack trace lines per thread and line length) across events, views, crashes, and user properties. Defaults can be overridden by server-side SDK Behavior Settings, or during init via `setMaxKeyLength`, `setMaxValueSize`, `setMaxSegmentationValues`, `setMaxBreadcrumbCount`, `setMaxStackTraceLinesPerThread` and `setMaxStackTraceLineLength`.
+- ! Minor breaking change ! Updated the bundled nlohmann/json from v3.7.0 to v3.12.0. JSON types are part of the public API, so applications must be recompiled against the new headers; binaries built against the old headers will not link against a library built with the new ones.
+- ! Minor breaking change ! SQLite is now bundled: when built with `COUNTLY_USE_SQLITE=ON`, the official SQLite amalgamation (3.53.4) is compiled into the library and no system SQLite is needed. This grows SQLite-enabled binaries by roughly 0.7 MB; set `COUNTLY_USE_SYSTEM_SQLITE=ON` to link the platform's SQLite instead. Existing database files remain fully compatible. After updating an existing clone, run `git submodule deinit -f vendor/sqlite` once.
+- ! Minor breaking change ! When built with SQLite, each SDK instance requires its own database path. An instance claiming a path already in use logs an error and does not initialize.
+
+- Added multi-instance support: several `Countly` instances can now run in one process, each with its own app key, queues, storage, and threads. Named instances can be managed with `createInstance`, `getInstance(name)`, `findInstance`, `hasInstance`, `destroyInstance` and `destroyAllInstances`.
+- Added `shutdownNetworking()` for applications that load and unload the SDK without exiting the process.
+- Added Windows support for the SQLite storage backend.
+- Added a Software Bill of Materials: every release now ships a CycloneDX SBOM with a signed attestation; see SECURITY.md for details.
+
+- Fixed events and requests being dropped on SQLite builds when database reads and writes from different threads overlapped.
+- Fixed duplicate event and view IDs when many were generated in quick succession, most visibly on Windows.
+- Fixed a possible crash when the SDK was destroyed while a remote config update was still in flight. Only one remote config fetch now runs at a time per instance; a call made while one is in flight is ignored.
+- Fixed hangs and unbounded recursion when calling the SDK from inside the log callback; the event queue size getters now return -1 in that context instead of deadlocking.
+- Fixed concurrent `endSession` calls each sending an `end_session` request.
+- Fixed the event queue flush sending an empty request, and on SQLite builds failing with a database error, when another thread emptied the queue mid-flush.
+- Fixed data races that could lose view events, report the wrong first view, or produce wrong `dow`, `hour` and `tz` values when recording from multiple threads.
+- Fixed a storage error during initialization leaving the SDK's initialization state undefined.
+- Fixed SDK shutdown potentially blocking for up to the full SDK Behavior Settings update interval.
+
 ## 26.1.1
 - Updated CMake minimum required version to use the range format with upper the end of `3.31`.
 - Hardened mutex handling against exceptions.

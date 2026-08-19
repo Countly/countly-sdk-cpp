@@ -1,0 +1,66 @@
+name: Release SBOM
+
+# Generates the CycloneDX superset SBOM for each release, attaches it (plus a
+# source archive) to the GitHub release, and publishes a signed attestation
+# binding the SBOM to that archive. Can also be run manually to inspect the
+# SBOM for the current tree (uploaded as a workflow artifact instead).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  sbom:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Generate CycloneDX SBOM
+        id: generate
+        run: |
+          python3 scripts/generate_sbom.py
+          SBOM_FILE=$(ls countly-sdk-cpp-*.cdx.json)
+          echo "sbom_file=$SBOM_FILE" >> "$GITHUB_OUTPUT"
+          VERSION=$(echo "$SBOM_FILE" | sed 's/countly-sdk-cpp-\(.*\)\.cdx\.json/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create source archive
+        run: |
+          git archive --format=tar.gz \
+            --prefix="countly-sdk-cpp-${{ steps.generate.outputs.version }}/" \
+            -o "countly-sdk-cpp-${{ steps.generate.outputs.version }}.tar.gz" HEAD
+
+      - name: Attest SBOM
+        uses: actions/attest-sbom@v2
+        with:
+          subject-path: countly-sdk-cpp-${{ steps.generate.outputs.version }}.tar.gz
+          sbom-path: ${{ steps.generate.outputs.sbom_file }}
+
+      - name: Attach to release
+        if: github.event_name == 'release'
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            "${{ steps.generate.outputs.sbom_file }}" \
+            "countly-sdk-cpp-${{ steps.generate.outputs.version }}.tar.gz" \
+            --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Upload as workflow artifact (manual runs)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: |
+            ${{ steps.generate.outputs.sbom_file }}
+            countly-sdk-cpp-${{ steps.generate.outputs.version }}.tar.gz

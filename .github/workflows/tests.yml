@@ -5,23 +5,31 @@ on:
     branches: [master, staging]
   pull_request:
     branches: [master, staging]
+  workflow_dispatch:
+
+# A new push to the same branch/PR cancels the still-running previous run.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Cap apt timeouts so an unreachable Azure mirror costs seconds, not 20 minutes.
+  APT_OPTS: -o Acquire::Retries=2 -o Acquire::http::Timeout=10
 
 jobs:
   # ──────────────────────────────────────────────
-  # Core test matrix: OS × SQLite
+  # Core matrix: OS/arch × SQLite. Builds the library,
+  # the tests, and the sample on every cell.
   # ──────────────────────────────────────────────
   tests:
+    name: ${{ matrix.os }} sqlite=${{ matrix.sqlite }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04, macos-15, windows-2022]
+        os: [ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm, macos-15, windows-2022, windows-2025]
         sqlite: [OFF, ON]
-        exclude:
-          # Windows has no system sqlite3.lib
-          - os: windows-2022
-            sqlite: ON
 
     steps:
       - name: Checkout code
@@ -32,86 +40,67 @@ jobs:
       - name: Install dependencies (Ubuntu)
         if: startsWith(matrix.os, 'ubuntu')
         run: |
-          sudo apt-get update && sudo apt-get install -y \
-            libcurl4-openssl-dev \
-            libssl-dev \
-            libsqlite3-dev
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends \
+            libcurl4-openssl-dev libssl-dev
 
-      - name: Set up MSVC
-        if: matrix.os == 'windows-2022'
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Configure (Unix)
-        if: matrix.os != 'windows-2022'
-        run: cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=${{ matrix.sqlite }} -B build .
-        env:
-          CMAKE_POLICY_VERSION_MINIMUM: "3.31"
-
-      - name: Configure (Windows)
-        if: matrix.os == 'windows-2022'
-        run: cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=${{ matrix.sqlite }} -G "Visual Studio 17 2022" -A x64 -B build .
-        env:
-          CMAKE_POLICY_VERSION_MINIMUM: "3.31"
-
-      - name: Build (Unix)
-        if: matrix.os != 'windows-2022'
-        run: cd build && make ./countly-tests
-
-      - name: Build (Windows)
-        if: matrix.os == 'windows-2022'
-        run: cd build && msbuild countly-tests.vcxproj -t:rebuild -verbosity:minimal -property:Configuration=Release
-
-      - name: Run tests (Unix)
-        if: matrix.os != 'windows-2022'
-        run: cd build && ./countly-tests
-
-      - name: Run tests (Windows)
-        if: matrix.os == 'windows-2022'
-        run: cd build && .\Release\countly-tests.exe
-
-  # ──────────────────────────────────────────────
-  # Sanitizers (Linux only, with SQLite)
-  # ──────────────────────────────────────────────
-  sanitizer-asan:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 120
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: "recursive"
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update && sudo apt-get install -y \
-            libcurl4-openssl-dev \
-            libssl-dev \
-            libsqlite3-dev
-
-      - name: Configure with ASAN
-        run: |
-          cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=ON \
-            -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer" \
-            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address" \
-            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address" \
-            -B build .
-        env:
-          CMAKE_POLICY_VERSION_MINIMUM: "3.31"
+      - name: Configure
+        run: cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_BUILD_SAMPLE=ON -DCOUNTLY_USE_SQLITE=${{ matrix.sqlite }} -B build .
 
       - name: Build
-        run: cd build && make ./countly-tests
+        run: cmake --build build --config Release -j 4
 
       - name: Run tests
-        run: cd build && ./countly-tests
-        env:
-          ASAN_OPTIONS: "detect_leaks=1"
+        shell: bash
+        run: |
+          if [ -f build/Release/countly-tests.exe ]; then
+            ./build/Release/countly-tests.exe
+          else
+            ./build/countly-tests
+          fi
 
-  sanitizer-tsan:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 120
+  # ──────────────────────────────────────────────
+  # Build-option flavors and toolchains (Linux).
+  # One job per flavor via matrix include.
+  # ──────────────────────────────────────────────
+  flavors:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     # TSAN detects known threading issues tracked for future refactor.
-    # Runs for visibility but does not block the pipeline.
-    continue-on-error: true
+    # It runs for visibility but does not block the pipeline.
+    continue-on-error: ${{ matrix.experimental == true }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: sanitizer-asan
+            flags: -DCOUNTLY_USE_SQLITE=ON -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address" -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address"
+          - name: sanitizer-ubsan
+            flags: -DCOUNTLY_USE_SQLITE=ON -DCMAKE_CXX_FLAGS="-fsanitize=undefined -fno-sanitize-recover=all" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=undefined" -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=undefined"
+          - name: sanitizer-tsan
+            flags: -DCOUNTLY_USE_SQLITE=ON -DCMAKE_CXX_FLAGS="-fsanitize=thread" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread" -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=thread"
+            experimental: true
+          - name: static-custom-http
+            flags: -DCOUNTLY_USE_SQLITE=ON -DBUILD_SHARED_LIBS=OFF -DCOUNTLY_USE_CUSTOM_HTTP=ON
+          - name: custom-sha256
+            flags: -DCOUNTLY_USE_SQLITE=ON -DCOUNTLY_USE_CUSTOM_SHA256=ON
+          - name: system-sqlite
+            flags: -DCOUNTLY_USE_SQLITE=ON -DCOUNTLY_USE_SYSTEM_SQLITE=ON
+            apt: libsqlite3-dev
+          - name: cpp17
+            flags: -DCOUNTLY_USE_SQLITE=ON -DCMAKE_CXX_STANDARD=17
+          - name: cpp20
+            flags: -DCOUNTLY_USE_SQLITE=ON -DCMAKE_CXX_STANDARD=20
+          - name: clang
+            flags: -DCOUNTLY_USE_SQLITE=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+            apt: clang
+
+    env:
+      ASAN_OPTIONS: "detect_leaks=1"
+      UBSAN_OPTIONS: "print_stacktrace=1"
+      TSAN_OPTIONS: "second_deadlock_stack=1"
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -120,101 +109,27 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y \
-            libcurl4-openssl-dev \
-            libssl-dev \
-            libsqlite3-dev
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends \
+            libcurl4-openssl-dev libssl-dev ${{ matrix.apt }}
 
-      - name: Configure with TSAN
-        run: |
-          cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=ON \
-            -DCMAKE_CXX_FLAGS="-fsanitize=thread" \
-            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread" \
-            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=thread" \
-            -B build .
-        env:
-          CMAKE_POLICY_VERSION_MINIMUM: "3.31"
+      - name: Configure
+        run: cmake ${{ matrix.flags }} -DCOUNTLY_BUILD_TESTS=1 -B build .
 
       - name: Build
-        run: cd build && make ./countly-tests
+        run: cmake --build build -j 4
 
       - name: Run tests
-        run: cd build && ./countly-tests
-        env:
-          TSAN_OPTIONS: "second_deadlock_stack=1"
-
-  sanitizer-ubsan:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 120
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: "recursive"
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update && sudo apt-get install -y \
-            libcurl4-openssl-dev \
-            libssl-dev \
-            libsqlite3-dev
-
-      - name: Configure with UBSAN
-        run: |
-          cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=ON \
-            -DCMAKE_CXX_FLAGS="-fsanitize=undefined -fno-sanitize-recover=all" \
-            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=undefined" \
-            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=undefined" \
-            -B build .
-        env:
-          CMAKE_POLICY_VERSION_MINIMUM: "3.31"
-
-      - name: Build
-        run: cd build && make ./countly-tests
-
-      - name: Run tests
-        run: cd build && ./countly-tests
-        env:
-          UBSAN_OPTIONS: "print_stacktrace=1"
+        run: ./build/countly-tests
 
   # ──────────────────────────────────────────────
-  # Static library build (custom HTTP, no curl)
+  # Oldest supported CMake (3.13, as documented).
+  # Catches accidental use of newer CMake features.
   # ──────────────────────────────────────────────
-  static-build:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 120
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: "recursive"
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update && sudo apt-get install -y \
-            libssl-dev \
-            libsqlite3-dev
-
-      - name: Configure static build
-        run: |
-          cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=ON \
-            -DBUILD_SHARED_LIBS=OFF -DCOUNTLY_USE_CUSTOM_HTTP=ON \
-            -B build .
-        env:
-          CMAKE_POLICY_VERSION_MINIMUM: "3.31"
-
-      - name: Build
-        run: cd build && make ./countly-tests
-
-      - name: Run tests
-        run: cd build && ./countly-tests
-
-  # ──────────────────────────────────────────────
-  # C++17 compatibility check
-  # ──────────────────────────────────────────────
-  cpp17:
+  min-cmake:
+    name: cmake-3.13
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -223,55 +138,52 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y \
-            libcurl4-openssl-dev \
-            libssl-dev \
-            libsqlite3-dev
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends \
+            libcurl4-openssl-dev libssl-dev
 
-      - name: Configure with C++17
+      - name: Install CMake 3.13
         run: |
-          cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=ON \
-            -DCMAKE_CXX_STANDARD=17 \
-            -B build .
-        env:
-          CMAKE_POLICY_VERSION_MINIMUM: "3.31"
+          curl -sSL -o cmake.tar.gz https://cmake.org/files/v3.13/cmake-3.13.5-Linux-x86_64.tar.gz
+          tar -xzf cmake.tar.gz
+          echo "$PWD/cmake-3.13.5-Linux-x86_64/bin" >> "$GITHUB_PATH"
 
-      - name: Build
-        run: cd build && make ./countly-tests
+      - name: Configure and build with CMake 3.13
+        run: |
+          cmake --version
+          cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_BUILD_SAMPLE=ON -DCOUNTLY_USE_SQLITE=ON -B build .
+          cmake --build build -j 4
 
       - name: Run tests
-        run: cd build && ./countly-tests
+        run: ./build/countly-tests
 
   # ──────────────────────────────────────────────
-  # Clang on Linux
+  # Release tooling smoke test: the SBOM generator must
+  # not be discovered broken on release day.
   # ──────────────────────────────────────────────
-  clang-linux:
+  sbom-check:
+    name: sbom-generator
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: "recursive"
 
-      - name: Install dependencies
+      - name: Generate and validate SBOM
         run: |
-          sudo apt-get update && sudo apt-get install -y \
-            clang \
-            libcurl4-openssl-dev \
-            libssl-dev \
-            libsqlite3-dev
-
-      - name: Configure with Clang
-        run: |
-          cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=ON \
-            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
-            -B build .
-        env:
-          CMAKE_POLICY_VERSION_MINIMUM: "3.31"
-
-      - name: Build
-        run: cd build && make ./countly-tests
-
-      - name: Run tests
-        run: cd build && ./countly-tests
+          python3 scripts/generate_sbom.py
+          python3 - << 'EOF'
+          import glob, json, sys
+          path = glob.glob("countly-sdk-cpp-*.cdx.json")[0]
+          doc = json.load(open(path))
+          assert doc["bomFormat"] == "CycloneDX", "not a CycloneDX document"
+          assert doc["components"], "no components"
+          refs = {c["bom-ref"] for c in doc["components"]}
+          refs.add(doc["metadata"]["component"]["bom-ref"])
+          for dep in doc["dependencies"]:
+              missing = [r for r in [dep["ref"], *dep["dependsOn"]] if r not in refs]
+              assert not missing, f"dangling bom-refs: {missing}"
+          print(f"ok: {path} with {len(doc['components'])} components")
+          EOF

@@ -14,6 +14,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include <deque>
 
@@ -29,6 +30,7 @@
 #include <countly/configuration_module.hpp>
 #include <countly/configuration_provider.hpp>
 #include <countly/crash_module.hpp>
+#include <countly/remote_config_store.hpp>
 #include <countly/request_builder.hpp>
 #include <countly/request_module.hpp>
 
@@ -39,14 +41,72 @@ public:
 
   virtual ~Countly();
 
-  // Returns the singleton instance of Countly
+  // Returns the default instance, creating it on first use.
   static Countly &getInstance();
 
-  // Do not implicitly generate the copy constructor, this is a singleton.
+  /**
+   * Returns the instance registered under 'name', creating an uninitialized one
+   * and logging a WARNING if that name is not registered yet. The empty name is
+   * the default instance, so getInstance("") == getInstance().
+   *
+   * The returned reference is valid until that instance is destroyed by
+   * destroyInstance(), destroyAllInstances() or halt().
+   */
+  static Countly &getInstance(const std::string &name);
+
+  /**
+   * Creates and returns the instance registered under 'name'. If that name is
+   * already registered, returns the existing instance and logs a WARNING.
+   */
+  static Countly &createInstance(const std::string &name);
+
+  /**
+   * Returns the instance registered under 'name', or nullptr if there is none.
+   * Unlike getInstance(name) this never creates anything, and unlike
+   * hasInstance() followed by getInstance() it is a single lookup, so no other
+   * thread can destroy the instance in between.
+   */
+  static Countly *findInstance(const std::string &name);
+
+  /**
+   * @return true if an instance is registered under 'name'.
+   */
+  static bool hasInstance(const std::string &name);
+
+  /**
+   * Destroys the instance registered under 'name'. Joins its threads, ends its
+   * session and frees its database path claim. A no-op if the name is not
+   * registered. Any reference or pointer to that instance dangles afterwards.
+   */
+  static void destroyInstance(const std::string &name);
+
+  /**
+   * Destroys every registered instance, in reverse creation order.
+   */
+  static void destroyAllInstances();
+
+  /**
+   * Releases process-wide networking state (libcurl's global data). Optional:
+   * process exit does this automatically. Call it only after destroying every
+   * instance, and only in a host that loads and unloads the SDK without exiting
+   * -- a plugin host using dlopen/dlclose, for example. Logs an error and does
+   * nothing if any instance is still live.
+   *
+   * A no-op on builds that do not use libcurl (Windows/WinHTTP,
+   * COUNTLY_USE_CUSTOM_HTTP).
+   */
+  static void shutdownNetworking();
+
+  // Do not implicitly generate the copy constructor, instances are not copyable.
   Countly(const Countly &) = delete;
 
-  // Do not implicitly generate the copy assignment operator, this is a singleton.
+  // Do not implicitly generate the copy assignment operator.
   void operator=(const Countly &) = delete;
+
+  // Not movable either: modules hold `CountlyDelegates *this` and background
+  // threads capture `this`, so relocating an instance is unsound.
+  Countly(Countly &&) = delete;
+  Countly &operator=(Countly &&) = delete;
 
   void alwaysUsePost(bool value);
 
@@ -178,6 +238,13 @@ public:
    * Minimum value is 1. Default value is 100. Maximum value is 10000.
    */
   void setEventsToRQThreshold(int value);
+
+  void setMaxKeyLength(unsigned int value);
+  void setMaxValueSize(unsigned int value);
+  void setMaxSegmentationValues(unsigned int value);
+  void setMaxBreadcrumbCount(unsigned int value);
+  void setMaxStackTraceLinesPerThread(unsigned int value);
+  void setMaxStackTraceLineLength(unsigned int value);
 
   void flushEvents(std::chrono::seconds timeout = std::chrono::seconds(30));
 
@@ -348,23 +415,50 @@ public:
   inline const CountlyConfiguration &getConfiguration() { return *configuration.get(); }
 
   static void halt();
+
+  static size_t debugClaimedPathCount();
+
+  static int debugLiveInstanceCount();
 #endif
 
 private:
+  /**
+   * Copies the default instance's logger callback onto a freshly created
+   * instance. Without this, a WARNING logged on a brand-new instance is
+   * swallowed: LoggerModule::log() no-ops when no callback is set.
+   */
+  static void inheritDefaultLogger(Countly &instance);
+
+  /**
+   * Gives back this instance's database path claim. A no-op when no claim is
+   * held, and compiled to nothing on non-SQLite builds.
+   */
+  void releaseDatabasePathClaim();
+
+  /**
+   * Starts a remote-config fetch on a detached thread. Never blocks: neither the
+   * caller (a UI thread must not stall on an HTTP timeout) nor destruction. At
+   * most one fetch is in flight per instance; a call made while one is running is
+   * logged and dropped.
+   *
+   * The thread body captures no reference to this object -- only shared_ptrs to
+   * the modules and the value store it needs -- so it stays valid however long it
+   * outlives the instance.
+   *
+   * @param data: request parameters, copied into the thread
+   * @param merge: true merges the response into the stored values, false replaces
+   *               them wholesale
+   * @param caller: public method name, used in log messages
+   * @return true if a fetch was started
+   */
+  bool startRemoteConfigFetch(const std::map<std::string, std::string> &data, bool merge, const char *caller);
+
   void _deleteThread();
   void _sendIndependantLocationRequest();
   void log(LogLevel level, const std::string &message);
 #ifdef COUNTLY_USE_SQLITE
   bool createEventTableSchema();
 #endif
-
-  /**
-   * Helper methods to fetch remote config from the server.
-   */
-#pragma region Remote_Config_Helper_Methods
-  void _fetchRemoteConfig(const std::map<std::string, std::string> &data);
-  void _updateRemoteConfigWithSpecificValues(const std::map<std::string, std::string> &data);
-#pragma endregion Remote_Config_Helper_Methods
 
   void _changeDeviceIdWithMerge(const std::string &value);
 
@@ -384,6 +478,15 @@ private:
   nlohmann::json session_params;
 
   std::unique_ptr<std::thread> thread;
+
+  // Remote config values, and the in-flight flag for the fetch that writes them.
+  //
+  // Held behind a shared_ptr because the fetch thread is detached: destruction
+  // must not wait for an HTTP round trip, so the thread can outlive this object
+  // and therefore must not touch it. Everything the fetch needs is reached
+  // through shared_ptrs it holds itself, this store included.
+  std::shared_ptr<cly::RemoteConfigStore> remote_config_store = std::make_shared<cly::RemoteConfigStore>();
+
   std::unique_ptr<cly::CrashModule> crash_module;
   std::unique_ptr<cly::ViewsModule> views_module;
 
@@ -407,10 +510,12 @@ private:
   std::deque<std::string> event_queue;
 #else
   std::string database_path;
+  // The normalized database path this instance has claimed in the process-wide
+  // registry, empty when it holds no claim.
+  std::string claimed_database_path;
 #endif
 
   bool remote_config_enabled = false;
-  nlohmann::json remote_config;
 };
 } // namespace cly
 #endif
