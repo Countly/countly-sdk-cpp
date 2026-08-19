@@ -174,7 +174,7 @@ def build_sbom() -> dict:
             "timestamp": datetime.datetime.now(datetime.timezone.utc)
             .isoformat(timespec="seconds")
             .replace("+00:00", "Z"),
-            "supplier": {"name": "Countly", "url": ["https://count.ly"]},
+            "supplier": {"name": "Countly", "url": ["https://countly.com"]},
             "component": {
                 "bom-ref": "countly-sdk-cpp",
                 "type": "library",

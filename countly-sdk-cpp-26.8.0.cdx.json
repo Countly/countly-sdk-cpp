@@ -1,14 +1,14 @@
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
-  "serialNumber": "urn:uuid:11e7babe-b230-43a9-a9d8-e1b2a842062d",
+  "serialNumber": "urn:uuid:dd63718d-246f-4f50-b5e0-e18f98c41ca3",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-08-18T11:10:18Z",
+    "timestamp": "2026-08-19T05:33:08Z",
     "supplier": {
       "name": "Countly",
       "url": [
-        "https://count.ly"
+        "https://countly.com"
       ]
     },
     "component": {
@@ -16,8 +16,8 @@
       "type": "library",
       "name": "countly-sdk-cpp",
       "group": "countly",
-      "version": "26.1.1",
-      "purl": "pkg:github/countly/countly-sdk-cpp@26.1.1",
+      "version": "26.8.0",
+      "purl": "pkg:github/countly/countly-sdk-cpp@26.8.0",
       "licenses": [
         {
           "license": {
