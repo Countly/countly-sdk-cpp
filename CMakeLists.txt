@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0...3.31)
+cmake_minimum_required(VERSION 3.13...3.31)
 
 # Acquire countly version from constant
 file(READ ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/constants.hpp COUNTLY_HPP_CONTENTS)

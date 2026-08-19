@@ -13,7 +13,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CMAKE_POLICY_VERSION_MINIMUM: "3.31"
   # Cap apt timeouts so an unreachable Azure mirror costs seconds, not 20 minutes.
   APT_OPTS: -o Acquire::Retries=2 -o Acquire::http::Timeout=10
 
