@@ -13,7 +13,9 @@ class ViewsModule::ViewModuleImpl {
   public:
     std::string name;
     std::string viewId;
-    std::chrono::seconds startTime;
+    // Monotonic, not system_clock: the view duration is elapsed time, and a
+    // system clock change while the view is open must not distort it (issue #100).
+    std::chrono::steady_clock::time_point startTime;
   };
 
 private:
@@ -67,9 +69,8 @@ private:
       }
     } else {
 
-      const std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
-      const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
-      std::chrono::seconds dur = timestamp - v->startTime;
+      const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+      const auto dur = std::chrono::duration_cast<std::chrono::seconds>(now - v->startTime);
       duration = dur.count();
     }
 
@@ -107,7 +108,7 @@ public:
     ViewModuleImpl::ViewInfo *v = new ViewModuleImpl::ViewInfo();
     v->name = limitedName;
     v->viewId = cly::utils::generateEventID();
-    v->startTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch());
+    v->startTime = std::chrono::steady_clock::now();
 
     std::shared_ptr<ViewModuleImpl::ViewInfo> ptr(v);
 
