@@ -464,9 +464,9 @@ private:
 
   void _changeDeviceIdWithoutMerge(const std::string &value);
 
-  std::chrono::system_clock::duration getSessionDuration(std::chrono::system_clock::time_point now);
+  std::chrono::steady_clock::duration getSessionDuration(std::chrono::steady_clock::time_point now);
 
-  std::chrono::system_clock::duration getSessionDuration();
+  std::chrono::steady_clock::duration getSessionDuration();
 
   void updateLoop();
   void packEvents();
@@ -474,7 +474,10 @@ private:
   std::atomic<bool> is_being_disposed{false};
   std::atomic<bool> is_sdk_initialized{false};
 
-  std::chrono::system_clock::time_point last_sent_session_request;
+  // Monotonic, not system_clock: session duration is elapsed time, and a
+  // system clock change mid-session must not shrink it or turn it negative
+  // (issue #100). Wall-clock timestamps in requests still use system_clock.
+  std::chrono::steady_clock::time_point last_sent_session_request;
   nlohmann::json session_params;
 
   std::unique_ptr<std::thread> thread;

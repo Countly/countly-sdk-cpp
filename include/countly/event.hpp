@@ -42,6 +42,9 @@ private:
   nlohmann::json object;
   bool timer_running;
   std::chrono::system_clock::time_point timestamp;
+  // Durations are measured on the monotonic clock so a system clock change
+  // while a timed event runs cannot produce a wrong or negative duration.
+  std::chrono::steady_clock::time_point timer_start;
 };
 } // namespace cly
 #endif

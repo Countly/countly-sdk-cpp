@@ -1,3 +1,11 @@
+## Next release
+- Static library builds on non-Windows platforms no longer require a custom HTTP client; the built-in libcurl client can now be used there as well.
+
+- Added the `COUNTLY_USE_SYSTEM_JSON` CMake option to compile the SDK against the application's own nlohmann/json (3.11 or newer) instead of the bundled copy, for applications that already use the library. The SDK headers now reject unsupported nlohmann/json versions at compile time with a clear error.
+
+- Fixed session, view and timed-event durations being distorted when the system clock changed while the application was running; elapsed time is now measured with a monotonic clock.
+- Fixed `cmake --install` producing an unusable include layout: `countly.hpp` is now installed into the include root, all public headers (several were missing, including `countly_configuration.hpp`) are installed under `include/countly`, and the bundled nlohmann/json headers are installed alongside them, so the installed tree compiles on its own.
+
 ## 26.8.0
 - ! Minor breaking change ! The SDK now enforces internal limits on recorded data (key length, value size, segmentation entry count, breadcrumb count, stack trace lines per thread and line length) across events, views, crashes, and user properties. Defaults can be overridden by server-side SDK Behavior Settings, or during init via `setMaxKeyLength`, `setMaxValueSize`, `setMaxSegmentationValues`, `setMaxBreadcrumbCount`, `setMaxStackTraceLinesPerThread` and `setMaxStackTraceLineLength`.
 - ! Minor breaking change ! Updated the bundled nlohmann/json from v3.7.0 to v3.12.0. JSON types are part of the public API, so applications must be recompiled against the new headers; binaries built against the old headers will not link against a library built with the new ones.

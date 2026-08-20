@@ -2,6 +2,17 @@
 #define COUNTLY_CONSTANTS_HPP_
 
 #include "nlohmann/json.hpp"
+
+// nlohmann/json is part of the SDK's public API, so the copy these headers are
+// compiled against must be the one the library was built with. If another copy
+// of the library wins the include-path race (both use the same include guard,
+// so only the first one found is ever seen), fail here with a clear message
+// instead of failing at link time. Versions from 3.11 on carry an ABI-tagged
+// inline namespace, which is what makes a mismatch a linker error rather than
+// silent memory corruption. To build against your application's own copy, use
+// the COUNTLY_USE_SYSTEM_JSON CMake option.
+static_assert(NLOHMANN_JSON_VERSION_MAJOR == 3 && NLOHMANN_JSON_VERSION_MINOR >= 11, "Countly SDK requires nlohmann/json 3.11 or newer (3.x). An incompatible copy of nlohmann/json was found first on the include path.");
+
 #include <cassert>
 #include <chrono>
 #include <climits>
