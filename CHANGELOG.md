@@ -1,3 +1,12 @@
+## XX.XX.XX
+- ! Minor breaking change ! Builds now stop with a clear error when the SDK headers find a nlohmann/json older than 3.11 first on the include path, instead of mixing two versions of the library.
+
+- Added the `COUNTLY_USE_SYSTEM_JSON` CMake option for building against the application's own nlohmann/json (3.11 or newer) instead of the bundled copy (default `OFF`).
+- Added support for static library builds with the built-in HTTP client (libcurl) on Linux and macOS.
+
+- Fixed session, view and timed event durations changing when the system clock was adjusted while the app was running.
+- Fixed `cmake --install` producing an include folder that could not be compiled against.
+
 ## 26.8.0
 - ! Minor breaking change ! The SDK now enforces internal limits on recorded data (key length, value size, segmentation entry count, breadcrumb count, stack trace lines per thread and line length) across events, views, crashes, and user properties. Defaults can be overridden by server-side SDK Behavior Settings, or during init via `setMaxKeyLength`, `setMaxValueSize`, `setMaxSegmentationValues`, `setMaxBreadcrumbCount`, `setMaxStackTraceLinesPerThread` and `setMaxStackTraceLineLength`.
 - ! Minor breaking change ! Updated the bundled nlohmann/json from v3.7.0 to v3.12.0. JSON types are part of the public API, so applications must be recompiled against the new headers; binaries built against the old headers will not link against a library built with the new ones.

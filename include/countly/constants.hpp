@@ -2,6 +2,10 @@
 #define COUNTLY_CONSTANTS_HPP_
 
 #include "nlohmann/json.hpp"
+
+// From 3.11 on nlohmann/json tags its namespace with its version, so a copy other than the library's fails to link instead of corrupting memory
+static_assert(NLOHMANN_JSON_VERSION_MAJOR == 3 && NLOHMANN_JSON_VERSION_MINOR >= 11, "Countly SDK requires nlohmann/json 3.11 or newer (3.x). An incompatible copy of nlohmann/json was found first on the include path. To use your own copy, build the SDK with COUNTLY_USE_SYSTEM_JSON.");
+
 #include <cassert>
 #include <chrono>
 #include <climits>

@@ -28,6 +28,7 @@ Event::Event(const std::string &key, size_t count, double sum, double duration) 
 
 void Event::setTimestamp() {
   timestamp = std::chrono::system_clock::now();
+  timer_start = std::chrono::steady_clock::now();
   object["timestamp"] = std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()).count();
 
   std::time_t time = std::chrono::system_clock::to_time_t(timestamp);
@@ -45,8 +46,8 @@ void Event::startTimer() {
 
 void Event::stopTimer() {
   if (timer_running) {
-    auto now = std::chrono::system_clock::now();
-    object["dur"] = std::chrono::duration_cast<std::chrono::seconds>(now - timestamp).count();
+    auto now = std::chrono::steady_clock::now();
+    object["dur"] = std::chrono::duration_cast<std::chrono::seconds>(now - timer_start).count();
     timer_running = false;
   }
 }

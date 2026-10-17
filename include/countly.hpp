@@ -464,9 +464,9 @@ private:
 
   void _changeDeviceIdWithoutMerge(const std::string &value);
 
-  std::chrono::system_clock::duration getSessionDuration(std::chrono::system_clock::time_point now);
+  std::chrono::steady_clock::duration getSessionDuration(std::chrono::steady_clock::time_point now);
 
-  std::chrono::system_clock::duration getSessionDuration();
+  std::chrono::steady_clock::duration getSessionDuration();
 
   void updateLoop();
   void packEvents();
@@ -474,7 +474,8 @@ private:
   std::atomic<bool> is_being_disposed{false};
   std::atomic<bool> is_sdk_initialized{false};
 
-  std::chrono::system_clock::time_point last_sent_session_request;
+  // steady_clock, so a system clock change can't distort the session duration
+  std::chrono::steady_clock::time_point last_sent_session_request;
   nlohmann::json session_params;
 
   std::unique_ptr<std::thread> thread;

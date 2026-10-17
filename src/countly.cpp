@@ -1389,7 +1389,7 @@ bool Countly::beginSession() {
 
   requestModule->addRequestToQueue(data);
   session_params.erase("user_details");
-  last_sent_session_request = Countly::getTimestamp();
+  last_sent_session_request = std::chrono::steady_clock::now();
   began_session = true;
   // snapshot guarded state before releasing the lock
   bool shouldUpdateRemoteConfig = remote_config_enabled;
@@ -1568,8 +1568,8 @@ bool Countly::endSession() {
     log(LogLevel::ERROR, "[Countly] endSession, Session tracking is disabled in server configuration, can not end session.");
     return false;
   }
-  const std::chrono::system_clock::time_point now = Countly::getTimestamp();
-  const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
+  const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(Countly::getTimestamp().time_since_epoch());
+  const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
 
   // lock_guard so the mutex is released on scope exit, including the early
   // returns below and any exception (e.g. a json type_error from a session_params
@@ -1933,13 +1933,13 @@ std::string Countly::calculateChecksum(const std::string &salt, const std::strin
 #endif
 }
 
-std::chrono::system_clock::duration Countly::getSessionDuration(std::chrono::system_clock::time_point now) {
+std::chrono::steady_clock::duration Countly::getSessionDuration(std::chrono::steady_clock::time_point now) {
   std::lock_guard<std::mutex> lk(*mutex);
-  std::chrono::system_clock::duration duration = now - last_sent_session_request;
+  std::chrono::steady_clock::duration duration = now - last_sent_session_request;
   return duration;
 }
 
-std::chrono::system_clock::duration Countly::getSessionDuration() { return Countly::getSessionDuration(Countly::getTimestamp()); }
+std::chrono::steady_clock::duration Countly::getSessionDuration() { return Countly::getSessionDuration(std::chrono::steady_clock::now()); }
 
 void Countly::updateLoop() {
   log(LogLevel::DEBUG, "[Countly][updateLoop]");

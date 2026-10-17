@@ -14,6 +14,7 @@ option(COUNTLY_USE_CUSTOM_HTTP "Use a custom HTTP library" OFF)
 option(COUNTLY_USE_CUSTOM_SHA256 "Use a custom SHA 256 library" OFF)
 option(COUNTLY_USE_SQLITE "Use SQLite" OFF)
 option(COUNTLY_USE_SYSTEM_SQLITE "Link the system SQLite instead of compiling the vendored amalgamation" OFF)
+option(COUNTLY_USE_SYSTEM_JSON "Compile against the system nlohmann_json instead of the vendored copy" OFF)
 option(COUNTLY_BUILD_TESTS "Build test programs" OFF)
 option(COUNTLY_BUILD_SAMPLE "Build Sample programs" OFF)
 
@@ -23,25 +24,28 @@ message("Use a custom HTTP library:" ${COUNTLY_USE_CUSTOM_HTTP})
 message("Use a custom SHA 256 library:" ${COUNTLY_USE_CUSTOM_SHA256})
 message("Use SQLite:" ${COUNTLY_USE_SQLITE})
 message("Use system SQLite:" ${COUNTLY_USE_SYSTEM_SQLITE})
+message("Use system nlohmann_json:" ${COUNTLY_USE_SYSTEM_JSON})
 message("Build test programs:" ${COUNTLY_BUILD_TESTS})
 message("Build Sample programs:" ${COUNTLY_BUILD_SAMPLE})
 
-if (NOT WIN32 AND NOT BUILD_SHARED_LIBS AND NOT COUNTLY_USE_CUSTOM_HTTP)
-  message(FATAL_ERROR "You must provide a custom HTTP function when compiling statically.")
-endif()
-
-# Compile countly public headers
+# Public headers installed under include/countly; countly.hpp goes to the include root, see the install rules
 set(COUNTLY_PUBLIC_HEADERS
-  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/configuration_module.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/configuration_provider.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/constants.hpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/event.hpp
-
-  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/logger_module.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/countly_configuration.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/crash_module.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/event.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/logger_module.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/remote_config_store.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/request_builder.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/request_module.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/storage_module_base.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/views_module.hpp)
 
 add_library(countly
   ${COUNTLY_PUBLIC_HEADERS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/countly.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/views_module.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/logger_module.cpp
@@ -66,7 +70,15 @@ set_target_properties(countly PROPERTIES
 find_package(Threads)
 target_link_libraries(countly Threads::Threads)
 
-target_include_directories(countly PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include)
+# nlohmann/json is part of the public API, so it is a usage requirement of the countly target
+if(COUNTLY_USE_SYSTEM_JSON)
+  find_package(nlohmann_json 3.11 REQUIRED)
+  target_link_libraries(countly nlohmann_json::nlohmann_json)
+else()
+  target_include_directories(countly PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include>
+    $<INSTALL_INTERFACE:include>)
+endif()
 if (COUNTLY_BUILD_TESTS)
   message("Compiling definitions for tests")
   target_compile_definitions(countly PRIVATE COUNTLY_BUILD_TESTS)
@@ -154,7 +166,6 @@ if(COUNTLY_BUILD_TESTS)
     target_compile_definitions(countly-tests PRIVATE COUNTLY_USE_CUSTOM_SHA256)
   endif()
   target_include_directories(countly-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/doctest/doctest)
-  target_include_directories(countly-tests PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include)
   target_link_libraries(countly-tests countly)
   set_target_properties(countly-tests PROPERTIES
     CXX_STANDARD 14
@@ -177,7 +188,6 @@ if(COUNTLY_USE_SQLITE)
   endif()
 endif()
   target_include_directories(countly-sample PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/doctest/doctest)
-  target_include_directories(countly-sample PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include)
   target_link_libraries(countly-sample countly)
   set_target_properties(countly-sample PROPERTIES
     CXX_STANDARD 14
@@ -190,3 +200,8 @@ install(TARGETS countly
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
   PUBLIC_HEADER DESTINATION include/countly)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/countly.hpp DESTINATION include)
+# The installed headers include nlohmann/json.hpp, so the bundled copy ships with them
+if(NOT COUNTLY_USE_SYSTEM_JSON)
+  install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include/nlohmann DESTINATION include)
+endif()

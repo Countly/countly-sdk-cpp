@@ -83,6 +83,11 @@ jobs:
             experimental: true
           - name: static-custom-http
             flags: -DCOUNTLY_USE_SQLITE=ON -DBUILD_SHARED_LIBS=OFF -DCOUNTLY_USE_CUSTOM_HTTP=ON
+          - name: static-builtin-http
+            flags: -DCOUNTLY_USE_SQLITE=ON -DBUILD_SHARED_LIBS=OFF
+          - name: system-json
+            flags: -DCOUNTLY_USE_SQLITE=ON -DCOUNTLY_USE_SYSTEM_JSON=ON
+            apt: nlohmann-json3-dev
           - name: custom-sha256
             flags: -DCOUNTLY_USE_SQLITE=ON -DCOUNTLY_USE_CUSTOM_SHA256=ON
           - name: system-sqlite
@@ -156,6 +161,62 @@ jobs:
 
       - name: Run tests
         run: ./build/countly-tests
+
+  # ──────────────────────────────────────────────
+  # Installed SDK: an app that sees only the install
+  # prefix must compile, link and run against it.
+  # ──────────────────────────────────────────────
+  install:
+    name: install-${{ matrix.libs }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - libs: shared
+            shared: ON
+          - libs: static
+            shared: OFF
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends \
+            libcurl4-openssl-dev libssl-dev
+
+      - name: Build and install
+        run: |
+          cmake -DBUILD_SHARED_LIBS=${{ matrix.shared }} -DCMAKE_BUILD_TYPE=Release -B build .
+          cmake --build build -j 4
+          cmake --install build --prefix "$RUNNER_TEMP/countly"
+
+      - name: Compile and run an app against the installed SDK
+        working-directory: ${{ runner.temp }}
+        run: |
+          cat > app.cpp << 'EOF'
+          #include "countly.hpp"
+          #include <iostream>
+
+          int main() {
+            (void)cly::Countly::getInstance();
+            cly::Event event("install_check", 1);
+            event.addSegmentation("source", "installed tree");
+            std::cout << event.serialize() << std::endl;
+            return 0;
+          }
+          EOF
+          if [ "${{ matrix.libs }}" = "static" ]; then
+            g++ -std=c++14 -I countly/include app.cpp countly/lib/libcountly.a -lcurl -lssl -lcrypto -lpthread -o app
+          else
+            g++ -std=c++14 -I countly/include app.cpp -L countly/lib -lcountly -Wl,-rpath,"$PWD/countly/lib" -o app
+          fi
+          ./app
 
   # ──────────────────────────────────────────────
   # Release tooling smoke test: the SBOM generator must
