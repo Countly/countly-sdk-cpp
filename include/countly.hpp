@@ -474,9 +474,7 @@ private:
   std::atomic<bool> is_being_disposed{false};
   std::atomic<bool> is_sdk_initialized{false};
 
-  // Monotonic, not system_clock: session duration is elapsed time, and a
-  // system clock change mid-session must not shrink it or turn it negative
-  // (issue #100). Wall-clock timestamps in requests still use system_clock.
+  // steady_clock, so a system clock change can't distort the session duration
   std::chrono::steady_clock::time_point last_sent_session_request;
   nlohmann::json session_params;
 

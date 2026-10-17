@@ -1,10 +1,11 @@
-## Next release
-- Static library builds on non-Windows platforms no longer require a custom HTTP client; the built-in libcurl client can now be used there as well.
+## XX.XX.XX
+- ! Minor breaking change ! Builds now stop with a clear error when the SDK headers find a nlohmann/json older than 3.11 first on the include path, instead of mixing two versions of the library.
 
-- Added the `COUNTLY_USE_SYSTEM_JSON` CMake option to compile the SDK against the application's own nlohmann/json (3.11 or newer) instead of the bundled copy, for applications that already use the library. The SDK headers now reject unsupported nlohmann/json versions at compile time with a clear error.
+- Added the `COUNTLY_USE_SYSTEM_JSON` CMake option for building against the application's own nlohmann/json (3.11 or newer) instead of the bundled copy (default `OFF`).
+- Added support for static library builds with the built-in HTTP client (libcurl) on Linux and macOS.
 
-- Fixed session, view and timed-event durations being distorted when the system clock changed while the application was running; elapsed time is now measured with a monotonic clock.
-- Fixed `cmake --install` producing an unusable include layout: `countly.hpp` is now installed into the include root, all public headers (several were missing, including `countly_configuration.hpp`) are installed under `include/countly`, and the bundled nlohmann/json headers are installed alongside them, so the installed tree compiles on its own.
+- Fixed session, view and timed event durations changing when the system clock was adjusted while the app was running.
+- Fixed `cmake --install` producing an include folder that could not be compiled against.
 
 ## 26.8.0
 - ! Minor breaking change ! The SDK now enforces internal limits on recorded data (key length, value size, segmentation entry count, breadcrumb count, stack trace lines per thread and line length) across events, views, crashes, and user properties. Defaults can be overridden by server-side SDK Behavior Settings, or during init via `setMaxKeyLength`, `setMaxValueSize`, `setMaxSegmentationValues`, `setMaxBreadcrumbCount`, `setMaxStackTraceLinesPerThread` and `setMaxStackTraceLineLength`.

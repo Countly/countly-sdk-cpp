@@ -13,8 +13,7 @@ class ViewsModule::ViewModuleImpl {
   public:
     std::string name;
     std::string viewId;
-    // Monotonic, not system_clock: the view duration is elapsed time, and a
-    // system clock change while the view is open must not distort it (issue #100).
+    // steady_clock, so a system clock change can't distort the view duration
     std::chrono::steady_clock::time_point startTime;
   };
 

@@ -28,9 +28,7 @@ message("Use system nlohmann_json:" ${COUNTLY_USE_SYSTEM_JSON})
 message("Build test programs:" ${COUNTLY_BUILD_TESTS})
 message("Build Sample programs:" ${COUNTLY_BUILD_SAMPLE})
 
-# Compile countly public headers: everything countly.hpp includes, so an
-# installed copy of the SDK is self-contained. countly.hpp itself is installed
-# separately into the include root (see the install rules at the bottom).
+# Public headers installed under include/countly; countly.hpp goes to the include root, see the install rules
 set(COUNTLY_PUBLIC_HEADERS
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/configuration_module.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/configuration_provider.hpp
@@ -72,13 +70,7 @@ set_target_properties(countly PROPERTIES
 find_package(Threads)
 target_link_libraries(countly Threads::Threads)
 
-# nlohmann/json is part of the public API, so its headers are a usage
-# requirement of the countly target. By default the vendored copy is used and
-# later installed next to the SDK headers, so the installed tree is
-# self-contained. An application that already uses nlohmann/json should set
-# COUNTLY_USE_SYSTEM_JSON to compile the SDK against that same copy instead,
-# so only one version of the library exists in the build (the SDK headers
-# reject unsupported versions at compile time).
+# nlohmann/json is part of the public API, so it is a usage requirement of the countly target
 if(COUNTLY_USE_SYSTEM_JSON)
   find_package(nlohmann_json 3.11 REQUIRED)
   target_link_libraries(countly nlohmann_json::nlohmann_json)
@@ -174,7 +166,6 @@ if(COUNTLY_BUILD_TESTS)
     target_compile_definitions(countly-tests PRIVATE COUNTLY_USE_CUSTOM_SHA256)
   endif()
   target_include_directories(countly-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/doctest/doctest)
-  # nlohmann/json comes in as a usage requirement of the countly target.
   target_link_libraries(countly-tests countly)
   set_target_properties(countly-tests PROPERTIES
     CXX_STANDARD 14
@@ -197,7 +188,6 @@ if(COUNTLY_USE_SQLITE)
   endif()
 endif()
   target_include_directories(countly-sample PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/doctest/doctest)
-  # nlohmann/json comes in as a usage requirement of the countly target.
   target_link_libraries(countly-sample countly)
   set_target_properties(countly-sample PROPERTIES
     CXX_STANDARD 14
@@ -210,12 +200,8 @@ install(TARGETS countly
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
   PUBLIC_HEADER DESTINATION include/countly)
-# countly.hpp lives in the include root, so `#include "countly.hpp"` works
-# against the installed tree just like against the source tree.
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/countly.hpp DESTINATION include)
-# The SDK headers include "nlohmann/json.hpp", so ship the vendored copy with
-# them; without it an installed tree does not compile on its own. Skipped when
-# building against the system copy, which the application provides itself.
+# The installed headers include nlohmann/json.hpp, so the bundled copy ships with them
 if(NOT COUNTLY_USE_SYSTEM_JSON)
   install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include/nlohmann DESTINATION include)
 endif()
