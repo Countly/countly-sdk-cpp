@@ -1297,7 +1297,6 @@ std::vector<std::string> Countly::debugReturnStateOfEQ() {
         if (return_value == SQLITE_OK && !no_request) {
 
           for (int event_index = 1; event_index < row_count + 1; event_index++) {
-            std::string rqstId = table[event_index * column_count];
             std::string rqst = table[(event_index * column_count) + 1];
             v.push_back(rqst);
           }

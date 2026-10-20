@@ -19,7 +19,6 @@
 #include <netinet/in.h>
 #include <poll.h>
 #include <sys/socket.h>
-#include <sys/time.h>
 #include <unistd.h>
 #endif
 using namespace cly;
@@ -319,15 +318,23 @@ private:
     }
   }
 
-  void answer(int client) {
-    timeval timeout = {5, 0};
-    ::setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+  /**
+   * Reads what the client sent, waiting at most five seconds for it. Returns what recv() returns, or -1 on a timeout.
+   */
+  static ssize_t receiveWithin5Seconds(int client, char *buffer, size_t size) {
+    pollfd readable = {client, POLLIN, 0};
+    if (::poll(&readable, 1, 5000) <= 0) {
+      return -1;
+    }
+    return ::recv(client, buffer, size, 0);
+  }
 
+  void answer(int client) {
     std::string request;
     char buffer[4096];
     std::string::size_type header_end;
     while ((header_end = request.find("\r\n\r\n")) == std::string::npos) {
-      ssize_t received = ::recv(client, buffer, sizeof(buffer), 0);
+      ssize_t received = receiveWithin5Seconds(client, buffer, sizeof(buffer));
       if (received <= 0) {
         ::close(client);
         return;
@@ -341,7 +348,7 @@ private:
       content_length = std::stoul(request.substr(length_header + 16));
     }
     while (request.size() < header_end + 4 + content_length) {
-      ssize_t received = ::recv(client, buffer, sizeof(buffer), 0);
+      ssize_t received = receiveWithin5Seconds(client, buffer, sizeof(buffer));
       if (received <= 0) {
         break;
       }
@@ -394,7 +401,7 @@ TEST_CASE("Built-in HTTP client") {
     while (std::chrono::steady_clock::now() < deadline) {
       countly->processRQDebug();
       for (const std::string &request_line : server.requestLines()) {
-        if (request_line.find("GET /i?") == 0 && request_line.find("begin_session=1") != std::string::npos) {
+        if (request_line.rfind("GET /i?", 0) == 0 && request_line.find("begin_session=1") != std::string::npos) {
           begin_session_received = true;
         }
       }

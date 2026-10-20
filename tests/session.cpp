@@ -262,7 +262,7 @@ static std::vector<HTTPCall> callsFor(const std::string &device_id, const std::s
   std::vector<HTTPCall> calls;
   for (size_t index = 0; index < http_call_queue.size(); index++) {
     HTTPCall call = http_call_queue.at(index);
-    std::map<std::string, std::string>::const_iterator device = call.data.find("device_id");
+    auto device = call.data.find("device_id");
     if (device != call.data.end() && device->second == device_id && call.data.find(parameter) != call.data.end()) {
       calls.push_back(call);
     }

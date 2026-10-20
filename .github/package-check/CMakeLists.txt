@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.13...3.31)
 project(package_check CXX)
 
 # Uses the SDK only through find_package, the way an app that installed it or got it from vcpkg or Conan does

@@ -3,6 +3,7 @@
 #include "test_utils.hpp"
 
 #include "doctest.h"
+#include <functional>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -52,7 +53,7 @@ TEST_CASE("Test Sqlite Storage Module Specific tests") {
  * Runs flush until check passes, for up to five seconds. The SDK's own update loop may be
  * sending the request queue at the moment the test asks, so a single attempt can miss.
  */
-template <typename Flush, typename Check> static bool eventually(Flush flush, Check check) {
+static bool eventually(const std::function<void()> &flush, const std::function<bool()> &check) {
   for (int attempt = 0; attempt < 50; attempt++) {
     flush();
     if (check()) {

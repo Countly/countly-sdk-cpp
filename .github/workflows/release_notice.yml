@@ -3,25 +3,28 @@ on:
   release:
     types: [published]
   workflow_dispatch:
-    inputs:
-      tag_name:
-        description: "Version to announce, for example 26.8.1"
-        type: string
-        required: false
-      html_url:
-        description: "Link to the GitHub release"
-        type: string
-        required: false
-      body:
-        description: "Release notes"
-        type: string
-        required: false
 permissions:
   contents: read
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # A manual run announces the latest release again
+      - name: Find the release to announce
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [ -z "$TAG" ]; then
+            TAG=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          fi
+          {
+            echo "RELEASE_TAG=$TAG"
+            echo "RELEASE_URL=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url --jq .url)"
+            echo "RELEASE_BODY<<COUNTLY_RELEASE_BODY_END"
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body
+            echo "COUNTLY_RELEASE_BODY_END"
+          } >> "$GITHUB_ENV"
       - name: Send custom JSON data to Slack workflow
         id: slack
         uses: slackapi/slack-github-action@v1.23.0
@@ -30,10 +33,10 @@ jobs:
           payload: |
             {
               "repository": "${{ github.repository }}",
-              "tag_name": "${{ inputs.tag_name || github.event.release.tag_name }}",
+              "tag_name": "${{ env.RELEASE_TAG }}",
               "actor": "${{ github.actor }}",
-              "body": ${{ toJSON(inputs.body || github.event.release.body) }},
-              "html_url": "${{ inputs.html_url || github.event.release.html_url }}"
+              "body": ${{ toJSON(env.RELEASE_BODY) }},
+              "html_url": "${{ env.RELEASE_URL }}"
             }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_RELEASE }}
@@ -42,8 +45,8 @@ jobs:
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
           nodetail: true
-          title: New ${{ github.repository }} version ${{ inputs.tag_name || github.event.release.tag_name }} published by ${{ github.actor }}
+          title: New ${{ github.repository }} version ${{ env.RELEASE_TAG }} published by ${{ github.actor }}
           description: |
-            Release URL: ${{ inputs.html_url || github.event.release.html_url }}
+            Release URL: ${{ env.RELEASE_URL }}
             Click [here](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md) to view the change log.
-            `${{ inputs.body || github.event.release.body }}`
+            `${{ env.RELEASE_BODY }}`

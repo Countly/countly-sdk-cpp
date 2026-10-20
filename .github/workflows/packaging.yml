@@ -109,7 +109,8 @@ jobs:
           git archive --format=tar.gz --prefix=countly-sdk-cpp/ -o "$work/countly-sdk-cpp.tar.gz" HEAD
           cp -r packaging/vcpkg/ports/countly-sdk-cpp "$work/ports/"
           portfile="$work/ports/countly-sdk-cpp/portfile.cmake"
-          ARCHIVE="$work/countly-sdk-cpp.tar.gz" perl -0pi -e 's/vcpkg_from_github\(.*?\n\)\n/vcpkg_extract_source_archive(SOURCE_PATH ARCHIVE "$ENV{ARCHIVE}")\n/s' "$portfile"
+          # Windows runners check files out with CRLF line endings
+          ARCHIVE="$work/countly-sdk-cpp.tar.gz" perl -0pi -e 's/vcpkg_from_github\(.*?\r?\n\)\r?\n/vcpkg_extract_source_archive(SOURCE_PATH ARCHIVE "$ENV{ARCHIVE}")\n/s' "$portfile"
           if grep -q "vcpkg_from_github" "$portfile" || ! grep -q "vcpkg_extract_source_archive" "$portfile"; then
             echo "::error file=packaging/vcpkg/ports/countly-sdk-cpp/portfile.cmake::could not point the port at the archive"
             exit 1
