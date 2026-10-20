@@ -3,15 +3,28 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # To check the github context
-      - name: Dump Github context
+      # A manual run announces the latest release again
+      - name: Find the release to announce
         env:
-          GITHUB_CONTEXT: ${{ toJSON(github) }}
-        run: echo "$GITHUB_CONTEXT"
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [ -z "$TAG" ]; then
+            TAG=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          fi
+          {
+            echo "RELEASE_TAG=$TAG"
+            echo "RELEASE_URL=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url --jq .url)"
+            echo "RELEASE_BODY<<COUNTLY_RELEASE_BODY_END"
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body
+            echo "COUNTLY_RELEASE_BODY_END"
+          } >> "$GITHUB_ENV"
       - name: Send custom JSON data to Slack workflow
         id: slack
         uses: slackapi/slack-github-action@v1.23.0
@@ -20,10 +33,10 @@ jobs:
           payload: |
             {
               "repository": "${{ github.repository }}",
-              "tag_name": "${{ github.event.release.tag_name }}",
+              "tag_name": "${{ env.RELEASE_TAG }}",
               "actor": "${{ github.actor }}",
-              "body": ${{ toJSON(github.event.release.body) }},
-              "html_url": "${{ github.event.release.html_url }}"
+              "body": ${{ toJSON(env.RELEASE_BODY) }},
+              "html_url": "${{ env.RELEASE_URL }}"
             }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_RELEASE }}
@@ -32,8 +45,8 @@ jobs:
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
           nodetail: true
-          title: New ${{ github.repository }} version ${{ github.event.release.tag_name }} published by ${{ github.actor }}
+          title: New ${{ github.repository }} version ${{ env.RELEASE_TAG }} published by ${{ github.actor }}
           description: |
-            Release URL: ${{ github.event.release.html_url }}
-            Click [here](https://github.com/Countly/countly-server/blob/master/CHANGELOG.md) to view the change log.
-            `${{ github.event.release.body }}`
+            Release URL: ${{ env.RELEASE_URL }}
+            Click [here](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md) to view the change log.
+            `${{ env.RELEASE_BODY }}`

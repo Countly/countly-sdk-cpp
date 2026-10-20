@@ -76,6 +76,27 @@ void RQInsertAtEndWithRequest(std::shared_ptr<StorageModuleBase> storageModule) 
 }
 
 /**
+ * Validate method 'RQInsertAtEnd' with requests that contain single quotes.
+ * Result: Requests are stored and read back unchanged, quotes included.
+ * @param *storageModule: a pointer to storage module.
+ */
+void RQInsertAtEndWithSingleQuotes(std::shared_ptr<StorageModuleBase> storageModule) {
+  storageModule->RQInsertAtEnd("it's");
+  storageModule->RQInsertAtEnd("it''s");
+  validateSizes(storageModule, 2);
+
+  std::vector<std::shared_ptr<DataEntry>> requests = storageModule->RQPeekAll();
+  REQUIRE(requests.size() == 2);
+  validateDataEntry(requests[0], 1, "it's");
+  validateDataEntry(requests[1], 2, "it''s");
+
+  storageModule->RQRemoveFront();
+  validateDataEntry(storageModule->RQPeekFront(), 2, "it''s");
+  storageModule->RQRemoveFront();
+  validateSizes(storageModule, 0);
+}
+
+/**
  * Validate method 'RQPeekFront' with empty queue.
  * Result: RQPeekFront will return request having id '-1' and data an empty string.
  * @param *storageModule: a pointer to storage module.
@@ -486,6 +507,7 @@ TEST_CASE("Test Memory Storage Module") {
 
   SUBCASE("Validate method 'RQInsertAtEnd' with invalid request") { RQInsertAtEndWithInvalidRequest(storageModule); }
   SUBCASE("Validate method 'RQInsertAtEnd' with Valid requests") { RQInsertAtEndWithRequest(storageModule); }
+  SUBCASE("Validate method 'RQInsertAtEnd' with requests containing single quotes") { RQInsertAtEndWithSingleQuotes(storageModule); }
 
   SUBCASE("Validate method 'RQPeekFront' with empty queue") { RQPeekFrontWithEmpthQueue(storageModule); }
   SUBCASE("Validate method 'RQPeekFront' after inserting multiple requests.") { RQPeekFront(storageModule); }
@@ -536,6 +558,7 @@ TEST_CASE("Test Sqlite Storage Module") {
 
   SUBCASE("Validate method 'RQInsertAtEnd' with invalid request") { RQInsertAtEndWithInvalidRequest(storageModule); }
   SUBCASE("Validate method 'RQInsertAtEnd' with Valid requests") { RQInsertAtEndWithRequest(storageModule); }
+  SUBCASE("Validate method 'RQInsertAtEnd' with requests containing single quotes") { RQInsertAtEndWithSingleQuotes(storageModule); }
 
   SUBCASE("Validate method 'RQPeekFront' with empty queue") { RQPeekFrontWithEmpthQueue(storageModule); }
   SUBCASE("Validate method 'RQPeekFront' after inserting multiple requests.") { RQPeekFront(storageModule); }

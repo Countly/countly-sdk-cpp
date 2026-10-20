@@ -1,0 +1,7 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+@COUNTLY_CONFIG_DEPENDENCIES@
+
+include("${CMAKE_CURRENT_LIST_DIR}/countlyTargets.cmake")
+check_required_components(countly)
