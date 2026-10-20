@@ -83,6 +83,11 @@ jobs:
             experimental: true
           - name: static-custom-http
             flags: -DCOUNTLY_USE_SQLITE=ON -DBUILD_SHARED_LIBS=OFF -DCOUNTLY_USE_CUSTOM_HTTP=ON
+          - name: static-builtin-http
+            flags: -DCOUNTLY_USE_SQLITE=ON -DBUILD_SHARED_LIBS=OFF
+          - name: system-json
+            flags: -DCOUNTLY_USE_SQLITE=ON -DCOUNTLY_USE_SYSTEM_JSON=ON
+            apt: nlohmann-json3-dev
           - name: custom-sha256
             flags: -DCOUNTLY_USE_SQLITE=ON -DCOUNTLY_USE_CUSTOM_SHA256=ON
           - name: system-sqlite
@@ -156,6 +161,125 @@ jobs:
 
       - name: Run tests
         run: ./build/countly-tests
+
+  # ──────────────────────────────────────────────
+  # Installed SDK: an app that sees only the install
+  # prefix finds it with find_package and runs.
+  # ──────────────────────────────────────────────
+  install:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: install-shared
+            os: ubuntu-24.04
+            shared: ON
+            sqlite: OFF
+          - name: install-static
+            os: ubuntu-24.04
+            shared: OFF
+            sqlite: OFF
+          - name: install-static-sqlite
+            os: ubuntu-24.04
+            shared: OFF
+            sqlite: ON
+          - name: install-shared-macos
+            os: macos-15
+            shared: ON
+            sqlite: OFF
+          - name: install-static-macos
+            os: macos-15
+            shared: OFF
+            sqlite: OFF
+          - name: install-shared-windows
+            os: windows-2022
+            shared: ON
+            sqlite: OFF
+          - name: install-shared-sqlite-windows
+            os: windows-2022
+            shared: ON
+            sqlite: ON
+          - name: install-static-windows
+            os: windows-2022
+            shared: OFF
+            sqlite: OFF
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Install dependencies (Ubuntu)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends \
+            libcurl4-openssl-dev libssl-dev
+
+      - name: Build and install
+        run: |
+          cmake -DBUILD_SHARED_LIBS=${{ matrix.shared }} -DCOUNTLY_USE_SQLITE=${{ matrix.sqlite }} -DCMAKE_BUILD_TYPE=Release -B build .
+          cmake --build build --config Release -j 4
+          cmake --install build --config Release --prefix "$RUNNER_TEMP/countly"
+
+      # Apps built without CMake (vcpkg's Visual Studio integration, plain makefiles) never see the SDK's definitions
+      - name: Check that the installed headers do not depend on COUNTLY_USE_SQLITE
+        run: |
+          if grep -rnE '^[[:space:]]*#[[:space:]]*(if|ifdef|ifndef|elif).*COUNTLY_USE_SQLITE' "$RUNNER_TEMP/countly/include/countly.hpp" "$RUNNER_TEMP/countly/include/countly"; then
+            echo "::error::the installed headers change with COUNTLY_USE_SQLITE"
+            exit 1
+          fi
+
+      - name: Build and run an app with find_package
+        working-directory: ${{ runner.temp }}
+        run: |
+          openssl_root=""
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            openssl_root="-DOPENSSL_ROOT_DIR=$(brew --prefix openssl)"
+          fi
+          cmake -S "$GITHUB_WORKSPACE/.github/package-check" -B app/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/countly" -DEXPECT_COUNTLY_SQLITE=${{ matrix.sqlite }} $openssl_root
+          cmake --build app/build --config Release
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            if [ "${{ matrix.shared }}" = "ON" ]; then
+              cp countly/bin/countly.dll app/build/Release/
+            fi
+            ./app/build/Release/app.exe
+          else
+            ./app/build/app
+          fi
+
+  # ──────────────────────────────────────────────
+  # Android: the SDK compiles with the NDK's default
+  # flags, which make format-security warnings errors.
+  # ──────────────────────────────────────────────
+  android:
+    name: android-${{ matrix.abi }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64-v8a, x86_64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Build with the Android NDK
+        run: |
+          ndk="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+          cmake -B build -DCMAKE_TOOLCHAIN_FILE="$ndk/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=${{ matrix.abi }} -DANDROID_PLATFORM=android-28 -DCMAKE_BUILD_TYPE=Release \
+            -DCOUNTLY_USE_CUSTOM_HTTP=ON -DCOUNTLY_USE_CUSTOM_SHA256=ON -DCOUNTLY_USE_SQLITE=ON \
+            -DCOUNTLY_BUILD_TESTS=1 .
+          cmake --build build -j 4
 
   # ──────────────────────────────────────────────
   # Release tooling smoke test: the SBOM generator must

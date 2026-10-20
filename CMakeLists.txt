@@ -14,6 +14,7 @@ option(COUNTLY_USE_CUSTOM_HTTP "Use a custom HTTP library" OFF)
 option(COUNTLY_USE_CUSTOM_SHA256 "Use a custom SHA 256 library" OFF)
 option(COUNTLY_USE_SQLITE "Use SQLite" OFF)
 option(COUNTLY_USE_SYSTEM_SQLITE "Link the system SQLite instead of compiling the vendored amalgamation" OFF)
+option(COUNTLY_USE_SYSTEM_JSON "Compile against the system nlohmann_json instead of the vendored copy" OFF)
 option(COUNTLY_BUILD_TESTS "Build test programs" OFF)
 option(COUNTLY_BUILD_SAMPLE "Build Sample programs" OFF)
 
@@ -23,25 +24,28 @@ message("Use a custom HTTP library:" ${COUNTLY_USE_CUSTOM_HTTP})
 message("Use a custom SHA 256 library:" ${COUNTLY_USE_CUSTOM_SHA256})
 message("Use SQLite:" ${COUNTLY_USE_SQLITE})
 message("Use system SQLite:" ${COUNTLY_USE_SYSTEM_SQLITE})
+message("Use system nlohmann_json:" ${COUNTLY_USE_SYSTEM_JSON})
 message("Build test programs:" ${COUNTLY_BUILD_TESTS})
 message("Build Sample programs:" ${COUNTLY_BUILD_SAMPLE})
 
-if (NOT WIN32 AND NOT BUILD_SHARED_LIBS AND NOT COUNTLY_USE_CUSTOM_HTTP)
-  message(FATAL_ERROR "You must provide a custom HTTP function when compiling statically.")
-endif()
-
-# Compile countly public headers
+# Public headers installed under include/countly; countly.hpp goes to the include root, see the install rules
 set(COUNTLY_PUBLIC_HEADERS
-  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/configuration_module.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/configuration_provider.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/constants.hpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/event.hpp
-
-  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/logger_module.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/countly_configuration.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/crash_module.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/event.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/logger_module.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/remote_config_store.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/request_builder.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/request_module.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/storage_module_base.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/views_module.hpp)
 
 add_library(countly
   ${COUNTLY_PUBLIC_HEADERS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/countly.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/views_module.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/logger_module.cpp
@@ -52,6 +56,7 @@ add_library(countly
   ${CMAKE_CURRENT_SOURCE_DIR}/src/storage_module_memory.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/event.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/configuration_module.cpp)
+add_library(countly::countly ALIAS countly)
 
 target_include_directories(countly
   PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -66,7 +71,15 @@ set_target_properties(countly PROPERTIES
 find_package(Threads)
 target_link_libraries(countly Threads::Threads)
 
-target_include_directories(countly PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include)
+# nlohmann/json is part of the public API, so it is a usage requirement of the countly target
+if(COUNTLY_USE_SYSTEM_JSON)
+  find_package(nlohmann_json 3.11 REQUIRED)
+  target_link_libraries(countly nlohmann_json::nlohmann_json)
+else()
+  target_include_directories(countly PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include>
+    $<INSTALL_INTERFACE:include>)
+endif()
 if (COUNTLY_BUILD_TESTS)
   message("Compiling definitions for tests")
   target_compile_definitions(countly PRIVATE COUNTLY_BUILD_TESTS)
@@ -76,7 +89,7 @@ if (COUNTLY_USE_CUSTOM_SHA256)
   message("Compiling definitions for custom sha256")
   target_compile_definitions(countly PRIVATE COUNTLY_USE_CUSTOM_SHA256)
 else()
-if (APPLE)
+if (APPLE AND NOT OPENSSL_ROOT_DIR)
   message("Setting openssl root for Mac")
   execute_process(COMMAND brew --prefix openssl OUTPUT_VARIABLE OPENSSL_ROOT_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
   if(NOT OPENSSL_ROOT_DIR)
@@ -84,8 +97,11 @@ if (APPLE)
   endif()
 endif()
 find_package(OpenSSL REQUIRED)
-target_include_directories(countly PRIVATE ${OPENSSL_INCLUDE_DIR})
-target_link_libraries(countly ${OPENSSL_LIBRARIES})
+if(TARGET OpenSSL::SSL)
+  target_link_libraries(countly OpenSSL::SSL OpenSSL::Crypto)
+else()
+  target_link_libraries(countly OpenSSL::Crypto)
+endif()
 endif()
 
 if(COUNTLY_USE_CUSTOM_HTTP)
@@ -94,12 +110,12 @@ if(COUNTLY_USE_CUSTOM_HTTP)
 elseif(NOT WIN32)
   message("Checking url as device is not windows")
   find_package(CURL REQUIRED)
-  target_include_directories(countly PRIVATE ${CURL_INCLUDE_DIRS})
-  target_link_libraries(countly ${CURL_LIBRARIES})
+  target_link_libraries(countly CURL::libcurl)
 endif()
 
 if(COUNTLY_USE_SQLITE)
-  target_compile_definitions(countly PRIVATE COUNTLY_USE_SQLITE)
+  # The public headers change with this definition, so code that includes them must see it too
+  target_compile_definitions(countly PUBLIC COUNTLY_USE_SQLITE)
   if(COUNTLY_USE_SYSTEM_SQLITE)
     message("Linking system SQLite")
     find_package(SQLite3 REQUIRED)
@@ -141,8 +157,6 @@ if(COUNTLY_BUILD_TESTS)
     target_compile_options(countly-tests PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-g>)
     target_compile_definitions(countly-tests PRIVATE COUNTLY_BUILD_TESTS)
   if(COUNTLY_USE_SQLITE)
-    message("Compiling definitions for sqlite")
-    target_compile_definitions(countly-tests PRIVATE COUNTLY_USE_SQLITE)
     if(COUNTLY_USE_SYSTEM_SQLITE)
       target_link_libraries(countly-tests SQLite::SQLite3)
     else()
@@ -153,8 +167,11 @@ if(COUNTLY_BUILD_TESTS)
     message("Compiling definitions for custom sha256")
     target_compile_definitions(countly-tests PRIVATE COUNTLY_USE_CUSTOM_SHA256)
   endif()
+  if(COUNTLY_USE_CUSTOM_HTTP)
+    message("Compiling definitions for custom http")
+    target_compile_definitions(countly-tests PRIVATE COUNTLY_USE_CUSTOM_HTTP)
+  endif()
   target_include_directories(countly-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/doctest/doctest)
-  target_include_directories(countly-tests PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include)
   target_link_libraries(countly-tests countly)
   set_target_properties(countly-tests PROPERTIES
     CXX_STANDARD 14
@@ -168,8 +185,6 @@ if(COUNTLY_BUILD_SAMPLE)
   ${CMAKE_CURRENT_SOURCE_DIR}/examples/example_integration.cpp)
   
 if(COUNTLY_USE_SQLITE)
-  message("Compiling definitions for sqlite")
-  target_compile_definitions(countly-sample PRIVATE COUNTLY_USE_SQLITE)
   if(COUNTLY_USE_SYSTEM_SQLITE)
     target_link_libraries(countly-sample SQLite::SQLite3)
   else()
@@ -177,7 +192,6 @@ if(COUNTLY_USE_SQLITE)
   endif()
 endif()
   target_include_directories(countly-sample PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/doctest/doctest)
-  target_include_directories(countly-sample PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include)
   target_link_libraries(countly-sample countly)
   set_target_properties(countly-sample PROPERTIES
     CXX_STANDARD 14
@@ -186,7 +200,36 @@ endif()
 endif()
 
 install(TARGETS countly
+  EXPORT countlyTargets
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
-  PUBLIC_HEADER DESTINATION include/countly)
+  PUBLIC_HEADER DESTINATION include/countly
+  INCLUDES DESTINATION include)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/countly.hpp DESTINATION include)
+# The installed headers include nlohmann/json.hpp, so the bundled copy ships with them
+if(NOT COUNTLY_USE_SYSTEM_JSON)
+  install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json/include/nlohmann DESTINATION include)
+endif()
+
+# The package config looks up only the dependencies this build links
+set(COUNTLY_CONFIG_DEPENDENCIES "find_dependency(Threads)")
+if(COUNTLY_USE_SYSTEM_JSON)
+  string(APPEND COUNTLY_CONFIG_DEPENDENCIES "\nfind_dependency(nlohmann_json 3.11)")
+endif()
+if(NOT COUNTLY_USE_CUSTOM_SHA256)
+  string(APPEND COUNTLY_CONFIG_DEPENDENCIES "\nfind_dependency(OpenSSL)")
+endif()
+if(NOT COUNTLY_USE_CUSTOM_HTTP AND NOT WIN32)
+  string(APPEND COUNTLY_CONFIG_DEPENDENCIES "\nfind_dependency(CURL)")
+endif()
+if(COUNTLY_USE_SQLITE AND COUNTLY_USE_SYSTEM_SQLITE)
+  string(APPEND COUNTLY_CONFIG_DEPENDENCIES "\nfind_dependency(SQLite3)")
+endif()
+include(CMakePackageConfigHelpers)
+configure_package_config_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/countlyConfig.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/countlyConfig.cmake
+  INSTALL_DESTINATION lib/cmake/countly)
+write_basic_package_version_file(${CMAKE_CURRENT_BINARY_DIR}/countlyConfigVersion.cmake COMPATIBILITY AnyNewerVersion)
+install(EXPORT countlyTargets NAMESPACE countly:: DESTINATION lib/cmake/countly)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/countlyConfig.cmake ${CMAKE_CURRENT_BINARY_DIR}/countlyConfigVersion.cmake
+  DESTINATION lib/cmake/countly)

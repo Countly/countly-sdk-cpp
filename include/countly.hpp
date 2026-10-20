@@ -130,8 +130,18 @@ public:
 
   void setMetrics(const std::string &os, const std::string &os_version, const std::string &device, const std::string &resolution, const std::string &carrier, const std::string &app_version);
 
+  /**
+   * Sets the user's details, such as name and email.
+   * Called before start(), the details are sent with the first session; after start(), they are sent right away.
+   * Details still waiting when the device ID changes without merge are sent for the previous device ID.
+   */
   void setUserDetails(const std::map<std::string, std::string> &value);
 
+  /**
+   * Sets the user's custom properties.
+   * Called before start(), the properties are sent with the first session; after start(), they are sent right away.
+   * Properties still waiting when the device ID changes without merge are sent for the previous device ID.
+   */
   void setCustomUserDetails(const std::map<std::string, std::string> &value);
 
   /*
@@ -268,15 +278,14 @@ public:
 
   std::string calculateChecksum(const std::string &salt, const std::string &data);
 
-#ifdef COUNTLY_USE_SQLITE
+  /**
+   * Sets the file in which the SDK keeps queued events and requests, so they survive app restarts. Call it before start().
+   * Only builds with COUNTLY_USE_SQLITE use the file; without a path, or when the file cannot be opened, they keep
+   * events and requests in memory instead. Builds without SQLite log a warning and ignore the path.
+   */
   void setDatabasePath(const std::string &path);
-#endif
 
-  void SetPath(const std::string &path) {
-#ifdef COUNTLY_USE_SQLITE
-    setDatabasePath(path);
-#endif
-  }
+  void SetPath(const std::string &path) { setDatabasePath(path); }
 
   void SetMetrics(const std::string &os, const std::string &os_version, const std::string &device, const std::string &resolution, const std::string &carrier, const std::string &app_version) { setMetrics(os, os_version, device, resolution, carrier, app_version); }
 
@@ -456,17 +465,21 @@ private:
   void _deleteThread();
   void _sendIndependantLocationRequest();
   void log(LogLevel level, const std::string &message);
-#ifdef COUNTLY_USE_SQLITE
   bool createEventTableSchema();
-#endif
 
   void _changeDeviceIdWithMerge(const std::string &value);
 
   void _changeDeviceIdWithoutMerge(const std::string &value);
 
-  std::chrono::system_clock::duration getSessionDuration(std::chrono::system_clock::time_point now);
+  /**
+   * Queues a request with the stored user details for the current device ID and drops the stored copy,
+   * so a later session does not send them again. The caller must hold the instance mutex.
+   */
+  void queueUserDetails();
 
-  std::chrono::system_clock::duration getSessionDuration();
+  std::chrono::steady_clock::duration getSessionDuration(std::chrono::steady_clock::time_point now);
+
+  std::chrono::steady_clock::duration getSessionDuration();
 
   void updateLoop();
   void packEvents();
@@ -474,7 +487,8 @@ private:
   std::atomic<bool> is_being_disposed{false};
   std::atomic<bool> is_sdk_initialized{false};
 
-  std::chrono::system_clock::time_point last_sent_session_request;
+  // steady_clock, so a system clock change can't distort the session duration
+  std::chrono::steady_clock::time_point last_sent_session_request;
   nlohmann::json session_params;
 
   std::unique_ptr<std::thread> thread;
@@ -506,14 +520,14 @@ private:
   size_t wait_milliseconds = COUNTLY_KEEPALIVE_INTERVAL;
 
   size_t max_events = COUNTLY_MAX_EVENTS_DEFAULT;
-#ifndef COUNTLY_USE_SQLITE
+  // Members are the same in every build, so code compiled without COUNTLY_USE_SQLITE still matches the library
   std::deque<std::string> event_queue;
-#else
   std::string database_path;
   // The normalized database path this instance has claimed in the process-wide
   // registry, empty when it holds no claim.
   std::string claimed_database_path;
-#endif
+  // Chosen in start(): true when this instance keeps its queues in the SQLite database
+  bool use_sqlite_storage = false;
 
   bool remote_config_enabled = false;
 };

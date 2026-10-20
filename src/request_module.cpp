@@ -48,6 +48,11 @@ public:
       _configuration->serverUrl.insert(0, "http://");
     }
 
+    const size_t scheme_length = use_https ? (sizeof("https://") - 1) : (sizeof("http://") - 1);
+    while (_configuration->serverUrl.size() > scheme_length && _configuration->serverUrl.back() == '/') {
+      _configuration->serverUrl.pop_back();
+    }
+
     if (_configuration->port <= 0) {
       _configuration->port = use_https ? 443 : 80;
     }
@@ -423,6 +428,9 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
 
     std::string full_url = full_url_stream.str();
     curl_easy_setopt(curl, CURLOPT_URL, full_url.c_str());
+    // Without these, a server that stops answering holds this request, and every request queued behind it, forever
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, static_cast<long>(COUNTLY_HTTP_CONNECT_TIMEOUT_SECONDS));
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(COUNTLY_HTTP_REQUEST_TIMEOUT_SECONDS));
 
     std::string body;
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, countly_curl_write_callback);

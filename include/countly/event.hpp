@@ -42,6 +42,8 @@ private:
   nlohmann::json object;
   bool timer_running;
   std::chrono::system_clock::time_point timestamp;
+  // steady_clock, so a system clock change can't distort the timed duration
+  std::chrono::steady_clock::time_point timer_start;
 };
 } // namespace cly
 #endif

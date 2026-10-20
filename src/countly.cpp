@@ -611,9 +611,7 @@ void Countly::setUserDetails(const std::map<std::string, std::string> &value) {
     lk.lock();
   }
 
-  std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"user_details", session_params["user_details"].dump()}};
-
-  requestModule->addRequestToQueue(data);
+  queueUserDetails();
 }
 
 void Countly::setCustomUserDetails(const std::map<std::string, std::string> &value) {
@@ -669,8 +667,13 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string> &val
     lk.lock();
   }
 
+  queueUserDetails();
+}
+
+void Countly::queueUserDetails() {
   std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"user_details", session_params["user_details"].dump()}};
   requestModule->addRequestToQueue(data);
+  session_params.erase("user_details");
 }
 
 #pragma region User location
@@ -821,6 +824,7 @@ void Countly::_changeDeviceIdWithMerge(const std::string &value) {
   session_params.erase("old_device_id");
 }
 
+/* Change device ID without merge after SDK has been initialized. Events and user details that are still waiting are sent for the old device ID first.*/
 void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
   log(LogLevel::DEBUG, "[Countly] _changeDeviceIdWithoutMerge, deviceId = [" + value + "]");
 
@@ -832,6 +836,9 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
 
   {
     std::lock_guard<std::mutex> lk(*mutex);
+    if (session_params.contains("user_details")) {
+      queueUserDetails();
+    }
     session_params["device_id"] = value;
     configuration->deviceId = value;
   }
@@ -855,21 +862,21 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 
 #ifdef COUNTLY_USE_SQLITE
   if (configuration->databasePath == "" || configuration->databasePath == " ") {
-    log(LogLevel::ERROR, "[Countly] start, Database path can not be empty or blank.");
-    return;
+    log(LogLevel::WARNING, "[Countly] start, No database path is set, so events and requests are kept in memory and are lost when the app closes. Call setDatabasePath() before start() to keep them.");
+  } else {
+    // One instance per database file. Two instances sharing one file would eat
+    // each other's queues, and because rows in the `events` table carry no
+    // app_key, one instance would pack the other's events into a request stamped
+    // with the wrong key.
+    const std::string normalized_database_path = cly::utils::normalizeDatabasePath(configuration->databasePath);
+    if (!registry().tryClaimPath(normalized_database_path)) {
+      log(LogLevel::ERROR, "[Countly] start, Database path '" + configuration->databasePath +
+                               "' is already in use by another Countly instance in this process. Note that stop() does not free the path: an instance keeps its claim until it is destroyed. SDK will not be initialized.");
+      return;
+    }
+    claimed_database_path = normalized_database_path;
+    use_sqlite_storage = true;
   }
-
-  // One instance per database file. Two instances sharing one file would eat
-  // each other's queues, and because rows in the `events` table carry no
-  // app_key, one instance would pack the other's events into a request stamped
-  // with the wrong key.
-  const std::string normalized_database_path = cly::utils::normalizeDatabasePath(configuration->databasePath);
-  if (!registry().tryClaimPath(normalized_database_path)) {
-    log(LogLevel::ERROR, "[Countly] start, Database path '" + configuration->databasePath +
-                             "' is already in use by another Countly instance in this process. Note that stop() does not free the path: an instance keeps its claim until it is destroyed. SDK will not be initialized.");
-    return;
-  }
-  claimed_database_path = normalized_database_path;
 #endif
 
   log(LogLevel::INFO, "[Countly] start, Initializing SDK");
@@ -912,12 +919,19 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 
   session_params["app_key"] = app_key;
 
-#ifdef COUNTLY_USE_SQLITE
-  storageModule.reset(new StorageModuleDB(configuration, logger));
-#else
-  storageModule.reset(new StorageModuleMemory(configuration, logger));
-#endif
-  storageModule->init();
+  if (use_sqlite_storage) {
+    storageModule.reset(new StorageModuleDB(configuration, logger));
+    storageModule->init();
+    if (!storageModule->isInitialized() || !createEventTableSchema()) {
+      log(LogLevel::ERROR, "[Countly] start, Could not open the database at path: '" + configuration->databasePath + "', so events and requests are kept in memory and are lost when the app closes. Please verify the path is valid and writable.");
+      releaseDatabasePathClaim();
+      use_sqlite_storage = false;
+    }
+  }
+  if (!use_sqlite_storage) {
+    storageModule.reset(new StorageModuleMemory(configuration, logger));
+    storageModule->init();
+  }
 
   requestBuilder.reset(new RequestBuilder(configuration, logger));
   requestModule.reset(new RequestModule(configuration, logger, requestBuilder, storageModule));
@@ -929,28 +943,13 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   views_module->setConfigurationProvider(configurationModule);
   crash_module->setConfigurationProvider(configurationModule);
 
-  bool result = true;
-#ifdef COUNTLY_USE_SQLITE
-  result = createEventTableSchema();
-  if (!result) {
-    log(LogLevel::ERROR, "[Countly] start, Failed to initialize database at path: '" + configuration->databasePath + "'. SDK will not be initialized. Please verify the path is valid and writable.");
-  }
-#endif
+  is_sdk_initialized = true; // after this point SDK is initialized.
 
-  is_sdk_initialized = result; // after this point SDK is initialized.
-  if (!is_sdk_initialized) {
-    log(LogLevel::ERROR, "[Countly] start, SDK initialization failed.");
-    releaseDatabasePathClaim();
-    return;
-  }
-
-  if (is_sdk_initialized) {
-    lk.unlock();
-    configurationModule->fetchConfigFromStorage();
-    configurationModule->fetchConfigFromServer(session_params);
-    configurationModule->startServerConfigUpdateTimer(session_params);
-    lk.lock();
-  }
+  lk.unlock();
+  configurationModule->fetchConfigFromStorage();
+  configurationModule->fetchConfigFromServer(session_params);
+  configurationModule->startServerConfigUpdateTimer(session_params);
+  lk.lock();
 
   if (!running) {
 
@@ -1138,11 +1137,11 @@ void Countly::addEvent(const cly::Event &event) {
   }
 
   std::unique_lock<std::mutex> lk(*mutex);
-#ifndef COUNTLY_USE_SQLITE
-  event_queue.push_back(filteredEvent.serialize());
-#else
-  addEventToSqlite(filteredEvent);
-#endif
+  if (use_sqlite_storage) {
+    addEventToSqlite(filteredEvent);
+  } else {
+    event_queue.push_back(filteredEvent.serialize());
+  }
   lk.unlock();
   checkAndSendEventToRQ();
 }
@@ -1158,30 +1157,30 @@ void Countly::checkAndSendEventToRQ() {
   // on a queued event or sendEventsToRQ throws; unlock/re-acquire around the
   // self-locking fillEventsIntoJson().
   std::unique_lock<std::mutex> lk(*mutex);
-#ifdef COUNTLY_USE_SQLITE
-  if (queueSize >= configurationModule->getEventQueueSizeLimit()) {
-    log(LogLevel::DEBUG, "[Countly] checkAndSendEventToRQ, Event queue threshold is reached");
-    std::string event_ids;
+  if (use_sqlite_storage) {
+    if (queueSize >= configurationModule->getEventQueueSizeLimit()) {
+      log(LogLevel::DEBUG, "[Countly] checkAndSendEventToRQ, Event queue threshold is reached");
+      std::string event_ids;
 
-    // fetch events up to the threshold from the database
-    lk.unlock();
-    fillEventsIntoJson(events, event_ids);
-    lk.lock();
-    // send them to request queue
-    sendEventsToRQ(events);
-    // remove them from database
-    removeEventWithId(event_ids);
-  }
-#else
-  if (queueSize >= configurationModule->getEventQueueSizeLimit()) {
-    log(LogLevel::WARNING, "[Countly] checkAndSendEventToRQ, Event queue is full, dropping the oldest event to insert a new one");
-    for (const auto &event_json : event_queue) {
-      events.push_back(nlohmann::json::parse(event_json));
+      // fetch events up to the threshold from the database
+      lk.unlock();
+      fillEventsIntoJson(events, event_ids);
+      lk.lock();
+      // send them to request queue
+      sendEventsToRQ(events);
+      // remove them from database
+      removeEventWithId(event_ids);
     }
-    sendEventsToRQ(events);
-    event_queue.clear();
+  } else {
+    if (queueSize >= configurationModule->getEventQueueSizeLimit()) {
+      log(LogLevel::WARNING, "[Countly] checkAndSendEventToRQ, Event queue is full, dropping the oldest event to insert a new one");
+      for (const auto &event_json : event_queue) {
+        events.push_back(nlohmann::json::parse(event_json));
+      }
+      sendEventsToRQ(events);
+      event_queue.clear();
+    }
   }
-#endif
 }
 
 void Countly::setMaxEvents(size_t value) {
@@ -1246,19 +1245,17 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
 
 bool Countly::attemptSessionUpdateEQ() {
   // return false if event queue is empty
-#ifndef COUNTLY_USE_SQLITE
-  {
+  if (use_sqlite_storage) {
+    int event_count = checkEQSize();
+    if (event_count <= 0) {
+      return false;
+    }
+  } else {
     std::lock_guard<std::mutex> lk(*mutex);
     if (event_queue.empty()) {
       return false;
     }
   }
-#else
-  int event_count = checkEQSize();
-  if (event_count <= 0) {
-    return false;
-  }
-#endif
   if (configuration->manualSessionControl == false) {
     return !updateSession();
   } else {
@@ -1268,13 +1265,13 @@ bool Countly::attemptSessionUpdateEQ() {
 }
 
 void Countly::clearEQInternal() {
-#ifndef COUNTLY_USE_SQLITE
-  // event_queue is guarded by mutex; the only caller (flushEvents) holds no lock here.
-  std::lock_guard<std::mutex> lk(*mutex);
-  event_queue.clear();
-#else
-  clearPersistentEQ();
-#endif
+  if (use_sqlite_storage) {
+    clearPersistentEQ();
+  } else {
+    // event_queue is guarded by mutex; the only caller (flushEvents) holds no lock here.
+    std::lock_guard<std::mutex> lk(*mutex);
+    event_queue.clear();
+  }
 }
 
 #ifdef COUNTLY_BUILD_TESTS
@@ -1282,39 +1279,40 @@ std::vector<std::string> Countly::debugReturnStateOfEQ() {
   try {
 
 #ifdef COUNTLY_USE_SQLITE
-    std::vector<std::string> v;
-    sqlite3 *database;
-    int return_value, row_count, column_count;
-    char **table;
-    char *error_message;
+    if (use_sqlite_storage) {
+      std::vector<std::string> v;
+      sqlite3 *database;
+      int return_value, row_count, column_count;
+      char **table;
+      char *error_message;
 
-    return_value = cly::utils::openDatabase(configuration->databasePath, &database);
-    if (return_value == SQLITE_OK) {
-      std::ostringstream sql_statement_stream;
-      sql_statement_stream << "SELECT * FROM events ORDER BY evtid ASC;";
-      std::string sql_statement = sql_statement_stream.str();
+      return_value = cly::utils::openDatabase(configuration->databasePath, &database);
+      if (return_value == SQLITE_OK) {
+        std::ostringstream sql_statement_stream;
+        sql_statement_stream << "SELECT * FROM events ORDER BY evtid ASC;";
+        std::string sql_statement = sql_statement_stream.str();
 
-      return_value = sqlite3_get_table(database, sql_statement.c_str(), &table, &row_count, &column_count, &error_message);
-      bool no_request = (row_count == 0);
-      if (return_value == SQLITE_OK && !no_request) {
+        return_value = sqlite3_get_table(database, sql_statement.c_str(), &table, &row_count, &column_count, &error_message);
+        bool no_request = (row_count == 0);
+        if (return_value == SQLITE_OK && !no_request) {
 
-        for (int event_index = 1; event_index < row_count + 1; event_index++) {
-          std::string rqstId = table[event_index * column_count];
-          std::string rqst = table[(event_index * column_count) + 1];
-          v.push_back(rqst);
+          for (int event_index = 1; event_index < row_count + 1; event_index++) {
+            std::string rqst = table[(event_index * column_count) + 1];
+            v.push_back(rqst);
+          }
+
+        } else if (return_value != SQLITE_OK) {
+          std::string error(error_message);
+          sqlite3_free(error_message);
         }
-
-      } else if (return_value != SQLITE_OK) {
-        std::string error(error_message);
-        sqlite3_free(error_message);
+        sqlite3_free_table(table);
       }
-      sqlite3_free_table(table);
+      sqlite3_close(database);
+      return v;
     }
-    sqlite3_close(database);
-#else
+#endif
     std::lock_guard<std::mutex> lk(*mutex);
     std::vector<std::string> v(event_queue.begin(), event_queue.end());
-#endif
     return v;
   } catch (const std::system_error &e) {
     std::ostringstream log_message;
@@ -1328,12 +1326,11 @@ std::vector<std::string> Countly::debugReturnStateOfEQ() {
 
 void Countly::debugInjectRawEvent(const std::string &raw) {
   std::lock_guard<std::mutex> lk(*mutex);
-#ifndef COUNTLY_USE_SQLITE
-  event_queue.push_back(raw);
-#else
-  (void)raw;
-  log(LogLevel::WARNING, "[Countly] debugInjectRawEvent, not supported in SQLite builds.");
-#endif
+  if (use_sqlite_storage) {
+    log(LogLevel::WARNING, "[Countly] debugInjectRawEvent, not supported with SQLite storage.");
+  } else {
+    event_queue.push_back(raw);
+  }
 }
 #endif
 
@@ -1389,7 +1386,7 @@ bool Countly::beginSession() {
 
   requestModule->addRequestToQueue(data);
   session_params.erase("user_details");
-  last_sent_session_request = Countly::getTimestamp();
+  last_sent_session_request = std::chrono::steady_clock::now();
   began_session = true;
   // snapshot guarded state before releasing the lock
   bool shouldUpdateRemoteConfig = remote_config_enabled;
@@ -1443,16 +1440,15 @@ bool Countly::updateSession() {
     lk.lock();
 
     if (!no_events) {
-#ifndef COUNTLY_USE_SQLITE
-      for (const auto &event_json : event_queue) {
-        events.push_back(nlohmann::json::parse(event_json));
+      if (use_sqlite_storage) {
+        lk.unlock();
+        fillEventsIntoJson(events, event_ids);
+        lk.lock();
+      } else {
+        for (const auto &event_json : event_queue) {
+          events.push_back(nlohmann::json::parse(event_json));
+        }
       }
-#else
-      // TODO: If database_path was empty there was return false here
-      lk.unlock();
-      fillEventsIntoJson(events, event_ids);
-      lk.lock();
-#endif
     } else {
       log(LogLevel::DEBUG, "[Countly] updateSession, EQ empty.");
     }
@@ -1476,14 +1472,14 @@ bool Countly::updateSession() {
 
 // clear event queue
 // TODO: check if we want to totally wipe the event queue in memory but not in database
-#ifndef COUNTLY_USE_SQLITE
-    event_queue.clear();
-#else
-    if (!event_ids.empty()) {
-      // this is a partial clearance, we only remove the events that were sent
-      removeEventWithId(event_ids);
+    if (use_sqlite_storage) {
+      if (!event_ids.empty()) {
+        // this is a partial clearance, we only remove the events that were sent
+        removeEventWithId(event_ids);
+      }
+    } else {
+      event_queue.clear();
     }
-#endif
   } catch (const std::system_error &e) {
     std::ostringstream log_message;
     log_message << "[Countly] updateSession, error: " << e.what();
@@ -1507,16 +1503,15 @@ void Countly::packEvents() {
     lk.lock();
 
     if (!no_events) {
-#ifndef COUNTLY_USE_SQLITE
-      for (const auto &event_json : event_queue) {
-        events.push_back(nlohmann::json::parse(event_json));
+      if (use_sqlite_storage) {
+        lk.unlock();
+        fillEventsIntoJson(events, event_ids);
+        lk.lock();
+      } else {
+        for (const auto &event_json : event_queue) {
+          events.push_back(nlohmann::json::parse(event_json));
+        }
       }
-#else
-      // TODO: If database_path was empty there was return false here
-      lk.unlock();
-      fillEventsIntoJson(events, event_ids);
-      lk.lock();
-#endif
     } else {
       log(LogLevel::DEBUG, "[Countly] packEvents, EQ empty.");
     }
@@ -1527,14 +1522,14 @@ void Countly::packEvents() {
 
 // clear event queue
 // TODO: check if we want to totally wipe the event queue in memory but not in database
-#ifndef COUNTLY_USE_SQLITE
-    event_queue.clear();
-#else
-    if (!event_ids.empty()) {
-      // this is a partial clearance, we only remove the events that were sent
-      removeEventWithId(event_ids);
+    if (use_sqlite_storage) {
+      if (!event_ids.empty()) {
+        // this is a partial clearance, we only remove the events that were sent
+        removeEventWithId(event_ids);
+      }
+    } else {
+      event_queue.clear();
     }
-#endif
   } catch (const std::system_error &e) {
     std::ostringstream log_message;
     log_message << "[Countly] packEvents, error: " << e.what();
@@ -1568,8 +1563,8 @@ bool Countly::endSession() {
     log(LogLevel::ERROR, "[Countly] endSession, Session tracking is disabled in server configuration, can not end session.");
     return false;
   }
-  const std::chrono::system_clock::time_point now = Countly::getTimestamp();
-  const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
+  const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(Countly::getTimestamp().time_since_epoch());
+  const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
 
   // lock_guard so the mutex is released on scope exit, including the early
   // returns below and any exception (e.g. a json type_error from a session_params
@@ -1620,11 +1615,7 @@ int Countly::checkEQSize() {
     return event_count;
   }
 
-#ifdef COUNTLY_USE_SQLITE
-  event_count = checkPersistentEQSize();
-#else
-  event_count = checkMemoryEQSize();
-#endif
+  event_count = use_sqlite_storage ? checkPersistentEQSize() : checkMemoryEQSize();
   return event_count;
 }
 
@@ -1645,7 +1636,6 @@ int Countly::checkRQSize() {
   return request_count;
 }
 
-#ifndef COUNTLY_USE_SQLITE
 int Countly::checkMemoryEQSize() {
   log(LogLevel::DEBUG, "[Countly] checkMemoryEQSize, Checking event queue size in memory.");
   // See checkEQSize(): locking here would deadlock a call made from inside the
@@ -1659,7 +1649,6 @@ int Countly::checkMemoryEQSize() {
   result = static_cast<int>(event_queue.size());
   return result;
 }
-#endif
 
 // Standalone Sqlite functions
 #ifdef COUNTLY_USE_SQLITE
@@ -1803,22 +1792,22 @@ void Countly::addEventToSqlite(const cly::Event &event) {
 
     sqlite3 *database;
     int return_value;
-    char *error_message;
 
     return_value = cly::utils::openDatabase(database_path, &database);
     if (return_value == SQLITE_OK) {
-      std::ostringstream sql_statement_stream;
-      // TODO Investigate if we need to escape single quotes in serialized event
-      sql_statement_stream << "INSERT INTO events (event) VALUES('" << event.serialize() << "');";
-      std::string sql_statement = sql_statement_stream.str();
-
-      return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
-      if (return_value != SQLITE_OK) {
+      const std::string serialized_event = event.serialize();
+      sqlite3_stmt *statement = nullptr;
+      return_value = sqlite3_prepare_v2(database, "INSERT INTO events (event) VALUES(?);", -1, &statement, nullptr);
+      if (return_value == SQLITE_OK) {
+        sqlite3_bind_text(statement, 1, serialized_event.c_str(), -1, SQLITE_TRANSIENT);
+        return_value = sqlite3_step(statement);
+      }
+      if (return_value != SQLITE_DONE) {
         // Say which operation failed: this event is being dropped, and a bare
         // "database is locked" gives no hint of what was lost.
-        log(LogLevel::ERROR, "[Countly] addEventToSqlite, Event was not stored, SQLite error: " + std::string(error_message));
-        sqlite3_free(error_message);
+        log(LogLevel::ERROR, "[Countly] addEventToSqlite, Event was not stored, SQLite error: " + std::string(sqlite3_errmsg(database)));
       }
+      sqlite3_finalize(statement);
     }
     sqlite3_close(database);
   } catch (const std::system_error &e) {
@@ -1898,6 +1887,27 @@ bool Countly::createEventTableSchema() {
     return false;
   }
 }
+#else
+// Builds without SQLite never choose SQLite storage, so these are never called
+int Countly::checkPersistentEQSize() { return -1; }
+
+void Countly::clearPersistentEQ() {}
+
+void Countly::removeEventWithId(const std::string &event_ids) { (void)event_ids; }
+
+void Countly::fillEventsIntoJson(nlohmann::json &events, std::string &event_ids) {
+  (void)events;
+  (void)event_ids;
+}
+
+void Countly::addEventToSqlite(const cly::Event &event) { (void)event; }
+
+bool Countly::createEventTableSchema() { return false; }
+
+void Countly::setDatabasePath(const std::string &path) {
+  (void)path;
+  log(LogLevel::WARNING, "[Countly] setDatabasePath, This build does not include SQLite storage (COUNTLY_USE_SQLITE), so the path is ignored and events and requests are kept in memory.");
+}
 #endif
 void Countly::log(LogLevel level, const std::string &message) { logger->log(cly::LogLevel(level), message); }
 
@@ -1933,13 +1943,13 @@ std::string Countly::calculateChecksum(const std::string &salt, const std::strin
 #endif
 }
 
-std::chrono::system_clock::duration Countly::getSessionDuration(std::chrono::system_clock::time_point now) {
+std::chrono::steady_clock::duration Countly::getSessionDuration(std::chrono::steady_clock::time_point now) {
   std::lock_guard<std::mutex> lk(*mutex);
-  std::chrono::system_clock::duration duration = now - last_sent_session_request;
+  std::chrono::steady_clock::duration duration = now - last_sent_session_request;
   return duration;
 }
 
-std::chrono::system_clock::duration Countly::getSessionDuration() { return Countly::getSessionDuration(Countly::getTimestamp()); }
+std::chrono::steady_clock::duration Countly::getSessionDuration() { return Countly::getSessionDuration(std::chrono::steady_clock::now()); }
 
 void Countly::updateLoop() {
   log(LogLevel::DEBUG, "[Countly][updateLoop]");
