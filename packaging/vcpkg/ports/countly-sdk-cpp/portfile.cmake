@@ -2,7 +2,7 @@ vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO Countly/countly-sdk-cpp
     REF "${VERSION}"
-    SHA512 0
+    SHA512 c7956e676ba90f442f00454c823be1239b583ce83235e7ba7aa73dc0885a1fc07bd7de0d903ca398039ff3e425fb3a23aaa736f9abf2778a2fea360ddd22f2b4
     HEAD_REF master
 )
 
