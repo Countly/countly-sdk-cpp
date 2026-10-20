@@ -1,0 +1,258 @@
+name: Package Managers
+
+on:
+  push:
+    branches: [master, staging]
+    paths:
+      - "CMakeLists.txt"
+      - "cmake/**"
+      - "include/**"
+      - "src/**"
+      - "packaging/**"
+      - ".github/package-check/**"
+      - ".github/workflows/packaging.yml"
+  pull_request:
+    branches: [master, staging]
+    paths:
+      - "CMakeLists.txt"
+      - "cmake/**"
+      - "include/**"
+      - "src/**"
+      - "packaging/**"
+      - ".github/package-check/**"
+      - ".github/workflows/packaging.yml"
+  workflow_dispatch:
+
+# A new push to the same branch/PR cancels the still-running previous run.
+concurrency:
+  group: packaging-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ──────────────────────────────────────────────
+  # The vcpkg port and the Conan recipe carry the
+  # SDK version, so they cannot ship with an old one.
+  # ──────────────────────────────────────────────
+  versions:
+    name: package-versions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Compare the package versions with COUNTLY_SDK_VERSION
+        run: |
+          version=$(sed -n 's/^#define COUNTLY_SDK_VERSION "\(.*\)"$/\1/p' include/countly/constants.hpp)
+          echo "SDK version: $version"
+          status=0
+          if ! grep -qF "\"version\": \"$version\"" packaging/vcpkg/ports/countly-sdk-cpp/vcpkg.json; then
+            echo "::error file=packaging/vcpkg/ports/countly-sdk-cpp/vcpkg.json::version is not $version"
+            status=1
+          fi
+          for file in packaging/conan/countly-sdk-cpp/config.yml packaging/conan/countly-sdk-cpp/all/conandata.yml; do
+            if ! grep -qxF "  \"$version\":" "$file"; then
+              echo "::error file=$file::no entry for $version"
+              status=1
+            fi
+          done
+          exit $status
+
+  # ──────────────────────────────────────────────
+  # vcpkg: the port builds from an archive of this
+  # commit, then an app uses it through vcpkg's CMake
+  # toolchain, without and with the sqlite feature.
+  # Android only builds: its binaries cannot run here.
+  # ──────────────────────────────────────────────
+  vcpkg:
+    name: vcpkg-${{ matrix.triplet }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            triplet: x64-linux
+            run-app: true
+          - os: windows-2022
+            triplet: x64-windows
+            run-app: true
+          - os: macos-15
+            triplet: arm64-osx
+            run-app: true
+          - os: ubuntu-24.04
+            triplet: arm64-android
+            run-app: false
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Pack this commit like a release and point the port at it
+        run: |
+          work=$RUNNER_TEMP
+          if command -v cygpath > /dev/null; then
+            work=$(cygpath -m "$work")
+          fi
+          echo "WORK=$work" >> "$GITHUB_ENV"
+          echo "VCPKG_ROOT=$work/vcpkg" >> "$GITHUB_ENV"
+          echo "VCPKG_BINARY_SOURCES=clear;files,$work/vcpkg-cache,readwrite" >> "$GITHUB_ENV"
+          mkdir -p "$work/vcpkg-cache" "$work/ports"
+
+          # git archive leaves the submodules out, as GitHub's release archives do
+          git archive --format=tar.gz --prefix=countly-sdk-cpp/ -o "$work/countly-sdk-cpp.tar.gz" HEAD
+          cp -r packaging/vcpkg/ports/countly-sdk-cpp "$work/ports/"
+          portfile="$work/ports/countly-sdk-cpp/portfile.cmake"
+          ARCHIVE="$work/countly-sdk-cpp.tar.gz" perl -0pi -e 's/vcpkg_from_github\(.*?\n\)\n/vcpkg_extract_source_archive(SOURCE_PATH ARCHIVE "$ENV{ARCHIVE}")\n/s' "$portfile"
+          if grep -q "vcpkg_from_github" "$portfile" || ! grep -q "vcpkg_extract_source_archive" "$portfile"; then
+            echo "::error file=packaging/vcpkg/ports/countly-sdk-cpp/portfile.cmake::could not point the port at the archive"
+            exit 1
+          fi
+
+      - name: Restore the vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/vcpkg-cache
+          key: vcpkg-${{ matrix.triplet }}-${{ github.run_id }}
+          restore-keys: vcpkg-${{ matrix.triplet }}-
+
+      - name: Point vcpkg at the Android NDK
+        if: contains(matrix.triplet, 'android')
+        run: echo "ANDROID_NDK_HOME=${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}" >> "$GITHUB_ENV"
+
+      - name: Set up vcpkg
+        run: git clone --depth 1 https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+
+      - name: Bootstrap vcpkg (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: '& "$env:VCPKG_ROOT/bootstrap-vcpkg.bat" -disableMetrics'
+
+      - name: Bootstrap vcpkg (Linux and macOS)
+        if: runner.os != 'Windows'
+        run: '"$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics'
+
+      - name: Install the port
+        run: '"$VCPKG_ROOT/vcpkg" install countly-sdk-cpp --overlay-ports="$WORK/ports" --triplet ${{ matrix.triplet }}'
+
+      - name: Build and run an app with the port
+        if: matrix.run-app
+        run: |
+          cmake -S .github/package-check -B "$WORK/app" -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} -DCMAKE_BUILD_TYPE=Release
+          cmake --build "$WORK/app" --config Release
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            "$WORK/app/Release/app.exe"
+          else
+            "$WORK/app/app"
+          fi
+
+      - name: Install the port with the sqlite feature
+        run: '"$VCPKG_ROOT/vcpkg" install "countly-sdk-cpp[sqlite]" --recurse --overlay-ports="$WORK/ports" --triplet ${{ matrix.triplet }}'
+
+      - name: Build and run an app with the sqlite feature
+        if: matrix.run-app
+        run: |
+          cmake -S .github/package-check -B "$WORK/app-sqlite" -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} -DCMAKE_BUILD_TYPE=Release -DEXPECT_COUNTLY_SQLITE=ON
+          cmake --build "$WORK/app-sqlite" --config Release
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            "$WORK/app-sqlite/Release/app.exe"
+          else
+            "$WORK/app-sqlite/app"
+          fi
+
+      # vcpkg features must be additive: turning on sqlite must not break an app that never sets a database path
+      - name: Build and run an app that sets no database path with the sqlite feature
+        if: matrix.run-app
+        run: |
+          cmake -S .github/package-check -B "$WORK/app-sqlite-no-path" -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} -DCMAKE_BUILD_TYPE=Release
+          cmake --build "$WORK/app-sqlite-no-path" --config Release
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            "$WORK/app-sqlite-no-path/Release/app.exe"
+          else
+            "$WORK/app-sqlite-no-path/app"
+          fi
+
+  # ──────────────────────────────────────────────
+  # Conan: the recipe builds from an archive of this
+  # commit and its test_package runs, without and with
+  # SQLite and as shared libraries, like ConanCenter's
+  # own builds; an app then uses the SQLite package.
+  # ──────────────────────────────────────────────
+  conan:
+    name: conan-${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-15]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Conan
+        run: |
+          pip install "conan>=2,<3"
+          conan profile detect --force
+
+      - name: Restore the Conan package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2/p
+          key: conan-${{ matrix.os }}-${{ github.run_id }}
+          restore-keys: conan-${{ matrix.os }}-
+
+      - name: Pack this commit like a release and point the recipe at it
+        run: |
+          work=$RUNNER_TEMP
+          if command -v cygpath > /dev/null; then
+            work=$(cygpath -m "$work")
+          fi
+          version=$(sed -n 's/^#define COUNTLY_SDK_VERSION "\(.*\)"$/\1/p' include/countly/constants.hpp)
+          echo "WORK=$work" >> "$GITHUB_ENV"
+          echo "COUNTLY_VERSION=$version" >> "$GITHUB_ENV"
+
+          # git archive leaves the submodules out, as GitHub's release archives do
+          git archive --format=tar.gz --prefix=countly-sdk-cpp/ -o "$work/countly-sdk-cpp.tar.gz" HEAD
+          sha256=$(sha256sum "$work/countly-sdk-cpp.tar.gz" | cut -d ' ' -f 1)
+          cp -r packaging/conan/countly-sdk-cpp/all "$work/recipe"
+          printf 'sources:\n  "%s":\n    url: "file:///%s"\n    sha256: "%s"\n' "$version" "${work#/}/countly-sdk-cpp.tar.gz" "$sha256" > "$work/recipe/conandata.yml"
+          cat "$work/recipe/conandata.yml"
+
+      - name: Create the package
+        run: conan create "$WORK/recipe" --version "$COUNTLY_VERSION" --build=missing
+
+      - name: Create the package with SQLite
+        run: conan create "$WORK/recipe" --version "$COUNTLY_VERSION" --build=missing -o "countly-sdk-cpp/*:with_sqlite=True"
+
+      - name: Create the package as shared libraries
+        run: conan create "$WORK/recipe" --version "$COUNTLY_VERSION" --build=missing -o "*:shared=True"
+
+      - name: Build and run an app with the SQLite package
+        run: |
+          conan install --requires="countly-sdk-cpp/$COUNTLY_VERSION" -o "countly-sdk-cpp/*:with_sqlite=True" -g CMakeDeps -g CMakeToolchain --output-folder="$WORK/app-deps"
+          cmake -S .github/package-check -B "$WORK/app" -DCMAKE_TOOLCHAIN_FILE="$WORK/app-deps/conan_toolchain.cmake" -DCMAKE_BUILD_TYPE=Release -DEXPECT_COUNTLY_SQLITE=ON
+          cmake --build "$WORK/app" --config Release
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            "$WORK/app/Release/app.exe"
+          else
+            "$WORK/app/app"
+          fi
+
+      # Keeps the saved cache to built packages, without sources and build folders
+      - name: Trim the Conan cache
+        run: conan cache clean "*"

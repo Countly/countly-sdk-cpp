@@ -218,4 +218,44 @@ TEST_CASE("Validate setting configuration values") {
     CHECK(config.metrics["_resolution"] == "800x600");
     CHECK(config.metrics["_device"] == "pc");
   }
+
+  // The server URL is joined with the port and the request path, so trailing slashes are not kept
+  SUBCASE("Validating that the server URL is stored without trailing slashes") {
+    const std::vector<std::pair<std::string, std::string>> server_urls = {
+        {"https://try.count.ly/", "https://try.count.ly"},
+        {"https://try.count.ly//", "https://try.count.ly"},
+        {"try.count.ly/", "http://try.count.ly"},
+        {"https://try.count.ly", "https://try.count.ly"},
+    };
+
+    for (const std::pair<std::string, std::string> &server_url : server_urls) {
+      clearSDK();
+      Countly &ct = Countly::getInstance();
+      ct.setHTTPClient(customClient);
+      ct.setDeviceID("test-device-id");
+      ct.SetPath(TEST_DATABASE_NAME);
+      ct.start("YOUR_APP_KEY", server_url.first, 443, false);
+
+      CHECK(ct.getConfiguration().serverUrl == server_url.second);
+    }
+  }
 }
+
+#ifndef COUNTLY_USE_SQLITE
+TEST_CASE("setDatabasePath is accepted and ignored in builds without SQLite") {
+  clearSDK();
+  clearCapturedLogs();
+  Countly &ct = Countly::getInstance();
+  ct.setLogger(captureLog);
+  ct.setHTTPClient(customClient);
+
+  ct.setDatabasePath(TEST_DATABASE_NAME);
+  CHECK(capturedLogContains("does not include SQLite storage"));
+
+  ct.setDeviceID("test-device-id");
+  ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, false);
+  CHECK(ct.checkEQSize() == 0);
+  CHECK(ct.getConfiguration().databasePath.empty());
+  ct.setLogger(nullptr);
+}
+#endif

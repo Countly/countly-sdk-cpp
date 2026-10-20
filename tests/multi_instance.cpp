@@ -445,20 +445,20 @@ TEST_CASE("halt releases the default instance's path claim") {
   CHECK(cly::Countly::debugClaimedPathCount() == 0);
 }
 
-TEST_CASE("a failed initialisation leaves no stale path claim") {
+TEST_CASE("an instance without a usable database leaves no stale path claim") {
   clearSDK();
   const size_t before = cly::Countly::debugClaimedPathCount();
 
-  // Blank path: refused before any claim is made.
+  // Blank path: no claim is made, and the instance keeps its queues in memory.
   std::shared_ptr<cly::Countly> blank = startInstanceAt("APP_KEY_A", "");
-  CHECK(blank->checkEQSize() == -1);
+  CHECK(blank->checkEQSize() == 0);
   CHECK(cly::Countly::debugClaimedPathCount() == before);
   blank.reset();
 
-  // Unwritable path: the claim is taken, then the schema creation fails, so the
-  // claim must be given back.
+  // Unwritable path: the claim is taken, then opening the database fails, so the
+  // claim must be given back before the instance falls back to memory.
   std::shared_ptr<cly::Countly> bad = startInstanceAt("APP_KEY_A", "mi-no-such-dir/x.db");
-  CHECK(bad->checkEQSize() == -1);
+  CHECK(bad->checkEQSize() == 0);
   CHECK(cly::Countly::debugClaimedPathCount() == before);
   bad.reset();
 }

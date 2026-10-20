@@ -19,7 +19,7 @@ static_assert(NLOHMANN_JSON_VERSION_MAJOR == 3 && NLOHMANN_JSON_VERSION_MINOR >=
 #include <thread>
 
 #define COUNTLY_SDK_NAME "cpp-native-unknown"
-#define COUNTLY_SDK_VERSION "26.8.0"
+#define COUNTLY_SDK_VERSION "26.8.1"
 #define COUNTLY_POST_THRESHOLD 2000
 #define COUNTLY_KEEPALIVE_INTERVAL 3000
 #define COUNTLY_MAX_EVENTS_DEFAULT 200
@@ -30,6 +30,8 @@ static_assert(NLOHMANN_JSON_VERSION_MAJOR == 3 && NLOHMANN_JSON_VERSION_MINOR >=
 #define COUNTLY_MAX_STACK_TRACE_LINES_PER_THREAD_DEFAULT 30
 #define COUNTLY_MAX_STACK_TRACE_LINE_LENGTH_DEFAULT 200
 #define COUNTLY_MAX_VALUE_SIZE_PICTURE 4096
+#define COUNTLY_HTTP_CONNECT_TIMEOUT_SECONDS 10
+#define COUNTLY_HTTP_REQUEST_TIMEOUT_SECONDS 30
 
 namespace cly {
 struct HTTPResponse {
@@ -40,6 +42,14 @@ struct HTTPResponse {
 using HTTPClientFunction = std::function<HTTPResponse(bool, const std::string &, const std::string &)>;
 using SHA256Function = std::function<std::string(const std::string &)>;
 namespace utils {
+
+/**
+ * Returns a message that has no arguments to format, without passing it through printf.
+ *
+ * @param format message without format arguments
+ * @return the message unchanged
+ */
+static std::string format_string(const std::string &format) { return format; }
 
 /**
  * Formats the given arguments into a string buffer.

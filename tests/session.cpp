@@ -191,6 +191,24 @@ TEST_CASE("event request unit tests") {
     nlohmann::json events = nlohmann::json::parse(http_call.data["events"]);
     CHECK(events.size() == 100);
   }
+
+  SUBCASE("event with single quotes in its key and segmentation is sent unchanged") {
+    cly::Event event("Player's profile", 1);
+    event.addSegmentation("name", "O'Brien");
+    event.addSegmentation("note", "it''s");
+    countly.addEvent(event);
+    REQUIRE(countly.checkEQSize() == 1);
+
+    countly.updateSession();
+    countly.processRQDebug();
+    HTTPCall http_call = popHTTPCall();
+
+    nlohmann::json events = nlohmann::json::parse(http_call.data["events"]);
+    REQUIRE(events.size() == 1);
+    CHECK(events[0]["key"].get<std::string>() == "Player's profile");
+    CHECK(events[0]["segmentation"]["name"].get<std::string>() == "O'Brien");
+    CHECK(events[0]["segmentation"]["note"].get<std::string>() == "it''s");
+  }
 }
 
 /**
@@ -235,4 +253,110 @@ TEST_CASE("concurrent endSession calls end the session only once") {
   // to end), but exactly one end_session request may be queued.
   CHECK(ended.load() == 4);
   CHECK(countly.checkRQSize() == rq_before + 1);
+}
+
+/**
+ * Returns the captured requests sent for the given device ID that carry the given parameter.
+ */
+static std::vector<HTTPCall> callsFor(const std::string &device_id, const std::string &parameter) {
+  std::vector<HTTPCall> calls;
+  for (size_t index = 0; index < http_call_queue.size(); index++) {
+    HTTPCall call = http_call_queue.at(index);
+    std::map<std::string, std::string>::const_iterator device = call.data.find("device_id");
+    if (device != call.data.end() && device->second == device_id && call.data.find(parameter) != call.data.end()) {
+      calls.push_back(call);
+    }
+  }
+  return calls;
+}
+
+/**
+ * User details set after start() used to stay stored for the next session, so after a
+ * device ID change without merge the new user's first session carried the previous
+ * user's details.
+ */
+TEST_CASE("user details are sent only for the device ID they were set for") {
+  clearSDK();
+  Countly &countly = Countly::getInstance();
+  const std::string second_device_id = "second-user-device";
+
+  SUBCASE("details set after start are not sent with the next user's session") {
+    test_utils::initCountlyWithFakeNetworking(true, countly);
+
+    countly.setUserDetails({{"name", "First User"}});
+    countly.setCustomUserDetails({{"plan", "gold"}});
+    countly.setDeviceID(second_device_id, false);
+    countly.processRQDebug();
+
+    std::vector<HTTPCall> first_user_details = callsFor(COUNTLY_TEST_DEVICE_ID, "user_details");
+    REQUIRE(first_user_details.size() == 2);
+    CHECK(nlohmann::json::parse(first_user_details[0].data["user_details"]) == nlohmann::json({{"name", "First User"}}));
+    CHECK(nlohmann::json::parse(first_user_details[1].data["user_details"]) == nlohmann::json({{"custom", {{"plan", "gold"}}}}));
+
+    CHECK(callsFor(second_device_id, "begin_session").size() == 1);
+    CHECK(callsFor(second_device_id, "user_details").empty());
+  }
+
+  SUBCASE("details set after start are not sent with a session the app begins for the next user") {
+    countly.enableManualSessionControl();
+    test_utils::initCountlyWithFakeNetworking(true, countly);
+
+    countly.setUserDetails({{"name", "First User"}});
+    countly.setDeviceID(second_device_id, false);
+    countly.beginSession();
+    countly.processRQDebug();
+
+    CHECK(callsFor(COUNTLY_TEST_DEVICE_ID, "user_details").size() == 1);
+    CHECK(callsFor(second_device_id, "begin_session").size() == 1);
+    CHECK(callsFor(second_device_id, "user_details").empty());
+  }
+
+  SUBCASE("details set before start are sent with the first session only") {
+    countly.setUserDetails({{"name", "First User"}});
+    test_utils::initCountlyWithFakeNetworking(false, countly);
+
+    countly.setDeviceID(second_device_id, false);
+    countly.processRQDebug();
+
+    std::vector<HTTPCall> first_user_sessions = callsFor(COUNTLY_TEST_DEVICE_ID, "begin_session");
+    REQUIRE(first_user_sessions.size() == 1);
+    REQUIRE(first_user_sessions[0].data.find("user_details") != first_user_sessions[0].data.end());
+    CHECK(nlohmann::json::parse(first_user_sessions[0].data["user_details"]) == nlohmann::json({{"name", "First User"}}));
+
+    CHECK(callsFor(second_device_id, "begin_session").size() == 1);
+    CHECK(callsFor(second_device_id, "user_details").empty());
+  }
+
+  SUBCASE("details still waiting for the first session are sent for the first user when the user changes") {
+    countly.enableManualSessionControl();
+    countly.setUserDetails({{"name", "First User"}});
+    test_utils::initCountlyWithFakeNetworking(true, countly);
+
+    countly.setDeviceID(second_device_id, false);
+    countly.beginSession();
+    countly.processRQDebug();
+
+    std::vector<HTTPCall> first_user_details = callsFor(COUNTLY_TEST_DEVICE_ID, "user_details");
+    REQUIRE(first_user_details.size() == 1);
+    CHECK(nlohmann::json::parse(first_user_details[0].data["user_details"]) == nlohmann::json({{"name", "First User"}}));
+
+    CHECK(callsFor(second_device_id, "begin_session").size() == 1);
+    CHECK(callsFor(second_device_id, "user_details").empty());
+  }
+
+  SUBCASE("details still waiting for the first session go with it after a device ID change with merge") {
+    countly.enableManualSessionControl();
+    countly.setUserDetails({{"name", "First User"}});
+    test_utils::initCountlyWithFakeNetworking(true, countly);
+
+    countly.setDeviceID(second_device_id, true);
+    countly.beginSession();
+    countly.processRQDebug();
+
+    CHECK(callsFor(COUNTLY_TEST_DEVICE_ID, "user_details").empty());
+    std::vector<HTTPCall> merged_user_sessions = callsFor(second_device_id, "begin_session");
+    REQUIRE(merged_user_sessions.size() == 1);
+    REQUIRE(merged_user_sessions[0].data.find("user_details") != merged_user_sessions[0].data.end());
+    CHECK(nlohmann::json::parse(merged_user_sessions[0].data["user_details"]) == nlohmann::json({{"name", "First User"}}));
+  }
 }

@@ -6,6 +6,8 @@
 #include "nlohmann/json.hpp"
 #include <cstdio>
 #include <mutex>
+#include <string>
+#include <vector>
 
 using namespace cly;
 
@@ -39,6 +41,40 @@ struct ThreadSafeHTTPCallQueue {
 };
 
 static ThreadSafeHTTPCallQueue http_call_queue;
+
+// Countly::setLogger takes a plain function pointer, so captured messages live in these statics.
+static std::mutex captured_log_mutex;
+static std::vector<std::string> captured_log_messages;
+
+/**
+ * Logger that keeps every message, for tests that assert what the SDK logged.
+ */
+static void captureLog(LogLevel level, const std::string &message) {
+  (void)level;
+  std::lock_guard<std::mutex> lock(captured_log_mutex);
+  captured_log_messages.push_back(message);
+}
+
+/**
+ * Forgets the messages captured so far.
+ */
+static void clearCapturedLogs() {
+  std::lock_guard<std::mutex> lock(captured_log_mutex);
+  captured_log_messages.clear();
+}
+
+/**
+ * Whether any captured message contains the given text.
+ */
+static bool capturedLogContains(const std::string &text) {
+  std::lock_guard<std::mutex> lock(captured_log_mutex);
+  for (const std::string &message : captured_log_messages) {
+    if (message.find(text) != std::string::npos) {
+      return true;
+    }
+  }
+  return false;
+}
 
 static void clearSDK() {
   cly::Countly::halt();

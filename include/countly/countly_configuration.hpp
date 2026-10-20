@@ -28,11 +28,9 @@ struct CountlyConfiguration {
   std::string salt;
 
   /**
-   * Path to the database.
+   * Path to the database. Only builds with COUNTLY_USE_SQLITE use it.
    */
-#ifdef COUNTLY_USE_SQLITE
   std::string databasePath;
-#endif
 
   /**
    * Sets the interval for the automatic update calls

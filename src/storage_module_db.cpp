@@ -342,22 +342,25 @@ void StorageModuleDB::RQInsertAtEnd(const std::string &request) {
     // Initializes variables for working with SQLite
     sqlite3 *database;
     int return_value;
-    char *error_message;
 
     // Opens the database connection
     return_value = cly::utils::openDatabase(_configuration->databasePath, &database);
     if (return_value == SQLITE_OK) {
       // Prepares the SQL statement for inserting the request into the database
       std::ostringstream sql_statement_stream;
-      sql_statement_stream << "INSERT INTO " << REQUESTS_TABLE_NAME << " (" << REQUESTS_TABLE_REQUEST_DATA << ") VALUES('" << request << "');";
+      sql_statement_stream << "INSERT INTO " << REQUESTS_TABLE_NAME << " (" << REQUESTS_TABLE_REQUEST_DATA << ") VALUES(?);";
       std::string sql_statement = sql_statement_stream.str();
 
-      return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
-      if (return_value != SQLITE_OK) {
-        std::string error(error_message);
-        _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQInsertAtEnd, error = " + error);
-        sqlite3_free(error_message);
+      sqlite3_stmt *statement = nullptr;
+      return_value = sqlite3_prepare_v2(database, sql_statement.c_str(), -1, &statement, nullptr);
+      if (return_value == SQLITE_OK) {
+        sqlite3_bind_text(statement, 1, request.c_str(), -1, SQLITE_TRANSIENT);
+        return_value = sqlite3_step(statement);
       }
+      if (return_value != SQLITE_DONE) {
+        _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQInsertAtEnd, error = " + std::string(sqlite3_errmsg(database)));
+      }
+      sqlite3_finalize(statement);
     }
     // Closes the database connection
     sqlite3_close(database);
