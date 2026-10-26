@@ -152,7 +152,8 @@ if(COUNTLY_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/sbs.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/internal_limits.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/internal_limits_integration.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/multi_instance.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/multi_instance.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/user_details.cpp)
     
     target_compile_options(countly-tests PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-g>)
     target_compile_definitions(countly-tests PRIVATE COUNTLY_BUILD_TESTS)

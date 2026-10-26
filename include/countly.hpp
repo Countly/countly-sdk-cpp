@@ -144,6 +144,14 @@ public:
    */
   void setCustomUserDetails(const std::map<std::string, std::string> &value);
 
+  /**
+   * Multiplies the numeric value of the user's custom property 'key' by 'value' on the server.
+   * Call it after start(): each call queues its own request, after any user details still waiting
+   * for the first session. A call before start(), an empty key, or a value that is not a finite
+   * number is ignored and logged.
+   */
+  void multiplyCustomUserDetail(const std::string &key, double value);
+
   /*
   setCountry is deprecated, please use void `setLocation(const std::string& countryCode, const std::string& city, const std::string& gpsCoordinates, const std::string& ipAddress)` function instead.
   */
@@ -476,6 +484,11 @@ private:
    * so a later session does not send them again. The caller must hold the instance mutex.
    */
   void queueUserDetails();
+
+  /**
+   * Queues a request with the given user details for the current device ID. The caller must hold the instance mutex.
+   */
+  void queueUserDetails(const nlohmann::json &userDetails);
 
   std::chrono::steady_clock::duration getSessionDuration(std::chrono::steady_clock::time_point now);
 
