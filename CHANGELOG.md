@@ -1,3 +1,6 @@
+## XX.XX.XX
+- Added `multiplyCustomUserDetail` for multiplying the numeric value of a custom user property on the server.
+
 ## 26.8.1
 - ! Minor breaking change ! Builds now stop with a clear error when the SDK headers find a nlohmann/json older than 3.11 first on the include path, instead of mixing two versions of the library.
 
