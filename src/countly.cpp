@@ -107,9 +107,9 @@ void runRemoteConfigFetch(std::shared_ptr<RemoteConfigFetch> fetch) {
 }
 
 /**
- * Whether the SDK behavior settings user property filter lets the custom property 'key' through.
+ * Whether an SDK behavior settings blacklist or whitelist lets 'key' through. An empty list lets every key through.
  */
-bool isUserPropertyAllowed(const FilterList<std::set<std::string>> &filter, const std::string &key) {
+bool isAllowedByFilter(const FilterList<std::set<std::string>> &filter, const std::string &key) {
   if (filter.filterList.empty()) {
     return true;
   }
@@ -640,18 +640,14 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string> &val
   if (configurationModule) {
     lim = configurationModule->getLimits();
     auto upFilter = configurationModule->getUserPropertyFilterList();
-    if (!upFilter.filterList.empty()) {
-      for (const auto &kv : value) {
-        if (isUserPropertyAllowed(upFilter, kv.first)) {
-          customValue[kv.first] = kv.second;
-        }
+    for (const auto &kv : value) {
+      if (isAllowedByFilter(upFilter, kv.first)) {
+        customValue[kv.first] = kv.second;
       }
-      if (customValue.empty()) {
-        log(LogLevel::DEBUG, "[Countly] setCustomUserDetails, All user properties were filtered out by SBS user property filter.");
-        return;
-      }
-    } else {
-      customValue = value;
+    }
+    if (customValue.empty() && !upFilter.filterList.empty()) {
+      log(LogLevel::DEBUG, "[Countly] setCustomUserDetails, All user properties were filtered out by SBS user property filter.");
+      return;
     }
   } else {
     customValue = value;
@@ -693,7 +689,7 @@ void Countly::multiplyCustomUserDetail(const std::string &key, double value) {
     log(LogLevel::WARNING, "[Countly] multiplyCustomUserDetail, The parameter 'key' can't be empty. Returning.");
     return;
   }
-  if (!isUserPropertyAllowed(configurationModule->getUserPropertyFilterList(), key)) {
+  if (!isAllowedByFilter(configurationModule->getUserPropertyFilterList(), key)) {
     log(LogLevel::DEBUG, "[Countly] multiplyCustomUserDetail, User property filtered out by SBS user property filter: [" + key + "]");
     return;
   }
@@ -1116,20 +1112,9 @@ void Countly::addEvent(const cly::Event &event) {
   }
 
   // Apply event filter (only for custom events)
-  if (!isInternalEvent) {
-    auto filter = configurationModule->getEventFilterList();
-    if (!filter.filterList.empty()) {
-      bool blocked = false;
-      if (filter.isWhitelist) {
-        blocked = (filter.filterList.find(eventKey) == filter.filterList.end());
-      } else {
-        blocked = (filter.filterList.find(eventKey) != filter.filterList.end());
-      }
-      if (blocked) {
-        log(LogLevel::DEBUG, "[Countly] addEvent, event filtered out by SBS event filter: [" + eventKey + "]");
-        return;
-      }
-    }
+  if (!isInternalEvent && !isAllowedByFilter(configurationModule->getEventFilterList(), eventKey)) {
+    log(LogLevel::DEBUG, "[Countly] addEvent, event filtered out by SBS event filter: [" + eventKey + "]");
+    return;
   }
 
   // Copy the event so we can apply segmentation filters without modifying the caller's object

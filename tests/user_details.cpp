@@ -248,6 +248,18 @@ TEST_CASE("multiplyCustomUserDetail follows the SDK behavior settings") {
     CHECK(json::parse(popRequest().data["user_details"]) == multiplied("lon", 2));
   }
 
+  SUBCASE("the user property filter matches the key as given, before it is truncated") {
+    clearSDK();
+    Countly &countly = Countly::getInstance();
+    startForUserDetails(countly, {{"upw", json::array({"longkey"})}, {"lkl", 3}});
+
+    countly.multiplyCustomUserDetail("longkey", 2);
+    countly.processRQDebug();
+
+    REQUIRE(http_call_queue.size() == 1);
+    CHECK(json::parse(popRequest().data["user_details"]) == multiplied("lon", 2));
+  }
+
   SUBCASE("a key the maximum key length cuts down to nothing is not sent") {
     clearSDK();
     Countly &countly = Countly::getInstance();
