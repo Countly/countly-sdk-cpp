@@ -3,6 +3,7 @@
 #include "countly/storage_module_db.hpp"
 #include "countly/storage_module_memory.hpp"
 #include <chrono>
+#include <cmath>
 #include <iomanip>
 #include <iostream>
 #include <set>
@@ -103,6 +104,20 @@ void runRemoteConfigFetch(std::shared_ptr<RemoteConfigFetch> fetch) {
   } else {
     fetch->store->values = response.data;
   }
+}
+
+/**
+ * Whether an SDK behavior settings blacklist or whitelist lets 'key' through. An empty list lets every key through.
+ */
+bool isAllowedByFilter(const FilterList<std::set<std::string>> &filter, const std::string &key) {
+  if (filter.filterList.empty()) {
+    return true;
+  }
+  bool listed = filter.filterList.find(key) != filter.filterList.end();
+  if (filter.isWhitelist) {
+    return listed;
+  }
+  return !listed;
 }
 } // namespace
 
@@ -625,24 +640,14 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string> &val
   if (configurationModule) {
     lim = configurationModule->getLimits();
     auto upFilter = configurationModule->getUserPropertyFilterList();
-    if (!upFilter.filterList.empty()) {
-      for (const auto &kv : value) {
-        bool allowed;
-        if (upFilter.isWhitelist) {
-          allowed = (upFilter.filterList.find(kv.first) != upFilter.filterList.end());
-        } else {
-          allowed = (upFilter.filterList.find(kv.first) == upFilter.filterList.end());
-        }
-        if (allowed) {
-          customValue[kv.first] = kv.second;
-        }
+    for (const auto &kv : value) {
+      if (isAllowedByFilter(upFilter, kv.first)) {
+        customValue[kv.first] = kv.second;
       }
-      if (customValue.empty()) {
-        log(LogLevel::DEBUG, "[Countly] setCustomUserDetails, All user properties were filtered out by SBS user property filter.");
-        return;
-      }
-    } else {
-      customValue = value;
+    }
+    if (customValue.empty() && !upFilter.filterList.empty()) {
+      log(LogLevel::DEBUG, "[Countly] setCustomUserDetails, All user properties were filtered out by SBS user property filter.");
+      return;
     }
   } else {
     customValue = value;
@@ -670,10 +675,45 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string> &val
   queueUserDetails();
 }
 
+void Countly::multiplyCustomUserDetail(const std::string &key, double value) {
+  if (!is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] multiplyCustomUserDetail, SDK is not initialized.");
+    return;
+  }
+  if (!std::isfinite(value)) {
+    log(LogLevel::WARNING, "[Countly] multiplyCustomUserDetail, The parameter 'value' must be a finite number. Returning.");
+    return;
+  }
+  const std::string truncatedKey = cly::limits::truncateString(key, configurationModule->getLimits().maxKeyLength);
+  if (truncatedKey.empty()) {
+    log(LogLevel::WARNING, "[Countly] multiplyCustomUserDetail, The parameter 'key' can't be empty. Returning.");
+    return;
+  }
+  if (!isAllowedByFilter(configurationModule->getUserPropertyFilterList(), key)) {
+    log(LogLevel::DEBUG, "[Countly] multiplyCustomUserDetail, User property filtered out by SBS user property filter: [" + key + "]");
+    return;
+  }
+
+  if (configuration->autoEventsOnUserProperties == true) {
+    flushEvents();
+  }
+
+  std::lock_guard<std::mutex> lk(*mutex);
+  // Details set before start() and still waiting for the first session go first, so the server applies them before the multiplication.
+  if (session_params.contains("user_details")) {
+    queueUserDetails();
+  }
+  queueUserDetails({{"custom", {{truncatedKey, {{"$mul", value}}}}}});
+}
+
 void Countly::queueUserDetails() {
-  std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"user_details", session_params["user_details"].dump()}};
-  requestModule->addRequestToQueue(data);
+  queueUserDetails(session_params["user_details"]);
   session_params.erase("user_details");
+}
+
+void Countly::queueUserDetails(const nlohmann::json &userDetails) {
+  std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"user_details", userDetails.dump()}};
+  requestModule->addRequestToQueue(data);
 }
 
 #pragma region User location
@@ -1072,20 +1112,9 @@ void Countly::addEvent(const cly::Event &event) {
   }
 
   // Apply event filter (only for custom events)
-  if (!isInternalEvent) {
-    auto filter = configurationModule->getEventFilterList();
-    if (!filter.filterList.empty()) {
-      bool blocked = false;
-      if (filter.isWhitelist) {
-        blocked = (filter.filterList.find(eventKey) == filter.filterList.end());
-      } else {
-        blocked = (filter.filterList.find(eventKey) != filter.filterList.end());
-      }
-      if (blocked) {
-        log(LogLevel::DEBUG, "[Countly] addEvent, event filtered out by SBS event filter: [" + eventKey + "]");
-        return;
-      }
-    }
+  if (!isInternalEvent && !isAllowedByFilter(configurationModule->getEventFilterList(), eventKey)) {
+    log(LogLevel::DEBUG, "[Countly] addEvent, event filtered out by SBS event filter: [" + eventKey + "]");
+    return;
   }
 
   // Copy the event so we can apply segmentation filters without modifying the caller's object
