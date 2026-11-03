@@ -49,12 +49,10 @@ std::string RequestBuilder::buildRequest(const std::map<std::string, std::string
                                                  {"timestamp", std::to_string(timestamp.count())},
                                                  {"dow", std::to_string(local_tm.tm_wday)},
                                                  {"hour", std::to_string(local_tm.tm_hour)},
-                                                 {"tz", std::to_string(tz_offset_minutes)},
-                                                 {"sdk_name", COUNTLY_SDK_NAME},
-                                                 {"sdk_version", COUNTLY_SDK_VERSION}};
+                                                 {"tz", std::to_string(tz_offset_minutes)}};
 
   request.insert(data.begin(), data.end());
-  return serializeData(request);
+  return buildFetchRequest(request);
 }
 
 std::string RequestBuilder::buildFetchRequest(const std::map<std::string, std::string> &data) {

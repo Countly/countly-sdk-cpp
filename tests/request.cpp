@@ -295,6 +295,9 @@ TEST_CASE("Every request carries the SDK name and version") {
   // 0 makes updateSession() report the session duration now rather than after a minute
   countly.setAutomaticSessionUpdateInterval(0);
   countly.SetPath(TEST_DATABASE_NAME);
+  // Only processRQDebug() sends: the update loop sleeps through the test, and immediate stop still ends it at once
+  countly.enableImmediateRequestOnStop();
+  countly.setUpdateInterval(60000);
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
   // Both fetches run on threads of their own, so each is awaited to keep the order fixed
   REQUIRE(waitForRequestWith("method", "sc"));
@@ -342,6 +345,9 @@ TEST_CASE("A request the server failed is sent again with the SDK name and versi
   countly.setHTTPClient(sendHTTPToFlakyServer);
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   countly.SetPath(TEST_DATABASE_NAME);
+  // Only processRQDebug() sends: the update loop sleeps through the test, and immediate stop still ends it at once
+  countly.enableImmediateRequestOnStop();
+  countly.setUpdateInterval(60000);
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
   REQUIRE(waitForRequestWith("method", "sc"));
   countly.processRQDebug();
