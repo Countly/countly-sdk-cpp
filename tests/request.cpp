@@ -235,7 +235,9 @@ TEST_CASE("Requests contain the SDK name and version") {
 
   SUBCASE("a fetch request carries them and gains no other parameter") {
     std::map<std::string, std::string> data = {{"method", "sc"}, {"app_key", "test_app_key"}, {"device_id", "test_device_id"}};
-    std::map<std::string, std::string> expected = {{"method", "sc"}, {"app_key", "test_app_key"}, {"device_id", "test_device_id"}, {"sdk_name", EXPECTED_SDK_NAME}, {"sdk_version", COUNTLY_SDK_VERSION}};
+    std::map<std::string, std::string> expected = data;
+    expected["sdk_name"] = EXPECTED_SDK_NAME;
+    expected["sdk_version"] = COUNTLY_SDK_VERSION;
 
     CHECK(parseRequest(requestBuilder->buildFetchRequest(data)) == expected);
   }
