@@ -9,7 +9,9 @@
 #include <chrono>
 #include <ctime>
 #include <iostream>
+#include <map>
 #include <mutex>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -108,7 +110,7 @@ TEST_CASE("Test Request Module with SQLite Storage") {
 }
 #endif
 
-// Helper to parse a serialized request string into a key-value map
+// Helper to parse a serialized request string into a map of decoded values
 static std::map<std::string, std::string> parseRequest(const std::string &data) {
   std::map<std::string, std::string> result;
   std::string::size_type start = 0;
@@ -119,7 +121,9 @@ static std::map<std::string, std::string> parseRequest(const std::string &data) 
     }
     auto eq = data.find('=', start);
     if (eq != std::string::npos && eq < ampersand) {
-      result[data.substr(start, eq - start)] = data.substr(eq + 1, ampersand - eq - 1);
+      std::string value = data.substr(eq + 1, ampersand - eq - 1);
+      test_utils::decodeURL(value);
+      result[data.substr(start, eq - start)] = value;
     }
     start = ampersand + 1;
   }
@@ -206,6 +210,166 @@ TEST_CASE("Requests contain dow, hour, and tz") {
 
     CHECK(std::stoi(parsed["tz"]) == expected_tz);
   }
+}
+
+/**
+ * The name the server and dashboard know the C++ SDK by, spelled out rather than taken from COUNTLY_SDK_NAME so that a rename fails these tests.
+ */
+static const std::string EXPECTED_SDK_NAME = "cpp-native-unknown";
+
+TEST_CASE("Requests contain the SDK name and version") {
+  shared_ptr<cly::LoggerModule> logger = std::make_shared<cly::LoggerModule>();
+  shared_ptr<cly::CountlyConfiguration> configuration = std::make_shared<CountlyConfiguration>("test_app_key", COUNTLY_TEST_HOST);
+  configuration->deviceId = "test_device_id";
+  std::shared_ptr<RequestBuilder> requestBuilder = std::make_shared<RequestBuilder>(configuration, logger);
+
+  SUBCASE("a queued request carries them") {
+    auto parsed = parseRequest(requestBuilder->buildRequest({}));
+
+    // These follow the clock and are checked in "Requests contain dow, hour, and tz"
+    for (const char *clock_key : {"timestamp", "dow", "hour", "tz"}) {
+      CHECK(parsed.erase(clock_key) == 1);
+    }
+    CHECK(parsed == std::map<std::string, std::string>{{"app_key", "test_app_key"}, {"device_id", "test_device_id"}, {"sdk_name", EXPECTED_SDK_NAME}, {"sdk_version", COUNTLY_SDK_VERSION}});
+  }
+
+  SUBCASE("a fetch request carries them and gains no other parameter") {
+    std::map<std::string, std::string> data = {{"method", "sc"}, {"app_key", "test_app_key"}, {"device_id", "test_device_id"}};
+    std::map<std::string, std::string> expected = data;
+    expected["sdk_name"] = EXPECTED_SDK_NAME;
+    expected["sdk_version"] = COUNTLY_SDK_VERSION;
+
+    CHECK(parseRequest(requestBuilder->buildFetchRequest(data)) == expected);
+  }
+
+  SUBCASE("a request's own sdk_name and sdk_version do not replace the SDK's") {
+    std::map<std::string, std::string> data = {{"sdk_name", "another-sdk"}, {"sdk_version", "1.0.0"}};
+
+    auto queued = parseRequest(requestBuilder->buildRequest(data));
+    auto fetch = parseRequest(requestBuilder->buildFetchRequest(data));
+
+    CHECK(queued["sdk_name"] == EXPECTED_SDK_NAME);
+    CHECK(queued["sdk_version"] == COUNTLY_SDK_VERSION);
+    CHECK(fetch["sdk_name"] == EXPECTED_SDK_NAME);
+    CHECK(fetch["sdk_version"] == COUNTLY_SDK_VERSION);
+  }
+}
+
+/**
+ * Waits up to five seconds for the fake HTTP client to receive a request carrying key=value.
+ */
+static bool waitForRequestWith(const std::string &key, const std::string &value) {
+  const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (!test_utils::httpQueueContains(key, value)) {
+    if (std::chrono::steady_clock::now() >= deadline) {
+      return false;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  return true;
+}
+
+/**
+ * What a request is for: the method of a fetch from /o/sdk, otherwise the type of queued request it carries.
+ */
+static std::string requestKind(const test_utils::HTTPCall &call) {
+  if (call.url == "/o/sdk") {
+    std::map<std::string, std::string>::const_iterator method = call.data.find("method");
+    if (method == call.data.end()) {
+      return "";
+    }
+    return method->second;
+  }
+  // end_session comes before session_duration because an end_session request carries both
+  for (const char *kind : {"begin_session", "end_session", "session_duration", "events", "user_details", "location", "crash", "old_device_id"}) {
+    if (call.data.count(kind) > 0) {
+      return kind;
+    }
+  }
+  return "";
+}
+
+TEST_CASE("Every request carries the SDK name and version") {
+  test_utils::clearSDK();
+  Countly &countly = Countly::getInstance();
+  countly.setHTTPClient(test_utils::fakeSendHTTP);
+  countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+  // 0 makes updateSession() report the session duration now rather than after a minute
+  countly.setAutomaticSessionUpdateInterval(0);
+  countly.SetPath(TEST_DATABASE_NAME);
+  // Only processRQDebug() sends: the update loop sleeps through the test, and immediate stop still ends it at once
+  countly.enableImmediateRequestOnStop();
+  countly.setUpdateInterval(60000);
+  countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+  // Both fetches run on threads of their own, so each is awaited to keep the order fixed
+  REQUIRE(waitForRequestWith("method", "sc"));
+  countly.updateRemoteConfig();
+  REQUIRE(waitForRequestWith("method", "fetch_remote_config"));
+
+  countly.addEvent(cly::Event("click", 1));
+  countly.updateSession();
+  countly.setUserDetails({{"name", "Jane Doe"}});
+  countly.setLocation("TR", "Izmir", "38.42,27.14", "");
+  countly.crash().recordException("Error", "stack trace", false, {{"_os", "Linux"}, {"_app_version", "1.0"}});
+  countly.setDeviceID("merged-device-id", true);
+  countly.endSession();
+  countly.processRQDebug();
+
+  std::vector<std::string> kinds;
+  for (size_t index = 0; index < test_utils::http_call_queue.size(); index++) {
+    test_utils::HTTPCall call = test_utils::http_call_queue.at(index);
+    kinds.push_back(requestKind(call));
+    CHECK(call.data["sdk_name"] == EXPECTED_SDK_NAME);
+    CHECK(call.data["sdk_version"] == COUNTLY_SDK_VERSION);
+  }
+  CHECK(kinds == std::vector<std::string>{"sc", "fetch_remote_config", "begin_session", "session_duration", "events", "user_details", "location", "crash", "old_device_id", "end_session"});
+}
+
+/**
+ * While set, sendHTTPToFlakyServer fails every request, as a server answering with an error or an unreachable one does.
+ */
+static std::atomic<bool> server_fails_requests(false);
+
+/**
+ * Fake HTTP client that records every request as fakeSendHTTP does, and fails each one while server_fails_requests is set.
+ */
+static HTTPResponse sendHTTPToFlakyServer(bool use_post, const std::string &url, const std::string &data) {
+  HTTPResponse response = test_utils::fakeSendHTTP(use_post, url, data);
+  if (server_fails_requests.load()) {
+    response.success = false;
+  }
+  return response;
+}
+
+TEST_CASE("A request the server failed is sent again with the SDK name and version") {
+  test_utils::clearSDK();
+  Countly &countly = Countly::getInstance();
+  countly.setHTTPClient(sendHTTPToFlakyServer);
+  countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+  countly.SetPath(TEST_DATABASE_NAME);
+  // Only processRQDebug() sends: the update loop sleeps through the test, and immediate stop still ends it at once
+  countly.enableImmediateRequestOnStop();
+  countly.setUpdateInterval(60000);
+  countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+  REQUIRE(waitForRequestWith("method", "sc"));
+  countly.processRQDebug();
+  test_utils::http_call_queue.clear();
+
+  countly.addEvent(cly::Event("click", 1));
+  countly.updateSession();
+  server_fails_requests.store(true);
+  countly.processRQDebug();
+  server_fails_requests.store(false);
+  countly.processRQDebug();
+
+  REQUIRE(test_utils::http_call_queue.size() == 2);
+  test_utils::HTTPCall failed = test_utils::http_call_queue.at(0);
+  test_utils::HTTPCall resent = test_utils::http_call_queue.at(1);
+  CHECK(resent.data == failed.data);
+  CHECK(resent.data.count("events") == 1);
+  CHECK(resent.data["sdk_name"] == EXPECTED_SDK_NAME);
+  CHECK(resent.data["sdk_version"] == COUNTLY_SDK_VERSION);
+  CHECK(countly.checkRQSize() == 0);
 }
 
 #if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
@@ -418,6 +582,49 @@ TEST_CASE("Built-in HTTP client") {
 
     CHECK(begin_session_received);
     CHECK(queued_requests == 0);
+  }
+
+  SUBCASE("every request reaches the server with the SDK name and version") {
+    LocalHTTPServer server(true);
+    std::shared_ptr<cly::Countly> countly = std::make_shared<cly::Countly>();
+    countly->setDeviceID(COUNTLY_TEST_DEVICE_ID);
+    countly->SetPath(database_path);
+    countly->enableRemoteConfig();
+    countly->start(COUNTLY_TEST_APP_KEY, "http://127.0.0.1", server.port(), false);
+    countly->addEvent(cly::Event("click", 1));
+    countly->updateSession();
+
+    std::vector<std::string> request_lines;
+    const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (std::chrono::steady_clock::now() < deadline) {
+      countly->processRQDebug();
+      request_lines = server.requestLines();
+      if (request_lines.size() >= 4 && countly->checkRQSize() == 0) {
+        break;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    countly.reset();
+    server.stop();
+    remove(database_path.c_str());
+
+    std::multiset<std::string> kinds;
+    for (const std::string &request_line : request_lines) {
+      // These requests are short enough to be sent as GET, so the parameters are in the request line: "GET /o/sdk?method=sc&app_key=... HTTP/1.1"
+      REQUIRE(request_line.rfind("GET /", 0) == 0);
+      const std::string::size_type path_start = 4;
+      const std::string::size_type query_start = request_line.find('?');
+      const std::string::size_type query_end = request_line.rfind(' ');
+      REQUIRE(query_start != std::string::npos);
+      REQUIRE(query_end > query_start);
+
+      test_utils::HTTPCall call{false, request_line.substr(path_start, query_start - path_start), parseRequest(request_line.substr(query_start + 1, query_end - query_start - 1))};
+      kinds.insert(requestKind(call));
+      CHECK(call.data["sdk_name"] == EXPECTED_SDK_NAME);
+      CHECK(call.data["sdk_version"] == COUNTLY_SDK_VERSION);
+    }
+    CHECK(kinds == std::multiset<std::string>{"sc", "fetch_remote_config", "begin_session", "events"});
   }
 
   SUBCASE("a request to a server that never answers is given up after the request timeout") {

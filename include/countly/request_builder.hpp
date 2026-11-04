@@ -20,7 +20,13 @@ public:
   static std::string encodeURL(const std::string &data);
   static std::string serializeData(const std::map<std::string, std::string> &data);
   std::string buildRequest(const std::map<std::string, std::string> &data);
-  
+
+  /**
+   * Builds a request from the given parameters plus the SDK name and version that every
+   * request carries, and nothing else: for a request sent at once instead of being queued,
+   * such as a remote config or SDK Behavior Settings fetch. buildRequest builds on it.
+   */
+  std::string buildFetchRequest(const std::map<std::string, std::string> &data);
 };
 } // namespace cly
 #endif

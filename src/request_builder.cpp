@@ -52,6 +52,13 @@ std::string RequestBuilder::buildRequest(const std::map<std::string, std::string
                                                  {"tz", std::to_string(tz_offset_minutes)}};
 
   request.insert(data.begin(), data.end());
+  return buildFetchRequest(request);
+}
+
+std::string RequestBuilder::buildFetchRequest(const std::map<std::string, std::string> &data) {
+  std::map<std::string, std::string> request = {{"sdk_name", COUNTLY_SDK_NAME}, {"sdk_version", COUNTLY_SDK_VERSION}};
+
+  request.insert(data.begin(), data.end());
   return serializeData(request);
 }
 

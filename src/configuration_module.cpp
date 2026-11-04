@@ -146,7 +146,7 @@ public:
 
   void _fetchConfigFromServerHTTP(const std::map<std::string, std::string> &data, const nlohmann::json &session_params) {
     try {
-      HTTPResponse response = _requestModule->sendHTTP("/o/sdk", _requestBuilder->serializeData(data));
+      HTTPResponse response = _requestModule->sendHTTP("/o/sdk", _requestBuilder->buildFetchRequest(data));
       if (response.success && response.data.is_object() && response.data.contains(KEY_CONFIG)) {
         nlohmann::json changedSettings;
         {

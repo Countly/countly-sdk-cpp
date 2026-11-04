@@ -1,4 +1,5 @@
 ## XX.XX.XX
+- Added the SDK name and version (`sdk_name` and `sdk_version`) to every request, including the remote config and SDK Behavior Settings fetches. Before, only the begin session request carried them.
 - Added `multiplyCustomUserDetail` for multiplying the numeric value of a custom user property on the server.
 
 ## 26.8.1
