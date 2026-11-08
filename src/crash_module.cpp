@@ -42,6 +42,7 @@ void CrashModule::addBreadcrumb(const std::string &value) {
 
   std::string limited = cly::limits::truncateString(value, lim.maxValueSize);
   impl->_logger->log(LogLevel::INFO, "[Countly] [CrashModule] addBreadcrumb, value = [" + limited + "]");
+  impl->_logger->recordUsage("crashes", "log");
 
   std::lock_guard<std::mutex> lk(*impl->_mutex);
   // if breadcrumb count limit is reached, remove oldest breadcrumb
@@ -56,6 +57,7 @@ void CrashModule::addBreadcrumb(const std::string &value) {
 void CrashModule::recordException(const std::string &title, const std::string &stackTrace, const bool fatal, const std::map<std::string, std::string> &crashMetrics, const std::map<std::string, std::string> &segmentation) {
 
   impl->_logger->log(LogLevel::INFO, cly::utils::format_string("[Countly] [CrashModule] recordException, title = [%s], stackTrace = [%s]", title.c_str(), stackTrace.c_str()));
+  impl->_logger->recordUsage("crashes", "record");
 
   SDKLimits lim{COUNTLY_MAX_KEY_LENGTH_DEFAULT, COUNTLY_MAX_VALUE_SIZE_DEFAULT, COUNTLY_MAX_SEGMENTATION_VALUES_DEFAULT, COUNTLY_MAX_BREADCRUMB_COUNT_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINES_PER_THREAD_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINE_LENGTH_DEFAULT};
   if (std::shared_ptr<ConfigurationProvider> config = impl->_configProvider.lock()) {
@@ -75,22 +77,26 @@ void CrashModule::recordException(const std::string &title, const std::string &s
 
   if (title.empty()) {
     impl->_logger->log(LogLevel::WARNING, "[Countly] [CrashModule] recordException, The parameter 'title' can't be empty");
+    impl->_logger->recordLogCode("w700");
   }
 
   if (stackTrace.empty()) {
-    impl->_logger->log(LogLevel::ERROR, "[Countly] [CrashModule] recordException, The parameter 'stackTrace' can't be empty");
+    impl->_logger->log(LogLevel::WARNING, "[Countly] [CrashModule] recordException, The parameter 'stackTrace' can't be empty");
+    impl->_logger->recordLogCode("w700");
   }
 
   // check if the crash metric '_os' exists and is not empty
   auto it = crashMetrics.find("_os");
   if (it == crashMetrics.end() || it->second.empty()) {
-    impl->_logger->log(LogLevel::ERROR, "[Countly] [CrashModule] recordException, The crash metric '_os' can't be empty");
+    impl->_logger->log(LogLevel::WARNING, "[Countly] [CrashModule] recordException, The crash metric '_os' can't be empty");
+    impl->_logger->recordLogCode("w700");
   }
 
   // check if the crash metric '_app_version' exists and is not empty
   it = crashMetrics.find("_app_version");
   if (it == crashMetrics.end() || it->second.empty()) {
-    impl->_logger->log(LogLevel::ERROR, "[Countly] [CrashModule] recordException, The crash metric '_app_version' can't be empty");
+    impl->_logger->log(LogLevel::WARNING, "[Countly] [CrashModule] recordException, The crash metric '_app_version' can't be empty");
+    impl->_logger->recordLogCode("w700");
   }
 
   // lock mutex to avoid concurrent access; lock_guard releases on scope exit,

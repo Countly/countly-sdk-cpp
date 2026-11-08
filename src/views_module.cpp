@@ -150,6 +150,7 @@ public:
       _logger->log(cly::LogLevel::WARNING, cly::utils::format_string("[Countly] [ViewsModule] _closeViewWithName, Couldn't find "
                                                                      "view with name = [%s]",
                                                                      name.c_str()));
+      _logger->recordLogCode("w730");
       return;
     }
     _recordView(v, {}, false);
@@ -180,6 +181,7 @@ public:
       _logger->log(cly::LogLevel::WARNING, cly::utils::format_string("[Countly] [ViewsModule] _closeViewWithID, Couldn't find "
                                                                      "view with viewId = [%s]",
                                                                      viewId.c_str()));
+      _logger->recordLogCode("w730");
       return;
     }
 
@@ -199,8 +201,10 @@ std::string ViewsModule::openView(const std::string &name, const std::map<std::s
 
   impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[Countly] [ViewsModule] openView, name = [%s], segmentation = [%s]", name.c_str(), utils::mapToString(segmentation).c_str()));
 
+  impl->_logger->recordUsage("views", "start");
   if (name.empty()) {
     impl->_logger->log(cly::LogLevel::WARNING, "[Countly] [ViewsModule] openView, view name can not be null or empty!");
+    impl->_logger->recordLogCode("w710");
     return {};
   }
 
@@ -210,8 +214,10 @@ std::string ViewsModule::openView(const std::string &name, const std::map<std::s
 void ViewsModule::closeViewWithName(const std::string &name) {
   impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[Countly] [ViewsModule] closeViewWithName, name = [%s]", name.c_str()));
 
+  impl->_logger->recordUsage("views", "stop");
   if (name.empty()) {
     impl->_logger->log(cly::LogLevel::WARNING, "[Countly] [ViewsModule] closeViewWithName, view name can not be null or empty!");
+    impl->_logger->recordLogCode("w700");
     return;
   }
   impl->_closeViewWithName(name);
@@ -220,8 +226,10 @@ void ViewsModule::closeViewWithName(const std::string &name) {
 void ViewsModule::closeViewWithID(const std::string &viewId) {
   impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[Countly] [ViewsModule] closeViewWithID, viewId = [%s]", viewId.c_str()));
 
+  impl->_logger->recordUsage("views", "stop");
   if (viewId.empty()) {
     impl->_logger->log(cly::LogLevel::WARNING, "[Countly] [ViewsModule] closeViewWithID, viewId can not be null or empty!");
+    impl->_logger->recordLogCode("w700");
     return;
   }
 

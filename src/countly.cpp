@@ -25,6 +25,11 @@
 #endif
 
 namespace cly {
+namespace {
+const char *const HEALTH_CHECK_AREA_SESSIONS = "sessions";
+const char *const HEALTH_CHECK_AREA_EVENTS = "events";
+} // namespace
+
 
 namespace {
 /**
@@ -129,6 +134,8 @@ Countly::Countly() {
   crash_module = nullptr;
   views_module = nullptr;
   logger.reset(new cly::LoggerModule());
+  health_check->setLogger(logger);
+  logger->setHealthCheck(health_check);
   configuration.reset(new cly::CountlyConfiguration("", ""));
 }
 
@@ -616,7 +623,8 @@ void Countly::setUserDetails(const std::map<std::string, std::string> &value) {
   session_params["user_details"] = limitedDetails;
 
   if (!is_sdk_initialized) {
-    log(LogLevel::ERROR, "[Countly] setUserDetails, This method can't be called before SDK initialization. Returning.");
+    log(LogLevel::WARNING, "[Countly] setUserDetails, This method can't be called before SDK initialization. Returning.");
+    logger->recordLogCode("w101");
     return;
   }
 
@@ -662,7 +670,8 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string> &val
   session_params["user_details"]["custom"] = limitedCustom;
 
   if (!is_sdk_initialized) {
-    log(LogLevel::ERROR, "[Countly] setCustomUserDetails, This method can't be called before SDK initialization. Returning.");
+    log(LogLevel::WARNING, "[Countly] setCustomUserDetails, This method can't be called before SDK initialization. Returning.");
+    logger->recordLogCode("w101");
     return;
   }
 
@@ -678,15 +687,18 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string> &val
 void Countly::multiplyCustomUserDetail(const std::string &key, double value) {
   if (!is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] multiplyCustomUserDetail, SDK is not initialized.");
+    logger->recordLogCode("w101");
     return;
   }
   if (!std::isfinite(value)) {
     log(LogLevel::WARNING, "[Countly] multiplyCustomUserDetail, The parameter 'value' must be a finite number. Returning.");
+    logger->recordLogCode("w700");
     return;
   }
   const std::string truncatedKey = cly::limits::truncateString(key, configurationModule->getLimits().maxKeyLength);
   if (truncatedKey.empty()) {
     log(LogLevel::WARNING, "[Countly] multiplyCustomUserDetail, The parameter 'key' can't be empty. Returning.");
+    logger->recordLogCode("w700");
     return;
   }
   if (!isAllowedByFilter(configurationModule->getUserPropertyFilterList(), key)) {
@@ -720,16 +732,19 @@ void Countly::queueUserDetails(const nlohmann::json &userDetails) {
 
 void Countly::setCountry(const std::string &country_code) {
   log(LogLevel::WARNING, "[Countly] setCountry, 'setCountry' is deprecated, please use 'setLocation(countryCode, city, gpsCoordinates, ipAddress)' method instead.");
+  logger->recordLogCode("w120");
   setLocation(country_code, "", "", "");
 }
 
 void Countly::setCity(const std::string &city_name) {
   log(LogLevel::WARNING, "[Countly] setCity, 'setCity' is deprecated, please use 'setLocation(countryCode, city, gpsCoordinates, ipAddress)' method instead.");
+  logger->recordLogCode("w120");
   setLocation("", city_name, "", "");
 }
 
 void Countly::setLocation(double lattitude, double longitude) {
   log(LogLevel::WARNING, "[Countly] setLocation, 'setLocation(latitude, longitude)' is deprecated, please use 'setLocation(countryCode, city, gpsCoordinates, ipAddress)' method instead.");
+  logger->recordLogCode("w120");
 
   std::ostringstream location_stream;
   location_stream << lattitude << ',' << longitude;
@@ -739,6 +754,7 @@ void Countly::setLocation(double lattitude, double longitude) {
 void Countly::setLocation(const std::string &countryCode, const std::string &city, const std::string &gpsCoordinates, const std::string &ipAddress) {
   if (!is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] setLocation, SDK is not initialized.");
+    logger->recordLogCode("w101");
     return;
   }
   bool isClearingLocation = countryCode.empty() && city.empty() && gpsCoordinates.empty() && ipAddress.empty();
@@ -753,6 +769,7 @@ void Countly::setLocation(const std::string &countryCode, const std::string &cit
 
   if ((!countryCode.empty() && city.empty()) || (!city.empty() && countryCode.empty())) {
     log(LogLevel::WARNING, "[Countly] setLocation, It's required that both 'country_code' and 'city' should be set together");
+    logger->recordLogCode("w700");
   }
 
   session_params["city"] = city;
@@ -831,7 +848,8 @@ void Countly::setDeviceID(const std::string &value, bool same_user) {
 
   lk.unlock();
   if (!is_sdk_initialized) {
-    log(LogLevel::ERROR, "[Countly] setDeviceID, Device id can't be changed while the SDK has not been initialized.");
+    log(LogLevel::WARNING, "[Countly] setDeviceID, Device id can't be changed while the SDK has not been initialized.");
+    logger->recordLogCode("w101");
     return;
   }
 
@@ -871,7 +889,7 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
   // send all event to server and end current session of old user
   flushEvents();
   if (configuration->manualSessionControl == false) {
-    endSession();
+    endSessionInternal(true);
   }
 
   {
@@ -885,7 +903,7 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
 
   // start a new session for new user
   if (configuration->manualSessionControl == false) {
-    beginSession();
+    beginSessionInternal(true);
   }
 }
 #pragma endregion Device Id
@@ -896,7 +914,8 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   // configurationModule->fetch*/beginSession() calls below.
   std::unique_lock<std::mutex> lk(*mutex);
   if (is_sdk_initialized) {
-    log(LogLevel::ERROR, "[Countly] start, SDK has already been initialized, 'start' should not be called a second time!");
+    log(LogLevel::WARNING, "[Countly] start, SDK has already been initialized, 'start' should not be called a second time!");
+    logger->recordLogCode("w110");
     return;
   }
 
@@ -950,6 +969,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 
   if (port < 0 || port > 65535) {
     log(LogLevel::WARNING, "[Countly] start, Port number is out of valid boundaries. Setting it to 0.");
+    logger->recordLogCode("w121");
     port = 0;
   }
 
@@ -982,6 +1002,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   requestModule->setConfigurationProvider(configurationModule);
   views_module->setConfigurationProvider(configurationModule);
   crash_module->setConfigurationProvider(configurationModule);
+  health_check->setStorage(storageModule);
 
   is_sdk_initialized = true; // after this point SDK is initialized.
 
@@ -995,7 +1016,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 
     if (configuration->manualSessionControl == false) {
       lk.unlock();
-      beginSession();
+      beginSessionInternal(true);
       lk.lock();
     }
 
@@ -1018,6 +1039,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
  */
 void Countly::startOnCloud(const std::string &app_key) {
   log(LogLevel::WARNING, "[Countly] startOnCloud, 'startOnCloud' is deprecated, this is going to be removed in the future.");
+  logger->recordLogCode("w120");
   this->start(app_key, "https://cloud.count.ly", 443);
 }
 
@@ -1066,8 +1088,9 @@ void Countly::stop() {
   // ~Countly, which is where the lifetime problem they solve actually arises.
   _deleteThread();
   if (configuration->manualSessionControl == false) {
-    endSession();
+    endSessionInternal(true);
   }
+  health_check->saveState();
 }
 
 void Countly::_deleteThread() {
@@ -1099,11 +1122,15 @@ void Countly::setUpdateInterval(size_t milliseconds) {
 void Countly::addEvent(const cly::Event &event) {
   if (!is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] addEvent, SDK is not initialized.");
+    logger->recordLogCode("w101");
     return;
   }
 
   std::string eventKey = event.getKey();
   bool isInternalEvent = eventKey.find("[CLY]_") == 0;
+  if (!isInternalEvent) {
+    logger->recordUsage(HEALTH_CHECK_AREA_EVENTS, "record");
+  }
 
   // Check custom event tracking (only blocks custom events)
   if (!configurationModule->isCustomEventTrackingEnabled() && !isInternalEvent) {
@@ -1202,7 +1229,7 @@ void Countly::checkAndSendEventToRQ() {
     }
   } else {
     if (queueSize >= configurationModule->getEventQueueSizeLimit()) {
-      log(LogLevel::WARNING, "[Countly] checkAndSendEventToRQ, Event queue is full, dropping the oldest event to insert a new one");
+      log(LogLevel::DEBUG, "[Countly] checkAndSendEventToRQ, Event queue threshold is reached, sending the events to the request queue");
       for (const auto &event_json : event_queue) {
         events.push_back(nlohmann::json::parse(event_json));
       }
@@ -1214,6 +1241,7 @@ void Countly::checkAndSendEventToRQ() {
 
 void Countly::setMaxEvents(size_t value) {
   log(LogLevel::WARNING, "[Countly] setMaxEvents, 'setMaxEvents' and 'SetMaxEventsPerMessage' are deprecated. Use 'setEventsToRQThreshold' instead.");
+  logger->recordLogCode("w120");
   setEventsToRQThreshold(static_cast<int>(value));
 }
 
@@ -1222,9 +1250,11 @@ void Countly::setEventsToRQThreshold(int value) {
   std::unique_lock<std::mutex> lk(*mutex);
   if (value < 1) {
     log(LogLevel::WARNING, "[Countly] setEventsToRQThreshold, Threshold can not be less than 1. Setting it to 1 instead of:[" + std::to_string(value) + "]");
+    logger->recordLogCode("w121");
     value = 1;
   } else if (value > 10000) {
     log(LogLevel::WARNING, "[Countly] setEventsToRQThreshold, Threshold can not be greater than 10000. Setting it to 10000 instead of:[" + std::to_string(value) + "]");
+    logger->recordLogCode("w121");
     value = 10000;
   }
 
@@ -1269,6 +1299,7 @@ void Countly::flushEvents(std::chrono::seconds timeout) {
     std::ostringstream log_message;
     log_message << "[Countly] flushEvents, error: " << e.what();
     log(LogLevel::FATAL, log_message.str());
+    logger->recordLogCode("e901");
   }
 }
 
@@ -1286,7 +1317,7 @@ bool Countly::attemptSessionUpdateEQ() {
     }
   }
   if (configuration->manualSessionControl == false) {
-    return !updateSession();
+    return !updateSessionInternal(true);
   } else {
     packEvents();
     return false;
@@ -1363,10 +1394,16 @@ void Countly::debugInjectRawEvent(const std::string &raw) {
 }
 #endif
 
-bool Countly::beginSession() {
+bool Countly::beginSession() { return beginSessionInternal(false); }
+
+bool Countly::beginSessionInternal(bool automatic) {
   if (!is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] beginSession, SDK is not initialized.");
+    logger->recordLogCode("w101");
     return false;
+  }
+  if (!automatic) {
+    logger->recordUsage(HEALTH_CHECK_AREA_SESSIONS, "begin");
   }
   // unique_lock so the mutex is always released on scope exit, including the
   // early returns below and any exception (e.g. a json type_error from a
@@ -1374,11 +1411,16 @@ bool Countly::beginSession() {
   std::unique_lock<std::mutex> lk(*mutex);
   log(LogLevel::INFO, "[Countly] beginSession, Starting session");
   if (configurationModule->isSessionTrackingEnabled() == false) {
-    log(LogLevel::ERROR, "[Countly] beginSession, Session tracking is disabled in server configuration, can not begin session.");
+    log(LogLevel::DEBUG, "[Countly] beginSession, Session tracking is disabled in server configuration, can not begin session.");
     return false;
   }
   if (began_session == true) {
-    log(LogLevel::DEBUG, "[Countly] beginSession, Session is already active.");
+    if (automatic) {
+      log(LogLevel::DEBUG, "[Countly] beginSession, Session is already active.");
+    } else {
+      log(LogLevel::WARNING, "[Countly] beginSession, Session is already active, the call is ignored.");
+      logger->recordLogCode("w760");
+    }
     return true;
   }
 
@@ -1416,6 +1458,9 @@ bool Countly::beginSession() {
   session_params.erase("user_details");
   last_sent_session_request = std::chrono::steady_clock::now();
   began_session = true;
+  if (automatic) {
+    logger->recordUsage(HEALTH_CHECK_AREA_SESSIONS, "begin:a");
+  }
   // snapshot guarded state before releasing the lock
   bool shouldUpdateRemoteConfig = remote_config_enabled;
   lk.unlock();
@@ -1429,10 +1474,16 @@ bool Countly::beginSession() {
 /**
  * @brief Update session
  */
-bool Countly::updateSession() {
+bool Countly::updateSession() { return updateSessionInternal(false); }
+
+bool Countly::updateSessionInternal(bool automatic) {
   if (!is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] updateSession, SDK is not initialized.");
+    logger->recordLogCode("w101");
     return false;
+  }
+  if (!automatic) {
+    logger->recordUsage(HEALTH_CHECK_AREA_SESSIONS, "update");
   }
   // unique_lock so the mutex is always released on scope exit, including when an
   // exception propagates out of a call made while the lock is held.
@@ -1441,7 +1492,7 @@ bool Countly::updateSession() {
     // Check if there was a session, if not try to start one
     lk.lock();
     if (configurationModule->isSessionTrackingEnabled() == false) {
-      log(LogLevel::ERROR, "[Countly] updateSession, Session tracking is disabled in server configuration, can not update session.");
+      log(LogLevel::DEBUG, "[Countly] updateSession, Session tracking is disabled in server configuration, can not update session.");
       lk.unlock();
       return false;
     }
@@ -1449,9 +1500,10 @@ bool Countly::updateSession() {
       lk.unlock();
       if (configuration->manualSessionControl == true) {
         log(LogLevel::WARNING, "[Countly] updateSession, SDK is in manual session control mode and there is no active session. Please start a session first.");
+        logger->recordLogCode("w760");
         return false;
       }
-      if (!beginSession()) {
+      if (!beginSessionInternal(true)) {
         log(LogLevel::DEBUG, "[Countly] updateSession, Failed to begin session.");
         // if beginSession fails, we should not try to update session
         return false;
@@ -1489,6 +1541,9 @@ bool Countly::updateSession() {
       log(LogLevel::DEBUG, "[Countly] updateSession, Sending session update.");
       std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"session_duration", std::to_string(duration.count())}};
       requestModule->addRequestToQueue(data);
+      if (automatic) {
+        logger->recordUsage(HEALTH_CHECK_AREA_SESSIONS, "update:a");
+      }
 
       last_sent_session_request += duration;
     }
@@ -1512,6 +1567,7 @@ bool Countly::updateSession() {
     std::ostringstream log_message;
     log_message << "[Countly] updateSession, error: " << e.what();
     log(LogLevel::FATAL, log_message.str());
+    logger->recordLogCode("e901");
   }
   // lk releases the mutex on scope exit if it is still held.
   return true;
@@ -1581,14 +1637,20 @@ void Countly::sendEventsToRQ(const nlohmann::json &events) {
   requestModule->addRequestToQueue(data);
 }
 
-bool Countly::endSession() {
+bool Countly::endSession() { return endSessionInternal(false); }
+
+bool Countly::endSessionInternal(bool automatic) {
   if (!is_sdk_initialized && !is_being_disposed) {
     log(LogLevel::WARNING, "[Countly] endSession, SDK is not initialized.");
+    logger->recordLogCode("w101");
     return false;
+  }
+  if (!automatic) {
+    logger->recordUsage(HEALTH_CHECK_AREA_SESSIONS, "end");
   }
   log(LogLevel::INFO, "[Countly] endSession, Ending session");
   if (is_being_disposed == false && configurationModule->isSessionTrackingEnabled() == false) {
-    log(LogLevel::ERROR, "[Countly] endSession, Session tracking is disabled in server configuration, can not end session.");
+    log(LogLevel::DEBUG, "[Countly] endSession, Session tracking is disabled in server configuration, can not end session.");
     return false;
   }
   const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(Countly::getTimestamp().time_since_epoch());
@@ -1602,9 +1664,14 @@ bool Countly::endSession() {
   // that clears it: read outside, two concurrent calls could both see an active
   // session and both queue an end_session request. stop() on one thread and a
   // device id change on another is enough to get there.
-  std::lock_guard<std::mutex> lk(*mutex);
+  std::unique_lock<std::mutex> lk(*mutex);
   if (began_session == false) {
-    log(LogLevel::DEBUG, "[Countly] endSession, There is no active session to end.");
+    if (automatic || is_being_disposed) {
+      log(LogLevel::DEBUG, "[Countly] endSession, There is no active session to end.");
+    } else {
+      log(LogLevel::WARNING, "[Countly] endSession, There is no active session to end, the call is ignored.");
+      logger->recordLogCode("w760");
+    }
     return true;
   }
 
@@ -1622,6 +1689,11 @@ bool Countly::endSession() {
 
   last_sent_session_request = now;
   began_session = false;
+  lk.unlock();
+  if (automatic) {
+    logger->recordUsage(HEALTH_CHECK_AREA_SESSIONS, "end:a");
+  }
+  health_check->saveState();
   return true;
 }
 
@@ -1834,6 +1906,7 @@ void Countly::addEventToSqlite(const cly::Event &event) {
         // Say which operation failed: this event is being dropped, and a bare
         // "database is locked" gives no hint of what was lost.
         log(LogLevel::ERROR, "[Countly] addEventToSqlite, Event was not stored, SQLite error: " + std::string(sqlite3_errmsg(database)));
+        logger->recordLogCode("e501");
       }
       sqlite3_finalize(statement);
     }
@@ -1986,6 +2059,7 @@ void Countly::updateLoop() {
     running = true;
   }
   try {
+    sendHealthCheck();
     if (configuration->immediateRequestOnStop) {
       while (true) {
         {
@@ -2000,11 +2074,12 @@ void Countly::updateLoop() {
           }
         }
         if (enable_automatic_session == true && configuration->manualSessionControl == false) {
-          updateSession();
+          updateSessionInternal(true);
         } else if (configuration->manualSessionControl == true) {
           packEvents();
         }
         requestModule->processQueue(mutex);
+        saveHealthCheckOnTimer();
       }
     } else {
       while (true) {
@@ -2019,11 +2094,12 @@ void Countly::updateLoop() {
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(last_wait_milliseconds));
         if (enable_automatic_session == true && configuration->manualSessionControl == false) {
-          updateSession();
+          updateSessionInternal(true);
         } else if (configuration->manualSessionControl == true) {
           packEvents();
         }
         requestModule->processQueue(mutex);
+        saveHealthCheckOnTimer();
       }
       std::lock_guard<std::mutex> lk(*mutex);
       running = false;
@@ -2037,6 +2113,61 @@ void Countly::updateLoop() {
   }
 }
 
+void Countly::disableHealthCheck() {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] disableHealthCheck, You can not disable the health check after SDK initialization.");
+    return;
+  }
+
+  configuration->healthCheckEnabled = false;
+}
+
+void Countly::sendHealthCheck() {
+  if (!configuration->healthCheckEnabled) {
+    log(LogLevel::DEBUG, "[Countly] sendHealthCheck, the health check is disabled, nothing is sent");
+    return;
+  }
+
+  if (configurationModule == nullptr || !configurationModule->isNetworkingEnabled()) {
+    log(LogLevel::DEBUG, "[Countly] sendHealthCheck, networking is disabled by the SDK behavior settings, the counters wait for the next start");
+    return;
+  }
+
+  if (health_check_sent.exchange(true)) {
+    log(LogLevel::DEBUG, "[Countly] sendHealthCheck, the health check was already sent");
+    return;
+  }
+
+  try {
+    const nlohmann::json snapshot = health_check->snapshot();
+    std::map<std::string, std::string> data = {{"hc", snapshot.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace)}};
+
+    nlohmann::json::const_iterator appVersion = configuration->metrics.find("_app_version");
+    if (appVersion != configuration->metrics.end() && appVersion->is_string() && !appVersion->get<std::string>().empty()) {
+      data["metrics"] = nlohmann::json({{"_app_version", appVersion->get<std::string>()}}).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+    }
+
+    log(LogLevel::DEBUG, "[Countly] sendHealthCheck, sending the health check");
+    const HTTPResponse response = requestModule->sendHTTP("/i", requestBuilder->buildRequest(data));
+    if (response.success && response.data.is_object() && response.data.contains("result")) {
+      log(LogLevel::DEBUG, "[Countly] sendHealthCheck, the server accepted the health check");
+      health_check->clearSentValues(snapshot);
+    } else {
+      log(LogLevel::DEBUG, "[Countly] sendHealthCheck, the server did not accept the health check, the counters are kept for the next start");
+    }
+  } catch (const std::exception &e) {
+    log(LogLevel::DEBUG, std::string("[Countly] sendHealthCheck, the health check could not be sent: ") + e.what());
+  }
+}
+
+void Countly::saveHealthCheckOnTimer() {
+  const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+  if (configurationModule != nullptr && now - last_health_check_save >= std::chrono::seconds(configurationModule->getSessionUpdateInterval())) {
+    last_health_check_save = now;
+    health_check->saveState();
+  }
+}
+
 void Countly::enableRemoteConfig() {
   std::lock_guard<std::mutex> lk(*mutex);
   remote_config_enabled = true;
@@ -2045,6 +2176,7 @@ void Countly::enableRemoteConfig() {
 void Countly::updateRemoteConfig() {
   if (!is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] updateRemoteConfig, SDK is not initialized.");
+    logger->recordLogCode("w101");
     return;
   }
   std::unique_lock<std::mutex> lk(*mutex);
@@ -2073,6 +2205,7 @@ nlohmann::json Countly::getRemoteConfigValue(const std::string &key) {
 void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
   if (!is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] updateRemoteConfigFor, SDK is not initialized.");
+    logger->recordLogCode("w101");
     return;
   }
   std::unique_lock<std::mutex> lk(*mutex);
@@ -2095,6 +2228,7 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
 void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
   if (!is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] updateRemoteConfigExcept, SDK is not initialized.");
+    logger->recordLogCode("w101");
     return;
   }
   std::unique_lock<std::mutex> lk(*mutex);

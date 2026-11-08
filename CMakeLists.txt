@@ -37,6 +37,7 @@ set(COUNTLY_PUBLIC_HEADERS
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/crash_module.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/event.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/logger_module.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/health_check_module.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/remote_config_store.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/request_builder.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/request_module.hpp
@@ -55,7 +56,8 @@ add_library(countly
   ${CMAKE_CURRENT_SOURCE_DIR}/src/storage_module_db.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/storage_module_memory.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/event.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/configuration_module.cpp)
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/configuration_module.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/health_check_module.cpp)
 add_library(countly::countly ALIAS countly)
 
 target_include_directories(countly
@@ -153,7 +155,8 @@ if(COUNTLY_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/internal_limits.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/internal_limits_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/multi_instance.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/user_details.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/user_details.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/health_check.cpp)
     
     target_compile_options(countly-tests PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-g>)
     target_compile_definitions(countly-tests PRIVATE COUNTLY_BUILD_TESTS)

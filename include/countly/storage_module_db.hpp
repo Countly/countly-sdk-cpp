@@ -26,6 +26,8 @@ public:
   void RQInsertAtEnd(const std::string &request) override;
   void storeSDKBehaviorSettings(const std::string &sdk_behavior_settings) override;
   std::string getSDKBehaviorSettings() override;
+  void storeHealthCheckState(const std::string &state) override;
+  std::string getHealthCheckState() override;
 };
 } // namespace cly
 #endif

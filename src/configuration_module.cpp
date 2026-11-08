@@ -382,7 +382,7 @@ public:
   }
 
   void _stopTimer() {
-    _logger->log(LogLevel::WARNING, "[Countly] [ConfigurationModule] stopTimer, stopping server config update timer thread.");
+    _logger->log(LogLevel::DEBUG, "[Countly] [ConfigurationModule] stopTimer, stopping server config update timer thread.");
 
     {
       // The flag has to be mutated under the same mutex the waiter evaluates it
