@@ -42,6 +42,10 @@ struct ThreadSafeHTTPCallQueue {
 
 static ThreadSafeHTTPCallQueue http_call_queue;
 
+// Health check requests the fake client received. Kept apart from http_call_queue, so the tests that
+// assert the order of the queued requests do not see the health check sent at start.
+static ThreadSafeHTTPCallQueue health_check_call_queue;
+
 // Countly::setLogger takes a plain function pointer, so captured messages live in these statics.
 static std::mutex captured_log_mutex;
 static std::vector<std::string> captured_log_messages;
@@ -80,6 +84,7 @@ static void clearSDK() {
   cly::Countly::halt();
   remove(TEST_DATABASE_NAME);
   http_call_queue.clear();
+  health_check_call_queue.clear();
 }
 
 /**
@@ -169,6 +174,11 @@ static HTTPResponse fakeSendHTTPInto(ThreadSafeHTTPCallQueue &queue, bool use_po
     } else {
       seperatorIndex = std::string::npos;
     }
+  }
+
+  if (http_call.data.find("hc") != http_call.data.end()) {
+    health_check_call_queue.push_back(http_call);
+    return HTTPResponse{true, nlohmann::json({{"result", "Success"}}), 200};
   }
 
   queue.push_back(http_call);

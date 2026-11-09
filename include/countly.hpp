@@ -24,6 +24,7 @@
 #undef ERROR
 #endif
 #include "countly/event.hpp"
+#include "countly/health_check_module.hpp"
 #include "countly/logger_module.hpp"
 #include "countly/storage_module_base.hpp"
 #include "countly/views_module.hpp"
@@ -360,6 +361,15 @@ public:
   }
 
   /**
+   * Disables the SDK health check. Once after start the SDK sends the server a short report about its own state:
+   * how many warnings and errors it logged, the last request the server refused, how often its session, event,
+   * view and crash methods were called, and which known problems occurred. It carries no data the app recorded,
+   * and the server shows it in SDK Manager. With this option the report is not sent; the SDK keeps counting.
+   * Call it before start().
+   */
+  void disableHealthCheck();
+
+  /**
    * Disable SDK behavior settings updates that SDK performs periodically from the server.
    */
   void disableSDKBehaviorSettingsUpdates() {
@@ -431,6 +441,12 @@ public:
 
   inline const CountlyConfiguration &getConfiguration() { return *configuration.get(); }
 
+  /**
+   * The health check counters of this instance.
+   * Warning: This method is for debugging purposes, and it is going to be removed in the future.
+   */
+  inline std::shared_ptr<cly::HealthCheckModule> debugHealthCheck() { return health_check; }
+
   static void halt();
 
   static size_t debugClaimedPathCount();
@@ -496,6 +512,38 @@ private:
 
   void updateLoop();
   void packEvents();
+
+  /**
+   * Begins a session, counted in the health check as a call of the app or, with 'automatic', of the SDK.
+   * A call of the app while a session runs is reported as log code w760.
+   */
+  bool beginSessionInternal(bool automatic);
+
+  /**
+   * Updates the session, counted in the health check as a call of the app or, with 'automatic', of the SDK.
+   * A call of the app in manual session control without a running session is reported as log code w760.
+   */
+  bool updateSessionInternal(bool automatic);
+
+  /**
+   * Ends the session, counted in the health check as a call of the app or, with 'automatic', of the SDK.
+   * A call of the app without a running session is reported as log code w760.
+   */
+  bool endSessionInternal(bool automatic);
+
+  /**
+   * Sends the health check once, as an immediate request to /i, unless it is disabled, the SDK behavior settings
+   * turn networking off, or it was sent already. It carries the base request parameters, the app version as
+   * metrics and the counters. Only what it reported is taken away from the counters, and only once the server
+   * accepted it with a 2xx answer that is a JSON object with a "result". Runs on the update thread, so the
+   * request never holds up start() and finishes before the instance is destroyed.
+   */
+  void sendHealthCheck();
+
+  /**
+   * Stores the health check counters when a session update interval passed since they were last stored.
+   */
+  void saveHealthCheckOnTimer();
   bool began_session = false;
   std::atomic<bool> is_being_disposed{false};
   std::atomic<bool> is_sdk_initialized{false};
@@ -516,6 +564,11 @@ private:
 
   std::unique_ptr<cly::CrashModule> crash_module;
   std::unique_ptr<cly::ViewsModule> views_module;
+
+  // Health check counters; created with the instance, so warnings logged before start() are counted too.
+  std::shared_ptr<cly::HealthCheckModule> health_check = std::make_shared<cly::HealthCheckModule>();
+  std::atomic<bool> health_check_sent{false};
+  std::chrono::steady_clock::time_point last_health_check_save = std::chrono::steady_clock::now();
 
   std::shared_ptr<cly::CountlyConfiguration> configuration;
   std::shared_ptr<cly::LoggerModule> logger;

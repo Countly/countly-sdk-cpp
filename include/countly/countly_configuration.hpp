@@ -92,6 +92,11 @@ struct CountlyConfiguration {
 
   bool sdkBehaviorSettingsUpdatesDisabled = false;
 
+  /**
+   * Whether the SDK sends its health check after start.
+   */
+  bool healthCheckEnabled = true;
+
   std::string sdkBehaviorSettings;
 
   CountlyConfiguration(const std::string appKey, std::string serverUrl) {

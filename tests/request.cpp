@@ -270,7 +270,7 @@ static bool waitForRequestWith(const std::string &key, const std::string &value)
 }
 
 /**
- * What a request is for: the method of a fetch from /o/sdk, otherwise the type of queued request it carries.
+ * What a request is for: the method of a fetch from /o/sdk, otherwise the type of queued request it carries, or "hc" for the health check.
  */
 static std::string requestKind(const test_utils::HTTPCall &call) {
   if (call.url == "/o/sdk") {
@@ -281,7 +281,7 @@ static std::string requestKind(const test_utils::HTTPCall &call) {
     return method->second;
   }
   // end_session comes before session_duration because an end_session request carries both
-  for (const char *kind : {"begin_session", "end_session", "session_duration", "events", "user_details", "location", "crash", "old_device_id"}) {
+  for (const char *kind : {"begin_session", "end_session", "session_duration", "events", "user_details", "location", "crash", "old_device_id", "hc"}) {
     if (call.data.count(kind) > 0) {
       return kind;
     }
@@ -599,7 +599,7 @@ TEST_CASE("Built-in HTTP client") {
     while (std::chrono::steady_clock::now() < deadline) {
       countly->processRQDebug();
       request_lines = server.requestLines();
-      if (request_lines.size() >= 4 && countly->checkRQSize() == 0) {
+      if (request_lines.size() >= 5 && countly->checkRQSize() == 0) {
         break;
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -624,7 +624,7 @@ TEST_CASE("Built-in HTTP client") {
       CHECK(call.data["sdk_name"] == EXPECTED_SDK_NAME);
       CHECK(call.data["sdk_version"] == COUNTLY_SDK_VERSION);
     }
-    CHECK(kinds == std::multiset<std::string>{"sc", "fetch_remote_config", "begin_session", "events"});
+    CHECK(kinds == std::multiset<std::string>{"sc", "fetch_remote_config", "begin_session", "events", "hc"});
   }
 
   SUBCASE("a request to a server that never answers is given up after the request timeout") {

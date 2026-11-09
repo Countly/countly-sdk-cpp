@@ -37,6 +37,15 @@ namespace cly {
 struct HTTPResponse {
   bool success;
   nlohmann::json data;
+  /**
+   * HTTP status code of the answer, 0 when no answer arrived or the HTTP client did not set it.
+   * The health check reports the code and the body of the last answer that refused a request.
+   */
+  long status_code = 0;
+  /**
+   * Body of the answer as text, empty when there was none or the HTTP client did not set it.
+   */
+  std::string body;
 };
 
 using HTTPClientFunction = std::function<HTTPResponse(bool, const std::string &, const std::string &)>;

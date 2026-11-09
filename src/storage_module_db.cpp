@@ -15,6 +15,10 @@ const char REQUESTS_TABLE_REQUEST_DATA[] = "RequestData";
 #define SDK_BEHAVIOR_SETTINGS_KEY_COLUMN_NAME "Key"
 #define SDK_BEHAVIOR_SETTINGS_DATA_COLUMN_NAME "SettingsData"
 #define SDK_BEHAVIOR_SETTINGS_KEY_VALUE 1
+#define HEALTH_CHECK_TABLE_NAME "HealthCheck"
+#define HEALTH_CHECK_KEY_COLUMN_NAME "Key"
+#define HEALTH_CHECK_DATA_COLUMN_NAME "StateData"
+#define HEALTH_CHECK_KEY_VALUE 1
 
 namespace cly {
 StorageModuleDB::StorageModuleDB(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger) : StorageModuleBase(config, logger) {}
@@ -33,8 +37,9 @@ void StorageModuleDB::init() {
     }
 #endif
 
-    // Create schema for the requests table and the SDK behavior settings table
-    _is_initialized = createSchema(REQUESTS_TABLE_NAME, REQUESTS_TABLE_REQUEST_ID, REQUESTS_TABLE_REQUEST_DATA) && createSchema(SDK_BEHAVIOR_SETTINGS_TABLE_NAME, SDK_BEHAVIOR_SETTINGS_KEY_COLUMN_NAME, SDK_BEHAVIOR_SETTINGS_DATA_COLUMN_NAME);
+    // Create schema for the requests table, the SDK behavior settings table and the health check table
+    _is_initialized = createSchema(REQUESTS_TABLE_NAME, REQUESTS_TABLE_REQUEST_ID, REQUESTS_TABLE_REQUEST_DATA) && createSchema(SDK_BEHAVIOR_SETTINGS_TABLE_NAME, SDK_BEHAVIOR_SETTINGS_KEY_COLUMN_NAME, SDK_BEHAVIOR_SETTINGS_DATA_COLUMN_NAME) &&
+                      createSchema(HEALTH_CHECK_TABLE_NAME, HEALTH_CHECK_KEY_COLUMN_NAME, HEALTH_CHECK_DATA_COLUMN_NAME);
 
     if (_is_initialized) {
       vacuumDatabase();
@@ -555,6 +560,99 @@ std::string StorageModuleDB::getSDKBehaviorSettings() {
 #endif
   } catch (const std::exception &e) {
     _logger->log(LogLevel::ERROR, std::string("[Countly] [StorageModuleDB] getSDKBehaviorSettings, exception: [") + e.what() + "]");
+    return "";
+  }
+}
+
+void StorageModuleDB::storeHealthCheckState(const std::string &state) {
+  try {
+    if (!_is_initialized) {
+      _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] storeHealthCheckState, Module is not initialized");
+      return;
+    }
+
+#ifdef COUNTLY_USE_SQLITE
+    sqlite3 *db = nullptr;
+    sqlite3_stmt *stmt = nullptr;
+
+    if (cly::utils::openDatabase(_configuration->databasePath, &db) != SQLITE_OK) {
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] storeHealthCheckState, Failed to open database");
+      _logger->recordLogCode("e501");
+      return;
+    }
+
+    const char *sql = "INSERT OR REPLACE INTO " HEALTH_CHECK_TABLE_NAME " (" HEALTH_CHECK_KEY_COLUMN_NAME ", " HEALTH_CHECK_DATA_COLUMN_NAME ") "
+                      "VALUES (?, ?);";
+
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] storeHealthCheckState, Failed to prepare statement");
+      _logger->recordLogCode("e501");
+      sqlite3_close(db);
+      return;
+    }
+
+    sqlite3_bind_int(stmt, 1, HEALTH_CHECK_KEY_VALUE);
+    sqlite3_bind_text(stmt, 2, state.c_str(), -1, SQLITE_TRANSIENT);
+
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+      const char *err = sqlite3_errmsg(db);
+      _logger->log(LogLevel::ERROR, std::string("[Countly] [StorageModuleDB] storeHealthCheckState, failed: [") + err + "]");
+      _logger->recordLogCode("e501");
+    }
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+#else
+    (void)state;
+#endif
+  } catch (const std::exception &e) {
+    _logger->log(LogLevel::ERROR, std::string("[Countly] [StorageModuleDB] storeHealthCheckState, exception: [") + e.what() + "]");
+    _logger->recordLogCode("e501");
+  }
+}
+
+std::string StorageModuleDB::getHealthCheckState() {
+  try {
+    if (!_is_initialized) {
+      _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] getHealthCheckState, Module is not initialized");
+      return "";
+    }
+
+#ifdef COUNTLY_USE_SQLITE
+    sqlite3 *db = nullptr;
+    sqlite3_stmt *stmt = nullptr;
+    std::string result;
+
+    if (cly::utils::openDatabase(_configuration->databasePath, &db) != SQLITE_OK) {
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] getHealthCheckState, Failed to open database");
+      return "";
+    }
+
+    const char *sql = "SELECT " HEALTH_CHECK_DATA_COLUMN_NAME " FROM " HEALTH_CHECK_TABLE_NAME " WHERE " HEALTH_CHECK_KEY_COLUMN_NAME " = ?;";
+
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+      sqlite3_bind_int(stmt, 1, HEALTH_CHECK_KEY_VALUE);
+      if (sqlite3_step(stmt) == SQLITE_ROW) {
+        const unsigned char *text = sqlite3_column_text(stmt, 0);
+        if (text) {
+          result = reinterpret_cast<const char *>(text);
+        }
+      }
+    } else {
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] getHealthCheckState, Failed to prepare statement");
+    }
+
+    if (stmt) {
+      sqlite3_finalize(stmt);
+    }
+    sqlite3_close(db);
+
+    return result;
+#else
+    return "";
+#endif
+  } catch (const std::exception &e) {
+    _logger->log(LogLevel::ERROR, std::string("[Countly] [StorageModuleDB] getHealthCheckState, exception: [") + e.what() + "]");
     return "";
   }
 }

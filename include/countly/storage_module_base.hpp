@@ -98,6 +98,18 @@ public:
   virtual void storeSDKBehaviorSettings(const std::string &sdk_behavior_settings) = 0;
 
   virtual std::string getSDKBehaviorSettings() = 0;
+
+  /**
+   * Store the health check counters.
+   * @param state: the counters as JSON text, empty to clear them
+   */
+  virtual void storeHealthCheckState(const std::string &state) { (void)state; }
+
+  /**
+   * Read the stored health check counters.
+   * @return the counters as JSON text, empty when none are stored
+   */
+  virtual std::string getHealthCheckState() { return std::string(); }
 };
 
 } // namespace cly

@@ -1,4 +1,5 @@
 #include "countly/request_module.hpp"
+#include "countly/health_check_module.hpp"
 #include "countly/request_builder.hpp"
 
 #include <atomic>
@@ -188,6 +189,7 @@ void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &
 
   if (config->getRequestQueueSizeLimit() <= impl->_storageModule->RQCount()) {
     impl->_logger->log(LogLevel::WARNING, cly::utils::format_string("[Countly] [RequestModule] addRequestToQueue: Request Queue is full. Dropping the oldest request."));
+    impl->_logger->recordLogCode("w310");
     impl->_storageModule->RQRemoveFront();
   }
 
@@ -255,6 +257,10 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
         std::lock_guard<std::mutex> lk(*mutex);
         if (!response.success) {
           impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] processQueue: Failed to deliver to server, will try again later."));
+          std::shared_ptr<HealthCheckModule> healthCheck = impl->_logger->healthCheck();
+          if (healthCheck && response.status_code > 0) {
+            healthCheck->logFailedNetworkRequest(response.status_code, !response.body.empty() || response.data.is_null() ? response.body : response.data.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
+          }
           // if the request was not a success, abort sending and try again in the future
           break;
         }
@@ -358,7 +364,8 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
         DWORD dwSize = static_cast<DWORD>(sizeof(dwStatusCode));
         WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &dwStatusCode, &dwSize, WINHTTP_NO_HEADER_INDEX);
         response.success = (dwStatusCode >= 200 && dwStatusCode < 300);
-        if (response.success) {
+        response.status_code = static_cast<long>(dwStatusCode);
+        {
           DWORD n_bytes_available;
           bool error_reading_body = false;
           std::string body;
@@ -387,10 +394,11 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
             delete[] body_part;
           } while (n_bytes_available > 0);
 
-          if (!body.empty()) {
+          response.body = body;
+          if (response.success && !body.empty()) {
             const nlohmann::json &parseResult = nlohmann::json::parse(body, nullptr, false);
             if (parseResult.is_discarded()) {
-              impl->_logger->log(LogLevel::WARNING, "[Countly] [RequestModule] sendHTTP, Returned response from the server was not a valid JSON.");
+              impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] sendHTTP, Returned response from the server was not a valid JSON.");
             } else {
               response.data = parseResult;
             }
@@ -442,11 +450,13 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
       long status_code;
       curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
       response.success = (status_code >= 200 && status_code < 300);
+      response.status_code = status_code;
+      response.body = body;
 
       if (!body.empty()) {
         const nlohmann::json &parseResult = nlohmann::json::parse(body, nullptr, false);
         if (parseResult.is_discarded()) {
-          impl->_logger->log(LogLevel::WARNING, "[Countly] [RequestModule] sendHTTP, Returned response from the server was not a valid JSON.");
+          impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] sendHTTP, Returned response from the server was not a valid JSON.");
         } else {
           response.data = parseResult;
         }

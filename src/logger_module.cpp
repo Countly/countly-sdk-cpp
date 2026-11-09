@@ -1,4 +1,5 @@
 #include "countly/logger_module.hpp"
+#include "countly/health_check_module.hpp"
 #include <atomic>
 #include <iostream>
 #include <memory>
@@ -24,6 +25,9 @@ public:
   // logs at DEBUG level on per-event paths.
   std::atomic<bool> has_logger{false};
   LoggerFunction logger_function;
+  // Set once, before the instance logs from other threads, and never cleared.
+  std::shared_ptr<HealthCheckModule> health_check;
+  std::atomic<bool> has_health_check{false};
 };
 
 LoggerModule::LoggerModule() { impl = std::make_unique<LoggerModuleImpl>(); }
@@ -42,6 +46,14 @@ const LoggerFunction LoggerModule::getLogger() {
 }
 
 void LoggerModule::log(LogLevel level, const std::string &message) {
+  if (level >= LogLevel::WARNING && impl->has_health_check.load(std::memory_order_acquire)) {
+    if (level == LogLevel::WARNING) {
+      impl->health_check->logWarning();
+    } else {
+      impl->health_check->logError();
+    }
+  }
+
   // Fast path for the common case of no registered callback: one atomic load and
   // out, no lock. Without this, adding the mutex would have made every DEBUG log
   // site on the per-event paths more expensive than before it existed.
@@ -78,4 +90,31 @@ void LoggerModule::log(LogLevel level, const std::string &message) {
 }
 
 bool LoggerModule::isInsideCallback() { return inside_log_callback; }
+
+void LoggerModule::setHealthCheck(std::shared_ptr<HealthCheckModule> healthCheck) {
+  if (!healthCheck || impl->has_health_check.load(std::memory_order_acquire)) {
+    return;
+  }
+  impl->health_check = healthCheck;
+  impl->has_health_check.store(true, std::memory_order_release);
+}
+
+std::shared_ptr<HealthCheckModule> LoggerModule::healthCheck() const {
+  if (!impl->has_health_check.load(std::memory_order_acquire)) {
+    return nullptr;
+  }
+  return impl->health_check;
+}
+
+void LoggerModule::recordLogCode(const std::string &code, int count) {
+  if (impl->has_health_check.load(std::memory_order_acquire)) {
+    impl->health_check->recordLogCode(code, count);
+  }
+}
+
+void LoggerModule::recordUsage(const std::string &area, const std::string &method) {
+  if (impl->has_health_check.load(std::memory_order_acquire)) {
+    impl->health_check->recordUsage(area, method);
+  }
+}
 } // namespace cly
