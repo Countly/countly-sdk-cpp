@@ -311,7 +311,7 @@ void HealthCheckModule::saveState() {
   std::string state;
   {
     std::lock_guard<std::mutex> lk(_mutex);
-    storage = _storage;
+    storage = _storage.lock();
     if (!storage) {
       return;
     }
@@ -334,7 +334,7 @@ void HealthCheckModule::clearAndSave() {
     _consecutiveBackoffRequestCounter = 0;
     _methodUsage.clear();
     _logCodes.clear();
-    storage = _storage;
+    storage = _storage.lock();
   }
   if (storage) {
     storage->storeHealthCheckState("");

@@ -34,6 +34,7 @@ public:
   /**
    * Sets the storage the counters are kept in and adds the counters a previous run stored to the
    * current ones. A stored state that is not valid JSON is cleared and reported as log code e503.
+   * Held weakly, as the storage holds the logger, which holds this module.
    */
   void setStorage(std::shared_ptr<StorageModuleBase> storage);
 
@@ -95,7 +96,7 @@ private:
 
   std::mutex _mutex;
   std::weak_ptr<LoggerModule> _logger;
-  std::shared_ptr<StorageModuleBase> _storage;
+  std::weak_ptr<StorageModuleBase> _storage;
 
   long long _countLogWarning = 0;
   long long _countLogError = 0;
