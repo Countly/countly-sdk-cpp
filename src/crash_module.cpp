@@ -1,4 +1,5 @@
 #include "countly/crash_module.hpp"
+#include "countly/consent_module.hpp"
 #include "countly/internal_limits.hpp"
 #include "countly/request_module.hpp"
 
@@ -18,10 +19,22 @@ public:
   std::shared_ptr<RequestModule> _requestModule;
   std::shared_ptr<std::mutex> _mutex;
   std::weak_ptr<ConfigurationProvider> _configProvider;
+  std::shared_ptr<ConsentModule> _consent;
   CrashModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestModule> requestModule, std::shared_ptr<std::mutex> mutex) : _configuration(config), _logger(logger), _requestModule(requestModule), _mutex(mutex) {}
 
   // destructor to reset logger
   ~CrashModuleImpl() { _logger.reset(); }
+
+  /**
+   * Whether the "crashes" consent allows the call, logged at debug level when it does not.
+   */
+  bool hasConsent(const char *caller) {
+    if (!_consent || _consent->getConsent(consent::CRASHES)) {
+      return true;
+    }
+    _logger->log(LogLevel::DEBUG, std::string("[Countly] [CrashModule] ") + caller + ", the 'crashes' consent is not given, the call is ignored.");
+    return false;
+  }
 };
 
 // destructor to reset implementation
@@ -35,6 +48,9 @@ CrashModule::CrashModule(std::shared_ptr<CountlyConfiguration> config, std::shar
 
 // function to add breadcrumb
 void CrashModule::addBreadcrumb(const std::string &value) {
+  if (!impl->hasConsent("addBreadcrumb")) {
+    return;
+  }
   SDKLimits lim{COUNTLY_MAX_KEY_LENGTH_DEFAULT, COUNTLY_MAX_VALUE_SIZE_DEFAULT, COUNTLY_MAX_SEGMENTATION_VALUES_DEFAULT, COUNTLY_MAX_BREADCRUMB_COUNT_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINES_PER_THREAD_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINE_LENGTH_DEFAULT};
   if (std::shared_ptr<ConfigurationProvider> config = impl->_configProvider.lock()) {
     lim = config->getLimits();
@@ -57,6 +73,9 @@ void CrashModule::addBreadcrumb(const std::string &value) {
 void CrashModule::recordException(const std::string &title, const std::string &stackTrace, const bool fatal, const std::map<std::string, std::string> &crashMetrics, const std::map<std::string, std::string> &segmentation) {
 
   impl->_logger->log(LogLevel::INFO, cly::utils::format_string("[Countly] [CrashModule] recordException, title = [%s], stackTrace = [%s]", title.c_str(), stackTrace.c_str()));
+  if (!impl->hasConsent("recordException")) {
+    return;
+  }
   impl->_logger->recordUsage("crashes", "record");
 
   SDKLimits lim{COUNTLY_MAX_KEY_LENGTH_DEFAULT, COUNTLY_MAX_VALUE_SIZE_DEFAULT, COUNTLY_MAX_SEGMENTATION_VALUES_DEFAULT, COUNTLY_MAX_BREADCRUMB_COUNT_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINES_PER_THREAD_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINE_LENGTH_DEFAULT};
@@ -123,5 +142,12 @@ void CrashModule::recordException(const std::string &title, const std::string &s
 }
 
 void CrashModule::setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider) { impl->_configProvider = std::move(provider); }
+
+void CrashModule::setConsentModule(std::shared_ptr<ConsentModule> consent) { impl->_consent = std::move(consent); }
+
+void CrashModule::clearBreadcrumbs() {
+  std::lock_guard<std::mutex> lk(*impl->_mutex);
+  impl->_breadCrumbs.clear();
+}
 
 } // namespace cly

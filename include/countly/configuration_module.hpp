@@ -40,6 +40,11 @@ public:
   bool isCustomEventTrackingEnabled();
   bool isCrashReportingEnabled() const override;
 
+  /**
+   * The server's "Consent required" setting: -1 while the SDK behavior settings don't contain it, otherwise 0 or 1.
+   */
+  int getConsentRequired() const;
+
   unsigned int getRequestQueueSizeLimit() const override;
   SDKLimits getLimits() const override;
   unsigned int getEventQueueSizeLimit();

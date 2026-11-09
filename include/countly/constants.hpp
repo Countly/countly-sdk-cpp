@@ -163,6 +163,11 @@ public:
   virtual void RecordEvent(const std::string &key, const std::map<std::string, std::string> &segmentation, int count, double sum, double duration) = 0;
 
   virtual void RecordLocation(const std::string &countryCode, const std::string &city, const std::string &gpsCoordinates, const std::string &ipAddress) = 0;
+
+  /**
+   * Called by the SDK behavior settings when the server's "cr" setting changes whether consent is required.
+   */
+  virtual void ConsentRequirementChanged() {}
 };
 
 } // namespace cly

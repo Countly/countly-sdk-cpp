@@ -32,6 +32,7 @@ message("Build Sample programs:" ${COUNTLY_BUILD_SAMPLE})
 set(COUNTLY_PUBLIC_HEADERS
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/configuration_module.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/configuration_provider.hpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/consent_module.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/constants.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/countly_configuration.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/include/countly/crash_module.hpp
@@ -57,6 +58,7 @@ add_library(countly
   ${CMAKE_CURRENT_SOURCE_DIR}/src/storage_module_memory.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/event.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/configuration_module.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/consent_module.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/health_check_module.cpp)
 add_library(countly::countly ALIAS countly)
 
@@ -156,7 +158,8 @@ if(COUNTLY_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/internal_limits_integration.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/multi_instance.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/user_details.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/health_check.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/health_check.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/consent.cpp)
     
     target_compile_options(countly-tests PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-g>)
     target_compile_definitions(countly-tests PRIVATE COUNTLY_BUILD_TESTS)

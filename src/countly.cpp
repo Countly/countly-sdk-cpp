@@ -2,6 +2,7 @@
 #include "countly/path_utils.hpp"
 #include "countly/storage_module_db.hpp"
 #include "countly/storage_module_memory.hpp"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <iomanip>
@@ -28,6 +29,11 @@ namespace cly {
 namespace {
 const char *const HEALTH_CHECK_AREA_SESSIONS = "sessions";
 const char *const HEALTH_CHECK_AREA_EVENTS = "events";
+
+/**
+ * Whether the list of features contains the feature.
+ */
+bool containsFeature(const std::vector<std::string> &features, const char *feature) { return std::find(features.begin(), features.end(), feature) != features.end(); }
 } // namespace
 
 
@@ -141,6 +147,9 @@ Countly::Countly() {
 
 Countly::~Countly() {
   is_being_disposed = true;
+  {
+    std::lock_guard<std::mutex> change(consent_change_mutex);
+  }
   // Deliberately does not wait for an in-flight remote-config fetch: that would
   // make destruction block for an HTTP round trip. The fetch runs detached and
   // holds its own references to everything it touches, so it stays valid on its
@@ -613,6 +622,10 @@ void Countly::setUserDetails(const std::map<std::string, std::string> &value) {
   // unique_lock so the mutex is released on scope exit, including on a throwing
   // json/map/addRequestToQueue op; unlock/relock around the self-locking flushEvents().
   std::unique_lock<std::mutex> lk(*mutex);
+  if (is_sdk_initialized && !hasConsent(consent::USERS)) {
+    log(LogLevel::DEBUG, "[Countly] setUserDetails, the 'users' consent is not given, the call is ignored.");
+    return;
+  }
   SDKLimits lim = configurationModule ? configurationModule->getLimits()
                                       : SDKLimits{COUNTLY_MAX_KEY_LENGTH_DEFAULT, COUNTLY_MAX_VALUE_SIZE_DEFAULT, COUNTLY_MAX_SEGMENTATION_VALUES_DEFAULT, COUNTLY_MAX_BREADCRUMB_COUNT_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINES_PER_THREAD_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINE_LENGTH_DEFAULT};
   std::map<std::string, std::string> limitedDetails;
@@ -641,6 +654,10 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string> &val
   // unique_lock so the mutex is released on scope exit, including on a throwing
   // json/map/addRequestToQueue op; unlock/re-acquire around the self-locking flushEvents().
   std::unique_lock<std::mutex> lk(*mutex);
+  if (is_sdk_initialized && !hasConsent(consent::USERS)) {
+    log(LogLevel::DEBUG, "[Countly] setCustomUserDetails, the 'users' consent is not given, the call is ignored.");
+    return;
+  }
 
   // Determine the post-filter custom property map first, then apply limits.
   std::map<std::string, std::string> customValue;
@@ -690,6 +707,10 @@ void Countly::multiplyCustomUserDetail(const std::string &key, double value) {
     logger->recordLogCode("w101");
     return;
   }
+  if (!hasConsent(consent::USERS)) {
+    log(LogLevel::DEBUG, "[Countly] multiplyCustomUserDetail, the 'users' consent is not given, the call is ignored.");
+    return;
+  }
   if (!std::isfinite(value)) {
     log(LogLevel::WARNING, "[Countly] multiplyCustomUserDetail, The parameter 'value' must be a finite number. Returning.");
     logger->recordLogCode("w700");
@@ -719,7 +740,11 @@ void Countly::multiplyCustomUserDetail(const std::string &key, double value) {
 }
 
 void Countly::queueUserDetails() {
-  queueUserDetails(session_params["user_details"]);
+  if (hasConsent(consent::USERS)) {
+    queueUserDetails(session_params["user_details"]);
+  } else {
+    log(LogLevel::DEBUG, "[Countly] queueUserDetails, the 'users' consent is not given, the waiting user details are dropped.");
+  }
   session_params.erase("user_details");
 }
 
@@ -755,6 +780,10 @@ void Countly::setLocation(const std::string &countryCode, const std::string &cit
   if (!is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] setLocation, SDK is not initialized.");
     logger->recordLogCode("w101");
+    return;
+  }
+  if (!hasConsent(consent::LOCATION)) {
+    log(LogLevel::DEBUG, "[Countly] setLocation, the 'location' consent is not given, the call is ignored.");
     return;
   }
   bool isClearingLocation = countryCode.empty() && city.empty() && gpsCoordinates.empty() && ipAddress.empty();
@@ -882,10 +911,12 @@ void Countly::_changeDeviceIdWithMerge(const std::string &value) {
   session_params.erase("old_device_id");
 }
 
-/* Change device ID without merge after SDK has been initialized. Events and user details that are still waiting are sent for the old device ID first.*/
+/* Change device ID without merge after SDK has been initialized. Running views, events and user details that are still waiting are sent for the old device ID first, then all consent is removed without telling the server.*/
 void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
+  std::lock_guard<std::mutex> change(consent_change_mutex);
   log(LogLevel::DEBUG, "[Countly] _changeDeviceIdWithoutMerge, deviceId = [" + value + "]");
 
+  views_module->stopAllViews();
   // send all event to server and end current session of old user
   flushEvents();
   if (configuration->manualSessionControl == false) {
@@ -897,6 +928,17 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
     if (session_params.contains("user_details")) {
       queueUserDetails();
     }
+  }
+
+  if (consent_module->isRequired()) {
+    const std::vector<std::string> given = consent_module->featuresWithFlag(true);
+    if (!given.empty()) {
+      runConsentChange(given, false, ConsentChangeSource::DeviceIdChangedWithoutMerge);
+    }
+  }
+
+  {
+    std::lock_guard<std::mutex> lk(*mutex);
     session_params["device_id"] = value;
     configuration->deviceId = value;
   }
@@ -1002,6 +1044,8 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   requestModule->setConfigurationProvider(configurationModule);
   views_module->setConfigurationProvider(configurationModule);
   crash_module->setConfigurationProvider(configurationModule);
+  views_module->setConsentModule(consent_module);
+  crash_module->setConsentModule(consent_module);
   health_check->setStorage(storageModule);
 
   is_sdk_initialized = true; // after this point SDK is initialized.
@@ -1010,6 +1054,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   configurationModule->fetchConfigFromStorage();
   configurationModule->fetchConfigFromServer(session_params);
   configurationModule->startServerConfigUpdateTimer(session_params);
+  activateConsent();
   lk.lock();
 
   if (!running) {
@@ -1120,13 +1165,20 @@ void Countly::setUpdateInterval(size_t milliseconds) {
 }
 
 void Countly::addEvent(const cly::Event &event) {
+  std::string eventKey = event.getKey();
   if (!is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] addEvent, SDK is not initialized.");
-    logger->recordLogCode("w101");
+    if (hasEventConsent(eventKey)) {
+      logger->recordLogCode("w101");
+    }
     return;
   }
 
-  std::string eventKey = event.getKey();
+  if (!hasEventConsent(eventKey)) {
+    log(LogLevel::DEBUG, "[Countly] addEvent, the consent for the event [" + eventKey + "] is not given, it is not recorded.");
+    return;
+  }
+
   bool isInternalEvent = eventKey.find("[CLY]_") == 0;
   if (!isInternalEvent) {
     logger->recordUsage(HEALTH_CHECK_AREA_EVENTS, "record");
@@ -1399,7 +1451,13 @@ bool Countly::beginSession() { return beginSessionInternal(false); }
 bool Countly::beginSessionInternal(bool automatic) {
   if (!is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] beginSession, SDK is not initialized.");
-    logger->recordLogCode("w101");
+    if (hasConsent(consent::SESSIONS)) {
+      logger->recordLogCode("w101");
+    }
+    return false;
+  }
+  if (!hasConsent(consent::SESSIONS)) {
+    log(LogLevel::DEBUG, "[Countly] beginSession, the 'sessions' consent is not given, no session begins.");
     return false;
   }
   if (!automatic) {
@@ -1429,28 +1487,36 @@ bool Countly::beginSessionInternal(bool automatic) {
 
   std::map<std::string, std::string> data = {{"timestamp", std::to_string(timestamp.count())}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"begin_session", "1"}};
 
-  if (session_params.contains("city") && session_params["city"].is_string() && !session_params["city"].get<std::string>().empty()) {
-    data["city"] = session_params["city"].get<std::string>();
-  }
+  if (isLocationOn()) {
+    if (session_params.contains("city") && session_params["city"].is_string() && !session_params["city"].get<std::string>().empty()) {
+      data["city"] = session_params["city"].get<std::string>();
+    }
 
-  if (session_params.contains("location") && session_params["location"].is_string() && !session_params["location"].get<std::string>().empty()) {
-    data["location"] = session_params["location"].get<std::string>();
-  }
+    if (session_params.contains("location") && session_params["location"].is_string() && !session_params["location"].get<std::string>().empty()) {
+      data["location"] = session_params["location"].get<std::string>();
+    }
 
-  if (session_params.contains("country_code") && session_params["country_code"].is_string() && !session_params["country_code"].get<std::string>().empty()) {
-    data["country_code"] = session_params["country_code"].get<std::string>();
-  }
+    if (session_params.contains("country_code") && session_params["country_code"].is_string() && !session_params["country_code"].get<std::string>().empty()) {
+      data["country_code"] = session_params["country_code"].get<std::string>();
+    }
 
-  if (session_params.contains("ip_address") && session_params["ip_address"].is_string() && !session_params["ip_address"].get<std::string>().empty()) {
-    data["ip_address"] = session_params["ip_address"].get<std::string>();
+    if (session_params.contains("ip_address") && session_params["ip_address"].is_string() && !session_params["ip_address"].get<std::string>().empty()) {
+      data["ip_address"] = session_params["ip_address"].get<std::string>();
+    }
+  } else {
+    data["location"] = "";
   }
 
   if (session_params.contains("user_details")) {
-    data["user_details"] = session_params["user_details"].dump();
+    if (hasConsent(consent::USERS)) {
+      data["user_details"] = session_params["user_details"].dump();
+    } else {
+      log(LogLevel::DEBUG, "[Countly] beginSession, the 'users' consent is not given, the waiting user details are dropped.");
+    }
     session_params.erase("user_details");
   }
 
-  if (configuration->metrics.size() > 0) {
+  if (configuration->metrics.size() > 0 && hasConsent(consent::METRICS)) {
     data["metrics"] = configuration->metrics.dump();
   }
 
@@ -1479,7 +1545,17 @@ bool Countly::updateSession() { return updateSessionInternal(false); }
 bool Countly::updateSessionInternal(bool automatic) {
   if (!is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] updateSession, SDK is not initialized.");
-    logger->recordLogCode("w101");
+    if (hasConsent(consent::SESSIONS)) {
+      logger->recordLogCode("w101");
+    }
+    return false;
+  }
+  if (!hasConsent(consent::SESSIONS)) {
+    if (automatic) {
+      packEvents();
+      return true;
+    }
+    log(LogLevel::DEBUG, "[Countly] updateSession, the 'sessions' consent is not given, the session is not updated.");
     return false;
   }
   if (!automatic) {
@@ -1642,7 +1718,13 @@ bool Countly::endSession() { return endSessionInternal(false); }
 bool Countly::endSessionInternal(bool automatic) {
   if (!is_sdk_initialized && !is_being_disposed) {
     log(LogLevel::WARNING, "[Countly] endSession, SDK is not initialized.");
-    logger->recordLogCode("w101");
+    if (hasConsent(consent::SESSIONS)) {
+      logger->recordLogCode("w101");
+    }
+    return false;
+  }
+  if (!hasConsent(consent::SESSIONS)) {
+    log(LogLevel::DEBUG, "[Countly] endSession, the 'sessions' consent is not given, there is no session to end.");
     return false;
   }
   if (!automatic) {
@@ -2143,7 +2225,7 @@ void Countly::sendHealthCheck() {
     std::map<std::string, std::string> data = {{"hc", snapshot.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace)}};
 
     nlohmann::json::const_iterator appVersion = configuration->metrics.find("_app_version");
-    if (appVersion != configuration->metrics.end() && appVersion->is_string() && !appVersion->get<std::string>().empty()) {
+    if (hasConsent(consent::METRICS) && appVersion != configuration->metrics.end() && appVersion->is_string() && !appVersion->get<std::string>().empty()) {
       data["metrics"] = nlohmann::json({{"_app_version", appVersion->get<std::string>()}}).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
     }
 
@@ -2179,6 +2261,10 @@ void Countly::updateRemoteConfig() {
     logger->recordLogCode("w101");
     return;
   }
+  if (!hasConsent(consent::REMOTE_CONFIG)) {
+    log(LogLevel::DEBUG, "[Countly] updateRemoteConfig, the 'remote-config' consent is not given, nothing is downloaded.");
+    return;
+  }
   std::unique_lock<std::mutex> lk(*mutex);
   if (!session_params["app_key"].is_string() || !session_params["device_id"].is_string()) {
 
@@ -2208,6 +2294,10 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
     logger->recordLogCode("w101");
     return;
   }
+  if (!hasConsent(consent::REMOTE_CONFIG)) {
+    log(LogLevel::DEBUG, "[Countly] updateRemoteConfigFor, the 'remote-config' consent is not given, nothing is downloaded.");
+    return;
+  }
   std::unique_lock<std::mutex> lk(*mutex);
   std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
 
@@ -2231,6 +2321,10 @@ void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
     logger->recordLogCode("w101");
     return;
   }
+  if (!hasConsent(consent::REMOTE_CONFIG)) {
+    log(LogLevel::DEBUG, "[Countly] updateRemoteConfigExcept, the 'remote-config' consent is not given, nothing is downloaded.");
+    return;
+  }
   std::unique_lock<std::mutex> lk(*mutex);
   std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
 
@@ -2246,5 +2340,299 @@ void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
   // Asynchronous and detached: neither this call nor destruction waits for it.
   // Merges into the stored values, since this fetches only some of them.
   startRemoteConfigFetch(data, true, "updateRemoteConfigExcept");
+}
+
+void Countly::setRequiresConsent(bool required) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] setRequiresConsent, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+
+  consent_module->setRequiredByApp(required);
+}
+
+void Countly::setConsentEnabled(const std::vector<std::string> &featureNames) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] setConsentEnabled, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+
+  std::vector<std::string> features;
+  for (const std::string &name : featureNames) {
+    if (!ConsentModule::isFeature(name)) {
+      log(LogLevel::WARNING, "[Countly] setConsentEnabled, [" + name + "] is not a feature this SDK offers, it is ignored.");
+      logger->recordLogCode("w402");
+      continue;
+    }
+    features.push_back(name);
+  }
+  consent_module->setOnlyGiven(features);
+}
+
+void Countly::giveConsent(const std::vector<std::string> &featureNames) { changeConsent(featureNames, true, "giveConsent"); }
+
+void Countly::removeConsent(const std::vector<std::string> &featureNames) { changeConsent(featureNames, false, "removeConsent"); }
+
+void Countly::giveConsentAll() { changeConsent(consent::allFeatures(), true, "giveConsentAll"); }
+
+void Countly::removeConsentAll() { changeConsent(consent::allFeatures(), false, "removeConsentAll"); }
+
+void Countly::setConsent(const std::vector<std::string> &featureNames, bool isConsentGiven) { changeConsent(featureNames, isConsentGiven, "setConsent"); }
+
+bool Countly::getConsent(const std::string &featureName) {
+  if (!is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] getConsent, SDK is not initialized.");
+    logger->recordLogCode("w101");
+    return false;
+  }
+  if (!consent_module->isRequired()) {
+    return true;
+  }
+  if (!consent_module->isKnownName(featureName)) {
+    log(LogLevel::WARNING, "[Countly] getConsent, [" + featureName + "] is neither a feature this SDK offers nor a feature group.");
+    logger->recordLogCode("w402");
+    return false;
+  }
+  return consent_module->getConsent(featureName);
+}
+
+void Countly::createFeatureGroup(const std::string &groupName, const std::vector<std::string> &featureNames) {
+  if (!is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] createFeatureGroup, SDK is not initialized.");
+    logger->recordLogCode("w101");
+    return;
+  }
+  if (groupName.empty()) {
+    log(LogLevel::WARNING, "[Countly] createFeatureGroup, The parameter 'groupName' can't be empty. Returning.");
+    logger->recordLogCode("w700");
+    return;
+  }
+  if (ConsentModule::isFeature(groupName)) {
+    log(LogLevel::WARNING, "[Countly] createFeatureGroup, a group can't take the name of the feature [" + groupName + "]. Returning.");
+    logger->recordLogCode("w700");
+    return;
+  }
+  if (featureNames.empty()) {
+    log(LogLevel::WARNING, "[Countly] createFeatureGroup, no feature was given for the group [" + groupName + "]. Returning.");
+    logger->recordLogCode("w402");
+    return;
+  }
+
+  std::vector<std::string> features;
+  for (const std::string &name : featureNames) {
+    if (!ConsentModule::isFeature(name)) {
+      log(LogLevel::WARNING, "[Countly] createFeatureGroup, [" + name + "] is not a feature this SDK offers, it is ignored.");
+      logger->recordLogCode("w402");
+      continue;
+    }
+    features.push_back(name);
+  }
+  if (features.empty()) {
+    log(LogLevel::DEBUG, "[Countly] createFeatureGroup, the group [" + groupName + "] has no feature this SDK offers, it is not created.");
+    return;
+  }
+  consent_module->createGroup(groupName, features);
+}
+
+void Countly::setConsentFeatureGroup(const std::string &groupName, bool isConsentGiven) { changeConsent({groupName}, isConsentGiven, "setConsentFeatureGroup"); }
+
+void Countly::checkAllConsent() {
+  if (!is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] checkAllConsent, SDK is not initialized.");
+    logger->recordLogCode("w101");
+    return;
+  }
+
+  std::ostringstream state;
+  state << "[Countly] checkAllConsent, consent is " << (consent_module->isRequired() ? "required" : "not required");
+  for (const std::string &feature : consent::allFeatures()) {
+    state << ", " << feature << ": " << (consent_module->getConsent(feature) ? "given" : "not given");
+  }
+  log(LogLevel::INFO, state.str());
+}
+
+void Countly::ConsentRequirementChanged() {
+  std::lock_guard<std::mutex> change(consent_change_mutex);
+  if (is_being_disposed || configurationModule == nullptr) {
+    return;
+  }
+
+  const int requiredByServer = configurationModule->getConsentRequired();
+  if (!consent_active || !consent_module->requirementChangesWith(requiredByServer)) {
+    consent_module->setRequiredByServer(requiredByServer);
+    return;
+  }
+
+  const std::vector<std::string> withoutConsent = consent_module->featuresWithFlag(false);
+  if (consent_module->isRequired()) {
+    log(LogLevel::INFO, "[Countly] ConsentRequirementChanged, the server lifted the consent requirement.");
+    consent_module->setRequiredByServer(requiredByServer);
+    consentChanged(withoutConsent, true, ConsentChangeSource::ServerRequirement);
+    return;
+  }
+
+  log(LogLevel::INFO, "[Countly] ConsentRequirementChanged, the server requires consent.");
+  consentWillBeRemoved(withoutConsent);
+  consent_module->setRequiredByServer(requiredByServer);
+  queueConsentState();
+  consentChanged(withoutConsent, false, ConsentChangeSource::ServerRequirement);
+}
+
+bool Countly::hasConsent(const char *feature) const { return consent_module->getConsent(feature); }
+
+bool Countly::hasEventConsent(const std::string &key) const {
+  if (key == "[CLY]_view") {
+    return hasConsent(consent::VIEWS);
+  }
+  if (key == "[CLY]_nps" || key == "[CLY]_survey") {
+    return hasConsent(consent::FEEDBACK);
+  }
+  if (key == "[CLY]_star_rating") {
+    return hasConsent(consent::STAR_RATING) || hasConsent(consent::FEEDBACK);
+  }
+  if (key == "[CLY]_orientation") {
+    return hasConsent(consent::USERS);
+  }
+  if (key == "[CLY]_push_action") {
+    return hasConsent("push");
+  }
+  if (key == "[CLY]_action") {
+    return hasConsent("clicks") || hasConsent("scrolls");
+  }
+  if (key == "[CLY]_content_shown" || key == "[CLY]_content_interacted") {
+    return hasConsent("content");
+  }
+  return hasConsent(consent::EVENTS);
+}
+
+bool Countly::isLocationOn() { return hasConsent(consent::LOCATION) && configurationModule->isLocationTrackingEnabled(); }
+
+void Countly::changeConsent(const std::vector<std::string> &names, bool given, const char *caller) {
+  if (LoggerModule::isInsideCallback()) {
+    return;
+  }
+  if (!is_sdk_initialized) {
+    log(LogLevel::WARNING, std::string("[Countly] ") + caller + ", SDK is not initialized.");
+    logger->recordLogCode("w101");
+    return;
+  }
+
+  std::lock_guard<std::mutex> change(consent_change_mutex);
+  if (is_being_disposed) {
+    return;
+  }
+  if (!consent_module->isRequired()) {
+    log(LogLevel::INFO, std::string("[Countly] ") + caller + ", consent is not required, the call is ignored.");
+    return;
+  }
+  if (names.empty()) {
+    log(LogLevel::WARNING, std::string("[Countly] ") + caller + ", no feature was given, the call is ignored.");
+    logger->recordLogCode("w402");
+    return;
+  }
+
+  std::vector<std::string> unknown;
+  const std::vector<std::string> features = consent_module->expand(names, unknown);
+  for (const std::string &name : unknown) {
+    log(LogLevel::WARNING, std::string("[Countly] ") + caller + ", [" + name + "] is neither a feature this SDK offers nor a feature group, it is ignored.");
+    logger->recordLogCode("w402");
+  }
+
+  const std::vector<std::string> changing = consent_module->featuresToChange(features, given);
+  if (changing.empty()) {
+    log(LogLevel::DEBUG, std::string("[Countly] ") + caller + ", the consent of the given features does not change.");
+    return;
+  }
+  runConsentChange(changing, given, ConsentChangeSource::App);
+}
+
+void Countly::runConsentChange(const std::vector<std::string> &features, bool given, ConsentChangeSource source) {
+  log(LogLevel::DEBUG, std::string("[Countly] runConsentChange, ") + (given ? "giving" : "removing") + " consent for " + std::to_string(features.size()) + " feature(s)");
+  if (!given) {
+    consentWillBeRemoved(features);
+  }
+  consent_module->setGiven(features, given);
+  if (source != ConsentChangeSource::DeviceIdChangedWithoutMerge && consent_module->isRequired()) {
+    queueConsentState();
+  }
+  consentChanged(features, given, source);
+}
+
+void Countly::consentWillBeRemoved(const std::vector<std::string> &features) {
+  if (containsFeature(features, consent::VIEWS)) {
+    views_module->stopAllViews();
+  }
+  if (containsFeature(features, consent::SESSIONS)) {
+    endSessionInternal(true);
+  }
+}
+
+void Countly::consentChanged(const std::vector<std::string> &features, bool given, ConsentChangeSource source) {
+  if (!given) {
+    if (containsFeature(features, consent::CRASHES)) {
+      crash_module->clearBreadcrumbs();
+    }
+    if (containsFeature(features, consent::USERS)) {
+      std::lock_guard<std::mutex> lk(*mutex);
+      session_params.erase("user_details");
+    }
+    if (containsFeature(features, consent::LOCATION)) {
+      clearStoredLocation();
+      if (source != ConsentChangeSource::DeviceIdChangedWithoutMerge) {
+        _sendIndependantLocationRequest();
+      }
+    }
+    return;
+  }
+
+  bool sessionBegan = false;
+  if (containsFeature(features, consent::SESSIONS) && configuration->manualSessionControl == false) {
+    bool sessionRunning = false;
+    {
+      std::lock_guard<std::mutex> lk(*mutex);
+      sessionRunning = began_session;
+    }
+    sessionBegan = !sessionRunning && beginSessionInternal(true);
+  }
+  if (containsFeature(features, consent::REMOTE_CONFIG)) {
+    bool automaticDownload = false;
+    {
+      std::lock_guard<std::mutex> lk(*mutex);
+      automaticDownload = remote_config_enabled;
+    }
+    if (automaticDownload && !sessionBegan) {
+      updateRemoteConfig();
+    }
+  }
+}
+
+void Countly::queueConsentState() {
+  const std::string state = consent_module->state().dump();
+  log(LogLevel::DEBUG, "[Countly] queueConsentState, consent = [" + state + "]");
+  std::lock_guard<std::mutex> lk(*mutex);
+  requestModule->addRequestToQueue({{"consent", state}});
+}
+
+void Countly::clearStoredLocation() {
+  std::lock_guard<std::mutex> lk(*mutex);
+  session_params.erase("city");
+  session_params.erase("location");
+  session_params.erase("country_code");
+  session_params.erase("ip_address");
+}
+
+void Countly::activateConsent() {
+  std::lock_guard<std::mutex> change(consent_change_mutex);
+  consent_module->setRequiredByServer(configurationModule->getConsentRequired());
+  consent_active = true;
+  if (!consent_module->isRequired()) {
+    return;
+  }
+
+  queueConsentState();
+  if (!hasConsent(consent::LOCATION) && (!hasConsent(consent::SESSIONS) || !configurationModule->isSessionTrackingEnabled())) {
+    clearStoredLocation();
+    _sendIndependantLocationRequest();
+  }
 }
 } // namespace cly

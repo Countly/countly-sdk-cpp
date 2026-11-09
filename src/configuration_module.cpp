@@ -20,6 +20,7 @@ static constexpr const char *KEY_VIEW_TRACKING = "vt";
 static constexpr const char *KEY_LOCATION_TRACKING = "lt";
 static constexpr const char *KEY_CUSTOM_EVENT_TRACKING = "cet";
 static constexpr const char *KEY_CRASH_REPORTING = "crt";
+static constexpr const char *KEY_CONSENT_REQUIRED = "cr";
 static constexpr const char *KEY_SERVER_CONFIG_UPDATE_INTERVAL = "scui";
 static constexpr const char *KEY_LOGGING = "log"; // not used and implemented yet
 
@@ -34,7 +35,6 @@ static constexpr const char *KEY_SEGMENTATION_WHITELIST = "sw";
 static constexpr const char *KEY_EVENT_SEGMENTATION_WHITELIST = "esw";
 
 // sdk configuration - not implemented yet
-static constexpr const char *KEY_CONSENT_REQUIRED = "cr";
 static constexpr const char *KEY_DROP_OLD_REQUEST_TIME = "dort";
 
 // sdk internal limits - not implemented yet
@@ -80,6 +80,8 @@ public:
   std::atomic<bool> locationTrackingEnabled{true};
   std::atomic<bool> customEventTrackingEnabled{true};
   std::atomic<bool> crashReportingEnabled{true};
+  // -1 while the settings don't contain "cr", otherwise 0 or 1
+  std::atomic<int> consentRequired{-1};
   std::atomic<unsigned int> eventQueueThreshold{0};
   std::atomic<unsigned int> requestQueueSizeLimit{0};
   std::atomic<unsigned int> sessionUpdateInterval{0};
@@ -222,6 +224,10 @@ public:
       configUpdateCv.notify_all();
     }
 
+    if (changedSettings.contains(KEY_CONSENT_REQUIRED)) {
+      _cly->ConsentRequirementChanged();
+    }
+
     if (changedSettings.contains(KEY_LOCATION_TRACKING) && changedSettings[KEY_LOCATION_TRACKING] == false) {
       // disable location - safe because _onSBSChanged is called outside of _mutex
       _cly->RecordLocation("", "", "", "");
@@ -240,6 +246,15 @@ public:
 
     bool locationTrackingCurrent = getBool(KEY_LOCATION_TRACKING, locationTrackingEnabledVal);
     unsigned int serverConfigUpdateIntervalCurrent = getUInt(KEY_SERVER_CONFIG_UPDATE_INTERVAL, serverConfigUpdateIntervalVal);
+    int consentRequiredVal = consentRequired.load(std::memory_order_acquire);
+    int consentRequiredCurrent = -1;
+    if (sdk_behavior_settings.is_object()) {
+      auto consentRequiredSetting = sdk_behavior_settings.find(KEY_CONSENT_REQUIRED);
+      if (consentRequiredSetting != sdk_behavior_settings.end() && consentRequiredSetting->is_boolean()) {
+        consentRequiredCurrent = consentRequiredSetting->get<bool>() ? 1 : 0;
+      }
+    }
+    consentRequired.store(consentRequiredCurrent, std::memory_order_release);
 
     trackingEnabled.store(getBool(KEY_TRACKING, trackingEnabledVal), std::memory_order_release);
     networkingEnabled.store(getBool(KEY_NETWORKING, networkingEnabledVal), std::memory_order_release);
@@ -298,6 +313,9 @@ public:
     }
     if (serverConfigUpdateIntervalCurrent != serverConfigUpdateIntervalVal) {
       changedSettings[KEY_SERVER_CONFIG_UPDATE_INTERVAL] = serverConfigUpdateIntervalCurrent;
+    }
+    if (consentRequiredCurrent != consentRequiredVal) {
+      changedSettings[KEY_CONSENT_REQUIRED] = consentRequiredCurrent;
     }
     return changedSettings;
   }
@@ -506,6 +524,8 @@ bool ConfigurationModule::isSessionTrackingEnabled() { return impl->sessionTrack
 bool ConfigurationModule::isCustomEventTrackingEnabled() { return impl->customEventTrackingEnabled.load(std::memory_order_acquire); }
 
 bool ConfigurationModule::isCrashReportingEnabled() const { return impl->crashReportingEnabled.load(std::memory_order_acquire); }
+
+int ConfigurationModule::getConsentRequired() const { return impl->consentRequired.load(std::memory_order_acquire); }
 
 unsigned int ConfigurationModule::getRequestQueueSizeLimit() const { return impl->requestQueueSizeLimit.load(std::memory_order_acquire); }
 

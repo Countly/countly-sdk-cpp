@@ -1,4 +1,8 @@
 ## XX.XX.XX
+- ! Minor breaking change ! The "Consent required" option of the SDK Behavior Settings now applies. While it is on, the SDK collects nothing until the app gives consent; while it is off, the SDK works as if every consent were given, also in apps that require consent.
+
+- Added user consent. With `setRequiresConsent(true)` a feature works only after its consent is given, at start with `setConsentEnabled` or later with `giveConsent`, `giveConsentAll` or `setConsent`, and stops when the consent is removed with `removeConsent`, `removeConsentAll` or `setConsent`. The SDK sends every change to the server. The feature names are in `cly::consent`, and `cly::consent::allFeatures()` lists them all. `createFeatureGroup` and `setConsentFeatureGroup` handle groups of features; `getConsent` and `checkAllConsent` show the current state.
+- While consent is required, changing the device ID without merge removes all consent, so the app gives it again for the new user.
 - Added the health check feature. The SDK now sends a health check request once after `start()`. Like any request, it updates the user's last seen time on the server.
 - Added the SDK name and version (`sdk_name` and `sdk_version`) to every request, including the remote config and SDK Behavior Settings fetches. Before, only the begin session request carried them.
 - Added `multiplyCustomUserDetail` for multiplying the numeric value of a custom user property on the server.
@@ -7,6 +11,8 @@
 - Calls made before `start()`, a second `start()`, beginning a session that already runs and ending one that does not are now logged at warning level. Failed and non-JSON server answers, and session calls ignored because the SDK Behavior Settings turned session tracking off, are now logged at debug level.
 
 - Mitigated an issue where reaching the event queue threshold logged a warning that events were dropped, although they were sent.
+- Mitigated an issue where a view that was open during a device ID change without merge was ended under the new device ID.
+- Mitigated an issue where session starts let the server work out the user's location from the IP address while the SDK Behavior Settings turned location tracking off.
 
 ## 26.8.1
 - ! Minor breaking change ! Builds now stop with a clear error when the SDK headers find a nlohmann/json older than 3.11 first on the include path, instead of mixing two versions of the library.
