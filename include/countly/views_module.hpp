@@ -9,6 +9,8 @@
 #include "countly/logger_module.hpp"
 
 namespace cly {
+class ConsentModule;
+
 class ViewsModule {
 
 public:
@@ -44,6 +46,17 @@ private:
   class ViewModuleImpl;
   std::unique_ptr<ViewModuleImpl> impl;
   void setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider); // try injecting
+
+  /**
+   * Sets the consent state the view calls check for the "views" consent.
+   */
+  void setConsentModule(std::shared_ptr<ConsentModule> consent);
+
+  /**
+   * Ends every running view and records its end event, while the SDK behavior settings allow view tracking;
+   * otherwise the views are dropped without an event.
+   */
+  void stopAllViews();
 };
 } // namespace cly
 #endif

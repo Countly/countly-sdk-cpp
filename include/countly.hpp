@@ -23,6 +23,7 @@
 #ifdef _WIN32
 #undef ERROR
 #endif
+#include "countly/consent_module.hpp"
 #include "countly/event.hpp"
 #include "countly/health_check_module.hpp"
 #include "countly/logger_module.hpp"
@@ -398,6 +399,78 @@ public:
     configuration->sdkBehaviorSettings = settings_json;
   }
 
+  /**
+   * Requires the user's consent before the SDK collects anything. Each feature then works only after its consent
+   * is given, at start with setConsentEnabled() or later with giveConsent(). The SDK does not remember consent
+   * across restarts: give it again at every start. While the server's SDK behavior settings contain "Consent
+   * required", the server's value applies instead. Call it before start().
+   */
+  void setRequiresConsent(bool required);
+
+  /**
+   * Gives consent at start to the listed features (see cly::consent), and to no other feature. Has an effect only
+   * while consent is required. Names this SDK does not offer are ignored with a warning. Call it before start().
+   */
+  void setConsentEnabled(const std::vector<std::string> &featureNames);
+
+  /**
+   * Gives consent to the listed features (see cly::consent) or feature groups. The features start at once, for
+   * example a session begins with automatic session tracking, and the SDK queues the new consent state for the
+   * server. Ignored while consent is not required. Call it after start().
+   */
+  void giveConsent(const std::vector<std::string> &featureNames);
+
+  /**
+   * Removes consent from the listed features (see cly::consent) or feature groups. The features stop at once:
+   * running views and the session end, and breadcrumbs, user details waiting for the first session and the
+   * location are cleared, the location also on the server. Data recorded before stays queued and is sent. The SDK
+   * queues the new consent state for the server. Ignored while consent is not required. Call it after start().
+   */
+  void removeConsent(const std::vector<std::string> &featureNames);
+
+  /**
+   * Gives consent to every feature this SDK offers, like giveConsent().
+   */
+  void giveConsentAll();
+
+  /**
+   * Removes consent from every feature this SDK offers, like removeConsent().
+   */
+  void removeConsentAll();
+
+  /**
+   * Whether the feature, or every feature of the group, has consent. Always true while consent is not required.
+   */
+  bool getConsent(const std::string &featureName);
+
+  /**
+   * Gives or removes consent for the listed features or feature groups, like giveConsent() and removeConsent().
+   */
+  void setConsent(const std::vector<std::string> &featureNames, bool isConsentGiven);
+
+  /**
+   * Stores a named group of features, so that their consent can be given or removed at once with
+   * setConsentFeatureGroup(), giveConsent() or removeConsent(). Creating a group again replaces it. A group can
+   * not take the name of a feature.
+   */
+  void createFeatureGroup(const std::string &groupName, const std::vector<std::string> &featureNames);
+
+  /**
+   * Gives or removes consent for every feature of the group.
+   */
+  void setConsentFeatureGroup(const std::string &groupName, bool isConsentGiven);
+
+  /**
+   * Logs whether consent is required and whether each feature has consent. Changes nothing.
+   */
+  void checkAllConsent();
+
+  /**
+   * Applies a change of the server's "Consent required" setting: turning the requirement on acts like removing
+   * consent from every feature that has none, lifting it like giving consent to every feature.
+   */
+  void ConsentRequirementChanged() override;
+
 #ifdef COUNTLY_BUILD_TESTS
   /**
    * Convert event queue into list.
@@ -522,6 +595,8 @@ private:
   /**
    * Updates the session, counted in the health check as a call of the app or, with 'automatic', of the SDK.
    * A call of the app in manual session control without a running session is reported as log code w760.
+   * Without the "sessions" consent a call of the app is ignored, while the SDK's own call still moves the queued
+   * events into a request.
    */
   bool updateSessionInternal(bool automatic);
 
@@ -544,6 +619,73 @@ private:
    * Stores the health check counters when a session update interval passed since they were last stored.
    */
   void saveHealthCheckOnTimer();
+
+  /**
+   * Where a consent change comes from: a call of the app, the silent removal of a device ID change without merge,
+   * or the server's "Consent required" setting.
+   */
+  enum class ConsentChangeSource { App, DeviceIdChangedWithoutMerge, ServerRequirement };
+
+  /**
+   * Whether the feature has consent; always true while consent is not required.
+   */
+  bool hasConsent(const char *feature) const;
+
+  /**
+   * Whether an event with this key may be recorded: a custom event needs the "events" consent, an internal event
+   * the consent of its own feature, and a "[CLY]_" key that is no known internal event the "events" consent.
+   */
+  bool hasEventConsent(const std::string &key) const;
+
+  /**
+   * Whether location is on: the "location" consent is given and the SDK behavior settings allow location tracking.
+   * While it is off, a session start carries the empty location, which keeps the server from working out the
+   * location from the IP address.
+   */
+  bool isLocationOn();
+
+  /**
+   * The shared part of the public calls that give or remove consent: checks the call, expands groups, records w402
+   * for unknown names and runs the change for the features whose consent changes.
+   */
+  void changeConsent(const std::vector<std::string> &names, bool given, const char *caller);
+
+  /**
+   * Changes the consent of the features: the reactions that need the old consent run first, then the flags change,
+   * the consent state is queued for the server, and the reactions to the new state run. The silent removal of a
+   * device ID change without merge queues no consent state and no location erase. The caller holds
+   * consent_change_mutex and not the instance mutex.
+   */
+  void runConsentChange(const std::vector<std::string> &features, bool given, ConsentChangeSource source);
+
+  /**
+   * The reactions that run while the features still have consent, before it is removed: the running views and the
+   * session end.
+   */
+  void consentWillBeRemoved(const std::vector<std::string> &features);
+
+  /**
+   * The reactions to the new consent of the features. Removed: the breadcrumbs, the user details waiting for the
+   * first session and the stored location are cleared, and a location erase is queued unless the removal is silent.
+   * Given: with automatic sessions a session begins, and the automatic remote config download runs.
+   */
+  void consentChanged(const std::vector<std::string> &features, bool given, ConsentChangeSource source);
+
+  /**
+   * Queues the consent state of every feature this SDK offers.
+   */
+  void queueConsentState();
+
+  /**
+   * Clears the stored location values.
+   */
+  void clearStoredLocation();
+
+  /**
+   * Applies the server's stored "Consent required" setting, and while consent is required, queues the consent
+   * state and, when location is off and no session start will be sent, a location erase. Called at the end of start().
+   */
+  void activateConsent();
   bool began_session = false;
   std::atomic<bool> is_being_disposed{false};
   std::atomic<bool> is_sdk_initialized{false};
@@ -567,6 +709,14 @@ private:
 
   // Health check counters; created with the instance, so warnings logged before start() are counted too.
   std::shared_ptr<cly::HealthCheckModule> health_check = std::make_shared<cly::HealthCheckModule>();
+
+  // Consent state; created with the instance, so the consent options can be set before start().
+  std::shared_ptr<cly::ConsentModule> consent_module = std::make_shared<cly::ConsentModule>();
+  // Serializes consent changes, their reactions and device ID changes without merge. Taken before the instance mutex.
+  // The destructor takes it once, so that no server requirement change runs while it tears the modules down.
+  std::mutex consent_change_mutex;
+  // Set at the end of start(); before that, a change of the server's requirement only updates the state.
+  bool consent_active = false;
   std::atomic<bool> health_check_sent{false};
   std::chrono::steady_clock::time_point last_health_check_save = std::chrono::steady_clock::now();
 

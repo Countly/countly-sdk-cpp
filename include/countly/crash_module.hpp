@@ -10,6 +10,8 @@
 #include "countly/request_module.hpp"
 
 namespace cly {
+class ConsentModule;
+
 class CrashModule {
 
 public:
@@ -39,6 +41,16 @@ private:
   class CrashModuleImpl;
   std::unique_ptr<CrashModuleImpl> impl;
   void setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider); // try injecting
+
+  /**
+   * Sets the consent state the crash calls check for the "crashes" consent.
+   */
+  void setConsentModule(std::shared_ptr<ConsentModule> consent);
+
+  /**
+   * Forgets every breadcrumb.
+   */
+  void clearBreadcrumbs();
 };
 } // namespace cly
 #endif

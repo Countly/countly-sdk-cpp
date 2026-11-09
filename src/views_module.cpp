@@ -1,9 +1,11 @@
 #include "countly/views_module.hpp"
 
+#include "countly/consent_module.hpp"
 #include "countly/internal_limits.hpp"
 
 #include <chrono>
 #include <mutex>
+#include <vector>
 
 #define CLY_VIEW_KEY "[CLY]_view"
 
@@ -82,9 +84,44 @@ private:
 public:
   std::shared_ptr<cly::LoggerModule> _logger;
   std::weak_ptr<ConfigurationProvider> _configProvider;
+  std::shared_ptr<ConsentModule> _consent;
   ViewModuleImpl(cly::CountlyDelegates *cly, std::shared_ptr<cly::LoggerModule> logger) : _cly(cly), _logger(logger) {}
 
   ~ViewModuleImpl() { _logger.reset(); }
+
+  /**
+   * Whether the "views" consent allows the call, logged at debug level when it does not.
+   */
+  bool hasConsent(const char *caller) {
+    if (!_consent || _consent->getConsent(consent::VIEWS)) {
+      return true;
+    }
+    _logger->log(LogLevel::DEBUG, std::string("[Countly] [ViewsModule] ") + caller + ", the 'views' consent is not given, the call is ignored.");
+    return false;
+  }
+
+  /**
+   * Takes every running view out of the map and records its end event, or drops them while view tracking is off.
+   */
+  void _stopAllViews() {
+    std::vector<std::shared_ptr<ViewInfo>> running;
+    {
+      std::lock_guard<std::mutex> lk(_views_mutex);
+      for (const auto &entry : _viewsStartTime) {
+        running.push_back(entry.second);
+      }
+      _viewsStartTime.clear();
+    }
+
+    std::shared_ptr<ConfigurationProvider> config = _configProvider.lock();
+    if (!config || config->isViewTrackingEnabled() == false) {
+      _logger->log(LogLevel::DEBUG, "[Countly] [ViewsModule] _stopAllViews, View tracking is disabled, the running views are dropped.");
+      return;
+    }
+    for (const std::shared_ptr<ViewInfo> &view : running) {
+      _recordView(view, {}, false);
+    }
+  }
 
   std::string _openView(const std::string &name, const std::map<std::string, std::string> &segmentation) {
     SDKLimits lim{COUNTLY_MAX_KEY_LENGTH_DEFAULT, COUNTLY_MAX_VALUE_SIZE_DEFAULT, COUNTLY_MAX_SEGMENTATION_VALUES_DEFAULT, COUNTLY_MAX_BREADCRUMB_COUNT_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINES_PER_THREAD_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINE_LENGTH_DEFAULT};
@@ -201,6 +238,9 @@ std::string ViewsModule::openView(const std::string &name, const std::map<std::s
 
   impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[Countly] [ViewsModule] openView, name = [%s], segmentation = [%s]", name.c_str(), utils::mapToString(segmentation).c_str()));
 
+  if (!impl->hasConsent("openView")) {
+    return {};
+  }
   impl->_logger->recordUsage("views", "start");
   if (name.empty()) {
     impl->_logger->log(cly::LogLevel::WARNING, "[Countly] [ViewsModule] openView, view name can not be null or empty!");
@@ -214,6 +254,9 @@ std::string ViewsModule::openView(const std::string &name, const std::map<std::s
 void ViewsModule::closeViewWithName(const std::string &name) {
   impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[Countly] [ViewsModule] closeViewWithName, name = [%s]", name.c_str()));
 
+  if (!impl->hasConsent("closeViewWithName")) {
+    return;
+  }
   impl->_logger->recordUsage("views", "stop");
   if (name.empty()) {
     impl->_logger->log(cly::LogLevel::WARNING, "[Countly] [ViewsModule] closeViewWithName, view name can not be null or empty!");
@@ -226,6 +269,9 @@ void ViewsModule::closeViewWithName(const std::string &name) {
 void ViewsModule::closeViewWithID(const std::string &viewId) {
   impl->_logger->log(cly::LogLevel::INFO, cly::utils::format_string("[Countly] [ViewsModule] closeViewWithID, viewId = [%s]", viewId.c_str()));
 
+  if (!impl->hasConsent("closeViewWithID")) {
+    return;
+  }
   impl->_logger->recordUsage("views", "stop");
   if (viewId.empty()) {
     impl->_logger->log(cly::LogLevel::WARNING, "[Countly] [ViewsModule] closeViewWithID, viewId can not be null or empty!");
@@ -237,5 +283,9 @@ void ViewsModule::closeViewWithID(const std::string &viewId) {
 }
 
 void ViewsModule::setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider) { impl->_configProvider = std::move(provider); }
+
+void ViewsModule::setConsentModule(std::shared_ptr<ConsentModule> consent) { impl->_consent = std::move(consent); }
+
+void ViewsModule::stopAllViews() { impl->_stopAllViews(); }
 
 } // namespace cly
