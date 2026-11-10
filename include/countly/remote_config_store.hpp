@@ -4,6 +4,7 @@
 #include "nlohmann/json.hpp"
 #include <atomic>
 #include <mutex>
+#include <string>
 
 namespace cly {
 
@@ -25,7 +26,10 @@ struct RemoteConfigStore {
   std::mutex mutex;
   nlohmann::json values = nlohmann::json::object();
 
-  // True from the moment a fetch is started until its thread body returns.
+  // The app key the values belong to. Only a fetch for this key stores its result or clears fetch_running.
+  std::string app_key;
+
+  // True from the moment a fetch is started until its thread body returns, or until the app key changes.
   std::atomic<bool> fetch_running{false};
 };
 

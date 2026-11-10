@@ -96,6 +96,10 @@ public:
 
   mutable std::mutex sbsMutex;
   std::thread configFetchThread;
+  // Whether configFetchThread is still fetching, and the parameters of a fetch requested meanwhile. Guarded by fetchMutex.
+  std::mutex fetchMutex;
+  bool fetchRunning = false;
+  std::map<std::string, std::string> nextFetch;
 
   mutable std::mutex filterMutex;
   FilterList<std::set<std::string>> eventFilter;
@@ -169,6 +173,22 @@ public:
       }
     } catch (const std::exception &e) {
       _logger->log(LogLevel::ERROR, "[Countly] [ConfigurationModule] _fetchConfigFromServerHTTP, exception: [" + std::string(e.what()) + "]");
+    }
+  }
+
+  /**
+   * Fetches the settings. Fetches requested while one runs lead to one more fetch, with the parameters of the latest request.
+   */
+  void _runConfigFetches(std::map<std::string, std::string> data, const nlohmann::json &session_params) {
+    while (true) {
+      _fetchConfigFromServerHTTP(data, session_params);
+      std::lock_guard<std::mutex> lock(fetchMutex);
+      if (nextFetch.empty()) {
+        fetchRunning = false;
+        return;
+      }
+      data.swap(nextFetch);
+      nextFetch.clear();
     }
   }
 
@@ -386,7 +406,7 @@ public:
         std::map<std::string, std::string> data;
         {
           std::lock_guard<std::mutex> mutexLock(*_mutex);
-          data = {{"method", "sc"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
+          data = {{"method", "sc"}, {"app_key", _configuration->appKey}, {"device_id", _configuration->deviceId}};
         }
         _fetchConfigFromServerHTTP(data, session_params);
         lock.lock();
@@ -480,18 +500,24 @@ ConfigurationModule::ConfigurationModule(cly::CountlyDelegates *cly, std::shared
 ConfigurationModule::~ConfigurationModule() { impl.reset(); }
 
 void ConfigurationModule::fetchConfigFromServer(nlohmann::json session_params) {
-  // Join any previous fetch thread before starting a new one
-  if (impl->configFetchThread.joinable()) {
-    impl->configFetchThread.join();
-  }
-
   std::map<std::string, std::string> data;
   {
     std::lock_guard<std::mutex> lock(*impl->_mutex);
     data = {{"method", "sc"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
   }
 
-  impl->configFetchThread = std::thread(&ConfigurationModule::ConfigurationModuleImpl::_fetchConfigFromServerHTTP, impl.get(), data, session_params);
+  std::lock_guard<std::mutex> lock(impl->fetchMutex);
+  if (impl->fetchRunning) {
+    // The running fetch takes these parameters when it ends, so the caller never waits for a server
+    impl->nextFetch = data;
+    return;
+  }
+  // The previous fetch thread has set fetchRunning to false as its last step, so this join returns at once
+  if (impl->configFetchThread.joinable()) {
+    impl->configFetchThread.join();
+  }
+  impl->fetchRunning = true;
+  impl->configFetchThread = std::thread(&ConfigurationModule::ConfigurationModuleImpl::_runConfigFetches, impl.get(), data, session_params);
 }
 
 void ConfigurationModule::fetchConfigFromStorage() {

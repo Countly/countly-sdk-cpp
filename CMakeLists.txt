@@ -159,7 +159,8 @@ if(COUNTLY_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/multi_instance.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/user_details.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/health_check.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/consent.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/consent.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/server_url_app_key.cpp)
     
     target_compile_options(countly-tests PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-g>)
     target_compile_definitions(countly-tests PRIVATE COUNTLY_BUILD_TESTS)

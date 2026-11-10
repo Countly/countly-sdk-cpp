@@ -32,31 +32,43 @@ namespace cly {
 class RequestModule::RequestModuleImpl {
 private:
 public:
-  bool use_https = true;
   bool is_queue_being_processed = false;
+  // Guards the server URL and the port in the configuration, which a server URL change replaces while requests are sent.
+  std::mutex server_mutex;
+  // The id of the request processQueue() is sending, -1 while it sends none, and whether a queue operation removed
+  // that request meanwhile. Guarded by the mutex processQueue() takes.
+  long long sending_id = -1;
+  bool sending_removed = false;
   std::shared_ptr<CountlyConfiguration> _configuration;
   std::shared_ptr<LoggerModule> _logger;
   std::shared_ptr<RequestBuilder> _requestBuilder;
   std::shared_ptr<StorageModuleBase> _storageModule;
   RequestModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule)
       : _configuration(config), _logger(logger), _requestBuilder(requestBuilder), _storageModule(storageModule) {
-    if (_configuration->serverUrl.find("http://") == 0) {
-      use_https = false;
-    } else if (_configuration->serverUrl.find("https://") == 0) {
-      use_https = true;
-    } else {
-      use_https = false;
-      _configuration->serverUrl.insert(0, "http://");
+    setServerUrl(_configuration->serverUrl, _configuration->port);
+  }
+
+  /**
+   * Normalizes and stores the server URL and the port, see RequestModule::setServerUrl().
+   */
+  void setServerUrl(std::string url, unsigned int port) {
+    const bool use_https = url.find("https://") == 0;
+    if (!use_https && url.find("http://") != 0) {
+      url.insert(0, "http://");
     }
 
     const size_t scheme_length = use_https ? (sizeof("https://") - 1) : (sizeof("http://") - 1);
-    while (_configuration->serverUrl.size() > scheme_length && _configuration->serverUrl.back() == '/') {
-      _configuration->serverUrl.pop_back();
+    while (url.size() > scheme_length && url.back() == '/') {
+      url.pop_back();
     }
 
-    if (_configuration->port <= 0) {
-      _configuration->port = use_https ? 443 : 80;
+    if (port == 0) {
+      port = use_https ? 443 : 80;
     }
+
+    std::lock_guard<std::mutex> lk(server_mutex);
+    _configuration->serverUrl = url;
+    _configuration->port = port;
   }
 
   ~RequestModuleImpl() { _logger.reset(); }
@@ -142,6 +154,21 @@ CurlGlobal &curlGlobal() {
  * -- the actual count is 1 by construction and proves nothing on its own.
  */
 std::atomic<int> networking_init_requests(0);
+
+/**
+ * Finds the app_key value of a stored request: sets 'start' and 'length' and returns true, or returns false when the
+ * request carries none. Stored values are URL-encoded, so a "&" always starts the next parameter.
+ */
+bool findAppKey(const std::string &request, std::string::size_type &start, std::string::size_type &length) {
+  start = request.compare(0, 8, "app_key=") == 0 ? 0 : request.find("&app_key=");
+  if (start == std::string::npos) {
+    return false;
+  }
+  start = request.find('=', start) + 1;
+  const std::string::size_type end = request.find('&', start);
+  length = (end == std::string::npos ? request.size() : end) - start;
+  return true;
+}
 } // namespace
 
 void RequestModule::initGlobalNetworking() {
@@ -197,7 +224,42 @@ void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &
   impl->_storageModule->RQInsertAtEnd(request);
 }
 
-void RequestModule::clearRequestQueue() { impl->_storageModule->RQClearAll(); }
+void RequestModule::clearRequestQueue() {
+  impl->_storageModule->RQClearAll();
+  impl->sending_removed = true;
+}
+
+void RequestModule::setServerUrl(const std::string &url, unsigned int port) { impl->setServerUrl(url, port); }
+
+void RequestModule::replaceAppKeysInQueue(const std::string &appKey) {
+  const std::string encodedKey = RequestBuilder::encodeURL(appKey);
+  for (const std::shared_ptr<DataEntry> &request : impl->_storageModule->RQPeekAll()) {
+    std::string data = request->getData();
+    std::string::size_type start, length;
+    if (findAppKey(data, start, length) && data.compare(start, length, encodedKey) != 0) {
+      data.replace(start, length, encodedKey);
+      impl->_storageModule->RQUpdate(request->getId(), data);
+    }
+  }
+}
+
+long long RequestModule::removeOtherAppKeysFromQueue(const std::string &appKey) {
+  const std::string encodedKey = RequestBuilder::encodeURL(appKey);
+  long long removed = 0;
+  for (const std::shared_ptr<DataEntry> &request : impl->_storageModule->RQPeekAll()) {
+    const std::string &data = request->getData();
+    std::string::size_type start, length;
+    if (findAppKey(data, start, length) && data.compare(start, length, encodedKey) == 0) {
+      continue;
+    }
+    impl->_storageModule->RQRemove(request->getId());
+    if (request->getId() == impl->sending_id) {
+      impl->sending_removed = true;
+    }
+    removed++;
+  }
+  return removed;
+}
 
 void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
   {
@@ -250,11 +312,14 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
         }
 
         data = impl->_storageModule->RQPeekFront();
+        impl->sending_id = data->getId();
+        impl->sending_removed = false;
       }
       HTTPResponse response = sendHTTP("/i", data->getData());
 
       {
         std::lock_guard<std::mutex> lk(*mutex);
+        impl->sending_id = -1;
         if (!response.success) {
           impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] processQueue: Failed to deliver to server, will try again later."));
           std::shared_ptr<HealthCheckModule> healthCheck = impl->_logger->healthCheck();
@@ -267,7 +332,10 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
 
         // we pop the front only if it is still the same request
         // the queue might have changed while we were sending the request
-        impl->_storageModule->RQRemoveFront(data);
+        // a removed request's id can belong to a newer request by now, so nothing is removed then
+        if (!impl->sending_removed) {
+          impl->_storageModule->RQRemoveFront(data);
+        }
         processedRequestsCounter++;
 
         if (processedRequestsCounter > impl->_configuration->maxProcessingBatchSize) {
@@ -316,7 +384,16 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
   if (impl->_configuration->http_client_function) {
     return impl->_configuration->http_client_function(use_post, path, data);
   }
+
+  std::string server_url;
+  unsigned int port;
+  {
+    std::lock_guard<std::mutex> lk(impl->server_mutex);
+    server_url = impl->_configuration->serverUrl;
+    port = impl->_configuration->port;
+  }
 #ifdef _WIN32
+  const bool use_https = server_url.find("https://") == 0;
   HINTERNET hSession = nullptr;
   HINTERNET hConnect = nullptr;
   HINTERNET hRequest = nullptr;
@@ -330,12 +407,12 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
                        10000,  // nSendTimeout: 10sec (default 30sec).
                        10000); // nReceiveTimeout: 10sec (default 30sec).
 
-    size_t scheme_offset = impl->use_https ? (sizeof("https://") - 1) : (sizeof("http://") - 1);
-    size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, impl->_configuration->serverUrl.c_str() + scheme_offset, -1, nullptr, 0);
+    size_t scheme_offset = use_https ? (sizeof("https://") - 1) : (sizeof("http://") - 1);
+    size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, server_url.c_str() + scheme_offset, -1, nullptr, 0);
     wchar_t *wide_hostname = new wchar_t[buffer_size];
-    MultiByteToWideChar(CP_ACP, 0, impl->_configuration->serverUrl.c_str() + scheme_offset, -1, wide_hostname, static_cast<int>(buffer_size));
+    MultiByteToWideChar(CP_ACP, 0, server_url.c_str() + scheme_offset, -1, wide_hostname, static_cast<int>(buffer_size));
 
-    hConnect = WinHttpConnect(hSession, wide_hostname, impl->_configuration->port, 0);
+    hConnect = WinHttpConnect(hSession, wide_hostname, port, 0);
 
     delete[] wide_hostname;
   }
@@ -350,7 +427,7 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
     wchar_t *wide_path = new wchar_t[buffer_size];
     MultiByteToWideChar(CP_ACP, 0, path.c_str(), -1, wide_path, static_cast<int>(buffer_size));
 
-    hRequest = WinHttpOpenRequest(hConnect, use_post ? L"POST" : L"GET", wide_path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, impl->use_https ? WINHTTP_FLAG_SECURE : 0);
+    hRequest = WinHttpOpenRequest(hConnect, use_post ? L"POST" : L"GET", wide_path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, use_https ? WINHTTP_FLAG_SECURE : 0);
     delete[] wide_path;
   }
 
@@ -423,7 +500,7 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
   curl = curl_easy_init();
   if (curl) {
     std::ostringstream full_url_stream;
-    full_url_stream << impl->_configuration->serverUrl << ':' << std::dec << impl->_configuration->port << path;
+    full_url_stream << server_url << ':' << std::dec << port << path;
 
     if (!use_post) {
       full_url_stream << '?' << data;

@@ -29,12 +29,28 @@ public:
   void addRequestToQueue(const std::map<std::string, std::string> &data);
 
   /**
-   * Clear request queue.
-   * Warning: This method is for debugging purposes, and it is going to be removed in the future.
-   * You should not be using this method.
-   * @return a vector object containing requests.
+   * Clears the request queue. A request that processQueue() is sending meanwhile is not removed again once it is
+   * delivered. The caller holds the mutex it passes to processQueue().
    */
   void clearRequestQueue();
+
+  /**
+   * Replaces the server URL and the port that the following requests go to, the way start() sets them: a URL without
+   * a scheme gets "http://" in front, trailing slashes are removed, and a port of 0 becomes the scheme's default port.
+   */
+  void setServerUrl(const std::string &url, unsigned int port);
+
+  /**
+   * Gives every queued request the app key. The caller holds the mutex it passes to processQueue().
+   */
+  void replaceAppKeysInQueue(const std::string &appKey);
+
+  /**
+   * Removes the queued requests whose app key is not the given one. The caller holds the mutex it passes to
+   * processQueue().
+   * @return the number of removed requests
+   */
+  long long removeOtherAppKeysFromQueue(const std::string &appKey);
 
   long long RQSize();
   void setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider); // try injecting
