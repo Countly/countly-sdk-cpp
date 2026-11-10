@@ -695,11 +695,11 @@ TEST_CASE("Built-in HTTP client") {
 }
 
 /**
- * Whether one of the request lines a server received contains the text.
+ * Whether one of the request bodies a server received contains the text.
  */
 static bool receivedRequestWith(const LocalHTTPServer &server, const std::string &text) {
-  for (const std::string &request_line : server.requestLines()) {
-    if (request_line.find(text) != std::string::npos) {
+  for (const std::string &request_body : server.requestBodies()) {
+    if (request_body.find(text) != std::string::npos) {
       return true;
     }
   }
@@ -719,7 +719,7 @@ TEST_CASE("Changing the server URL with the built-in HTTP client") {
   countly->setUpdateInterval(60000);
   countly->start(COUNTLY_TEST_APP_KEY, "http://127.0.0.1", first_server.port(), false);
   countly->addEvent(cly::Event("recorded_before_the_change", 1));
-  countly->updateSession();
+  countly->flushEvents();
 
   countly->changeServerUrl("ftp://127.0.0.1", second_server.port());
   countly->changeServerUrl("127.0.0.1", second_server.port());
@@ -753,11 +753,11 @@ TEST_CASE("Changing the server URL with the built-in HTTP client") {
   CHECK(receivedRequestWith(second_server, "recorded_before_the_change"));
   CHECK(receivedRequestWith(second_server, "method=sc"));
   for (const std::string &request_line : second_server.requestLines()) {
-    CHECK((request_line.rfind("GET /i?", 0) == 0 || request_line.rfind("GET /o/sdk?", 0) == 0));
+    CHECK((request_line.rfind("POST /i ", 0) == 0 || request_line.rfind("POST /o/sdk ", 0) == 0));
   }
   // The first server got at most what the SDK sent before the change: the SDK behavior settings fetch and the health check
-  for (const std::string &request_line : first_server.requestLines()) {
-    CHECK((request_line.find("method=sc") != std::string::npos || request_line.find("hc=") != std::string::npos));
+  for (const std::string &request_body : first_server.requestBodies()) {
+    CHECK((request_body.find("method=sc") != std::string::npos || request_body.find("hc=") != std::string::npos));
   }
 }
 #endif

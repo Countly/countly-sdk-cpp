@@ -214,7 +214,7 @@ struct HoldScope {
  */
 HTTPResponse sendThroughHoldWithSecondAppConfig(bool use_post, const std::string &url, const std::string &data) {
   HTTPResponse response = request_hold.send(use_post, url, data);
-  if (url == "/o/sdk" && data.find("method=fetch_remote_config") != std::string::npos && data.find("app_key=" + SECOND_APP_KEY) != std::string::npos && data.find("keys=") == std::string::npos) {
+  if (url == "/o/sdk" && data.find("method=rc") != std::string::npos && data.find("app_key=" + SECOND_APP_KEY) != std::string::npos && data.find("keys=") == std::string::npos) {
     response.success = true;
     response.data = {{"color", "#00FF00"}};
   }
@@ -287,7 +287,7 @@ TEST_CASE("Changing the server URL") {
 
     countly.changeServerUrl("https://changed.countly.notarealdomain");
     REQUIRE(waitForRequest({{"method", "sc"}}));
-    REQUIRE(waitForRequest({{"method", "fetch_remote_config"}}));
+    REQUIRE(waitForRequest({{"method", "rc"}}));
     countly.processRQDebug();
 
     CHECK(queuedRequestsSent() == std::vector<std::string>{"consent " + FIRST_APP_KEY});
@@ -295,7 +295,7 @@ TEST_CASE("Changing the server URL") {
     CHECK(state["sessions"] == true);
     CHECK(state["remote-config"] == true);
     CHECK(state["events"] == false);
-    for (const char *method : {"sc", "fetch_remote_config"}) {
+    for (const char *method : {"sc", "rc"}) {
       const HTTPCall fetch = callsWith({{"method", method}}).at(0);
       CHECK(fetch.data.at("app_key") == FIRST_APP_KEY);
       CHECK(fetch.data.at("device_id") == COUNTLY_TEST_DEVICE_ID);
@@ -319,12 +319,12 @@ TEST_CASE("Changing the app key") {
     startAndForget(countly);
 
     countly.addEvent(cly::Event("queued_before", 1));
-    countly.updateSession();
+    countly.flushEvents();
     countly.views().openView("Home");
     countly.addEvent(cly::Event("recorded_before", 1));
     countly.changeAppKey(SECOND_APP_KEY);
     countly.addEvent(cly::Event("recorded_after", 1));
-    countly.updateSession();
+    countly.flushEvents();
     REQUIRE(waitForRequest({{"method", "sc"}}));
     countly.processRQDebug();
 
@@ -385,9 +385,9 @@ TEST_CASE("Changing the app key") {
 
     countly.changeAppKey(SECOND_APP_KEY);
     CHECK(countly.getRemoteConfigValue("color").is_null());
-    CHECK(waitForRequest({{"method", "fetch_remote_config"}, {"app_key", SECOND_APP_KEY}}));
+    CHECK(waitForRequest({{"method", "rc"}, {"app_key", SECOND_APP_KEY}}));
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    CHECK(callsWith({{"method", "fetch_remote_config"}, {"app_key", SECOND_APP_KEY}}).size() == 1);
+    CHECK(callsWith({{"method", "rc"}, {"app_key", SECOND_APP_KEY}}).size() == 1);
   }
 
   SUBCASE("a call before start is ignored") {
@@ -405,6 +405,8 @@ TEST_CASE("Queue operations") {
     countly.enableManualSessionControl();
     countly.setUserDetails({{"name", "Waiting User"}});
     startAndForget(countly);
+    countly.addEvent(cly::Event("queued_event", 1));
+    countly.flushEvents();
     countly.views().openView("Home");
     countly.addEvent(cly::Event("flushed_event", 1));
     countly.setLocation("TR", "Izmir", "38.42,27.14", "");
@@ -421,6 +423,7 @@ TEST_CASE("Queue operations") {
     CHECK(queuedRequestsSent() == std::vector<std::string>{"begin_session " + FIRST_APP_KEY, "events " + FIRST_APP_KEY});
     const HTTPCall begin = callsWith({{"begin_session", ""}}).at(0);
     CHECK(nlohmann::json::parse(begin.data.at("user_details")) == nlohmann::json({{"name", "Waiting User"}}));
+    CHECK(begin.data.at("city") == "Izmir");
     CHECK(eventKeys(callsWith({{"events", ""}}).at(0)) == std::vector<std::string>{"[CLY]_view"});
   }
 
@@ -434,7 +437,7 @@ TEST_CASE("Queue operations") {
     }
 
     countly.addEvent(cly::Event("queued_before", 1));
-    countly.updateSession();
+    countly.flushEvents();
     countly.changeAppKey(SECOND_APP_KEY);
     countly.replaceAllAppKeysInQueueWithCurrentAppKey();
     countly.processRQDebug();
@@ -455,7 +458,7 @@ TEST_CASE("Queue operations") {
     Countly &countly = prepareCountly();
     startAndForget(countly);
     countly.addEvent(cly::Event("queued_before", 1));
-    countly.updateSession();
+    countly.flushEvents();
     countly.changeAppKey(SECOND_APP_KEY);
     countly.removeDifferentAppKeysFromQueue();
     countly.processRQDebug();
@@ -502,20 +505,20 @@ TEST_CASE("Queue operations while a request is on its way") {
   SUBCASE("flushQueues: the request on its way is delivered, and the request queued next is not lost") {
     countly.flushQueues();
     // The queue is empty now, so this request takes the id of the one on its way
-    countly.setLocation("TR", "Izmir", "38.42,27.14", "");
+    countly.beginSession();
     hold.release();
 
-    CHECK(queuedRequestsSent() == std::vector<std::string>{"events " + FIRST_APP_KEY, "location " + FIRST_APP_KEY});
+    CHECK(queuedRequestsSent() == std::vector<std::string>{"events " + FIRST_APP_KEY, "begin_session " + FIRST_APP_KEY});
     CHECK(countly.checkRQSize() == 0);
   }
 
   SUBCASE("removeDifferentAppKeysFromQueue: the request queued next is not lost") {
     countly.changeAppKey(SECOND_APP_KEY);
     countly.removeDifferentAppKeysFromQueue();
-    countly.setLocation("TR", "Izmir", "38.42,27.14", "");
+    countly.beginSession();
     hold.release();
 
-    CHECK(queuedRequestsSent() == std::vector<std::string>{"events " + FIRST_APP_KEY, "location " + SECOND_APP_KEY});
+    CHECK(queuedRequestsSent() == std::vector<std::string>{"events " + FIRST_APP_KEY, "begin_session " + SECOND_APP_KEY});
     CHECK(capturedLogContains("removeDifferentAppKeysFromQueue, Removed [1] queued requests with another app key."));
     CHECK(countly.checkRQSize() == 0);
   }
@@ -532,7 +535,8 @@ TEST_CASE("Queue operations while a request is on its way") {
 
 TEST_CASE("After an app key change the new app's remote config is downloaded, and a download for the old key stores nothing") {
   HoldScope hold;
-  request_hold.holdNext("method=fetch_remote_config");
+  // the download at the end of start() goes through, so the held one is the download for some keys
+  request_hold.holdNext("keys=");
   Countly &countly = prepareCountly(sendThroughHoldWithSecondAppConfig);
   countly.enableManualSessionControl();
   countly.enableRemoteConfig();
@@ -543,7 +547,7 @@ TEST_CASE("After an app key change the new app's remote config is downloaded, an
 
   countly.changeAppKey(SECOND_APP_KEY);
   // The download for the new key does not wait for the one still on its way for the old key
-  CHECK(waitForRequest({{"method", "fetch_remote_config"}, {"app_key", SECOND_APP_KEY}}));
+  CHECK(waitForRequest({{"method", "rc"}, {"app_key", SECOND_APP_KEY}}));
   CHECK(waitUntil([&countly]() { return countly.getRemoteConfigValue("color") == "#00FF00"; }));
 
   hold.release();
@@ -553,5 +557,5 @@ TEST_CASE("After an app key change the new app's remote config is downloaded, an
 
   // Neither download keeps the next one from starting
   countly.updateRemoteConfig();
-  CHECK(waitForRequest({{"method", "fetch_remote_config"}, {"app_key", SECOND_APP_KEY}}, 2));
+  CHECK(waitForRequest({{"method", "rc"}, {"app_key", SECOND_APP_KEY}}, 2));
 }
