@@ -91,7 +91,7 @@ TEST_CASE("SQLite builds keep events and requests in memory when there is no usa
 
     countly.addEvent(cly::Event("event_without_database_path", 1));
     CHECK(countly.checkEQSize() == 1);
-    CHECK(eventually([&countly]() { countly.updateSession(); countly.processRQDebug(); }, []() { return test_utils::httpQueueContainsEvent("event_without_database_path"); }));
+    CHECK(eventually([&countly]() { countly.flushEvents(); countly.processRQDebug(); }, []() { return test_utils::httpQueueContainsEvent("event_without_database_path"); }));
   }
 
   SUBCASE("the database cannot be opened") {
@@ -101,7 +101,7 @@ TEST_CASE("SQLite builds keep events and requests in memory when there is no usa
 
     countly.addEvent(cly::Event("event_after_database_failure", 1));
     CHECK(countly.checkEQSize() == 1);
-    CHECK(eventually([&countly]() { countly.updateSession(); countly.processRQDebug(); }, []() { return test_utils::httpQueueContainsEvent("event_after_database_failure"); }));
+    CHECK(eventually([&countly]() { countly.flushEvents(); countly.processRQDebug(); }, []() { return test_utils::httpQueueContainsEvent("event_after_database_failure"); }));
   }
 
   countly.setLogger(nullptr);
@@ -116,8 +116,8 @@ TEST_CASE("SQLite-build instances without database paths run side by side") {
 
   first.sdk->addEvent(cly::Event("first_app_event", 1));
   second.sdk->addEvent(cly::Event("second_app_event", 1));
-  CHECK(eventually([&first]() { first.sdk->updateSession(); first.flush(); }, [&first]() { return first.sawEvent("first_app_event"); }));
-  CHECK(eventually([&second]() { second.sdk->updateSession(); second.flush(); }, [&second]() { return second.sawEvent("second_app_event"); }));
+  CHECK(eventually([&first]() { first.sdk->flushEvents(); first.flush(); }, [&first]() { return first.sawEvent("first_app_event"); }));
+  CHECK(eventually([&second]() { second.sdk->flushEvents(); second.flush(); }, [&second]() { return second.sawEvent("second_app_event"); }));
   CHECK_FALSE(first.sawEvent("second_app_event"));
   CHECK_FALSE(second.sawEvent("first_app_event"));
 }
@@ -148,7 +148,7 @@ TEST_CASE("SQLite builds with a database path keep queued events across a restar
   after_restart->setDatabasePath(database_path);
   after_restart->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
   REQUIRE(after_restart->checkEQSize() >= 0);
-  CHECK(eventually([&after_restart]() { after_restart->updateSession(); after_restart->processRQDebug(); }, []() { return test_utils::httpQueueContainsEvent("event_before_restart"); }));
+  CHECK(eventually([&after_restart]() { after_restart->flushEvents(); after_restart->processRQDebug(); }, []() { return test_utils::httpQueueContainsEvent("event_before_restart"); }));
 
   after_restart.reset();
   remove(database_path.c_str());

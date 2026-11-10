@@ -2,6 +2,7 @@
 #include "countly/health_check_module.hpp"
 #include "countly/request_builder.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <deque>
@@ -13,6 +14,9 @@
 
 #ifndef COUNTLY_USE_CUSTOM_HTTP
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include "Windows.h"
 #include "WinHTTP.h"
 #undef ERROR
@@ -39,6 +43,10 @@ public:
   // that request meanwhile. Guarded by the mutex processQueue() takes.
   long long sending_id = -1;
   bool sending_removed = false;
+  // Both guarded by the instance mutex: no queued request is sent before them.
+  std::chrono::steady_clock::time_point next_attempt_after_failure;
+  std::chrono::steady_clock::time_point backoff_ends;
+  std::function<void()> on_merge_delivered;
   std::shared_ptr<CountlyConfiguration> _configuration;
   std::shared_ptr<LoggerModule> _logger;
   std::shared_ptr<RequestBuilder> _requestBuilder;
@@ -101,6 +109,48 @@ public:
 };
 
 namespace {
+/**
+ * The "timestamp" parameter of a stored request in milliseconds, or -1 when the request has none.
+ */
+long long requestTimestamp(const std::string &request) {
+  std::string::size_type position = 0;
+  if (request.compare(0, 10, "timestamp=") != 0) {
+    position = request.find("&timestamp=");
+    if (position == std::string::npos) {
+      return -1;
+    }
+    position += 1;
+  }
+  position += 10;
+  const std::string::size_type end = request.find('&', position);
+  const std::string value = request.substr(position, end == std::string::npos ? std::string::npos : end - position);
+  if (value.empty() || value.size() > 18 || value.find_first_not_of("0123456789") != std::string::npos) {
+    return -1;
+  }
+  return std::stoll(value);
+}
+
+/**
+ * The current time in milliseconds since the epoch, the unit of the "timestamp" parameter.
+ */
+long long nowMilliseconds() { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(); }
+
+/**
+ * Whether the request is older than the drop age. A request without a timestamp is never too old.
+ */
+bool isOlderThan(const std::string &request, unsigned int dropAgeHours) {
+  if (dropAgeHours == 0) {
+    return false;
+  }
+  const long long timestamp = requestTimestamp(request);
+  return timestamp >= 0 && nowMilliseconds() - timestamp > static_cast<long long>(dropAgeHours) * 3600LL * 1000LL;
+}
+
+/**
+ * Whether the answer to a queued request means it was delivered: a 2xx status and a JSON object with a "result".
+ */
+bool isDelivered(const HTTPResponse &response) { return response.success && response.data.is_object() && response.data.contains("result"); }
+
 /**
  * Process-wide libcurl initialisation.
  *
@@ -210,14 +260,34 @@ void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &
   }
 
   if (config->isTrackingEnabled() == false) {
-    impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] addRequestToQueue: Tracking is disabled. Not adding request to queue.");
+    impl->_logger->log(LogLevel::WARNING, "[Countly] [RequestModule] addRequestToQueue: The SDK behavior settings turned tracking off, so the request is not recorded.");
+    impl->_logger->recordLogCode("w505");
     return;
   }
 
-  if (config->getRequestQueueSizeLimit() <= impl->_storageModule->RQCount()) {
-    impl->_logger->log(LogLevel::WARNING, cly::utils::format_string("[Countly] [RequestModule] addRequestToQueue: Request Queue is full. Dropping the oldest request."));
-    impl->_logger->recordLogCode("w310");
-    impl->_storageModule->RQRemoveFront();
+  const long long limit = config->getRequestQueueSizeLimit();
+  long long count = impl->_storageModule->RQCount();
+  if (count >= limit) {
+    const unsigned int dropAgeHours = config->getRequestDropAgeHours();
+    while (count > 0) {
+      std::shared_ptr<DataEntry> front = impl->_storageModule->RQPeekFront();
+      if (front->getId() < 0 || !isOlderThan(front->getData(), dropAgeHours)) {
+        break;
+      }
+      impl->_storageModule->RQRemoveFront(front);
+      impl->_logger->log(LogLevel::WARNING, "[Countly] [RequestModule] addRequestToQueue: A request older than the drop age of [" + std::to_string(dropAgeHours) + "] hours is removed without being sent.");
+      impl->_logger->recordLogCode("w330");
+      count--;
+    }
+  }
+  if (count >= limit) {
+    const long long overflow = count - limit;
+    const long long toRemove = (impl->_configuration->gradualRequestCleanerEnabled ? std::min(overflow, 100LL) : overflow) + 1;
+    impl->_logger->log(LogLevel::WARNING, "[Countly] [RequestModule] addRequestToQueue: Request Queue is full. Dropping the oldest [" + std::to_string(toRemove) + "] request(s).");
+    for (long long index = 0; index < toRemove; index++) {
+      impl->_storageModule->RQRemoveFront();
+      impl->_logger->recordLogCode("w310");
+    }
   }
 
   const std::string request = impl->_requestBuilder->buildRequest(data);
@@ -262,27 +332,34 @@ long long RequestModule::removeOtherAppKeysFromQueue(const std::string &appKey) 
 }
 
 void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
+  std::shared_ptr<ConfigurationProvider> config;
   {
     // lock_guard so the mutex is released on every exit path of this block,
     // including early returns and any exception thrown while it is held.
     std::lock_guard<std::mutex> lk(*mutex);
 
-    if (std::shared_ptr<ConfigurationProvider> config = _configProvider.lock()) {
-      if (config->isTrackingEnabled() == false) {
-        impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] processQueue: Tracking is disabled. Not processing request queue.");
-        return;
-      }
-      if (config->isNetworkingEnabled() == false) {
-        impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] processQueue: Networking is disabled. Not processing request queue.");
-        return;
-      }
-    } else {
+    config = _configProvider.lock();
+    if (!config) {
       impl->_logger->log(LogLevel::WARNING, "[Countly] [RequestModule] processQueue: ConfigurationProvider unavailable, skipping queue processing.");
+      return;
+    }
+    if (config->isNetworkingEnabled() == false) {
+      impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] processQueue: Networking is disabled. Not processing request queue.");
       return;
     }
 
     // making sure that no other thread is processing the queue
     if (impl->is_queue_being_processed) {
+      return;
+    }
+
+    const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+    if (now < impl->next_attempt_after_failure) {
+      impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] processQueue: Waiting for the cool-down after a failed request.");
+      return;
+    }
+    if (now < impl->backoff_ends) {
+      impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] processQueue: Waiting for the backoff to end.");
       return;
     }
 
@@ -301,10 +378,12 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
   try {
     while (true) {
       std::shared_ptr<DataEntry> data;
+      long long behind = 0;
       {
         std::lock_guard<std::mutex> lk(*mutex);
         impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] processQueue: Processing the request queue."));
-        if (impl->_storageModule->RQCount() == 0) {
+        const long long count = impl->_storageModule->RQCount();
+        if (count <= 0) {
           impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] processQueue: Queue is empty."));
 
           // stop sending requests once the queue is empty
@@ -312,20 +391,32 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
         }
 
         data = impl->_storageModule->RQPeekFront();
+        if (isOlderThan(data->getData(), config->getRequestDropAgeHours())) {
+          impl->_storageModule->RQRemoveFront(data);
+          impl->_logger->log(LogLevel::WARNING, "[Countly] [RequestModule] processQueue: A request older than the drop age of [" + std::to_string(config->getRequestDropAgeHours()) + "] hours is removed without being sent.");
+          impl->_logger->recordLogCode("w330");
+          continue;
+        }
         impl->sending_id = data->getId();
         impl->sending_removed = false;
+        behind = count - 1;
       }
-      HTTPResponse response = sendHTTP("/i", data->getData());
+
+      bool mergeDelivered = false;
+      const std::chrono::steady_clock::time_point sent = std::chrono::steady_clock::now();
+      HTTPResponse response = sendHTTP("/i", data->getData() + "&rr=" + std::to_string(behind));
+      const std::chrono::steady_clock::duration responseTime = std::chrono::steady_clock::now() - sent;
 
       {
         std::lock_guard<std::mutex> lk(*mutex);
         impl->sending_id = -1;
-        if (!response.success) {
-          impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] processQueue: Failed to deliver to server, will try again later."));
-          std::shared_ptr<HealthCheckModule> healthCheck = impl->_logger->healthCheck();
+        std::shared_ptr<HealthCheckModule> healthCheck = impl->_logger->healthCheck();
+        if (!isDelivered(response)) {
+          impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] processQueue: Failed to deliver to server, will try again after the cool-down of [" + std::to_string(impl->_configuration->failedRequestCooldownSeconds) + "] seconds.");
           if (healthCheck && response.status_code > 0) {
             healthCheck->logFailedNetworkRequest(response.status_code, !response.body.empty() || response.data.is_null() ? response.body : response.data.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
           }
+          impl->next_attempt_after_failure = std::chrono::steady_clock::now() + std::chrono::seconds(impl->_configuration->failedRequestCooldownSeconds);
           // if the request was not a success, abort sending and try again in the future
           break;
         }
@@ -337,11 +428,33 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
           impl->_storageModule->RQRemoveFront(data);
         }
         processedRequestsCounter++;
+        mergeDelivered = data->getData().find("old_device_id=") != std::string::npos;
+
+        if (config->isBackoffEnabled()) {
+          const long long timestamp = requestTimestamp(data->getData());
+          const bool slow = responseTime >= std::chrono::seconds(config->getBackoffAcceptedTimeout());
+          const bool queueNotFull = impl->_storageModule->RQCount() <= config->getBackoffRequestQueuePercentage() * config->getRequestQueueSizeLimit();
+          const bool recent = timestamp >= 0 && nowMilliseconds() - timestamp <= static_cast<long long>(config->getBackoffRequestAge()) * 3600LL * 1000LL;
+          if (slow && queueNotFull && recent) {
+            impl->backoff_ends = std::chrono::steady_clock::now() + std::chrono::seconds(config->getBackoffDuration());
+            impl->_logger->log(LogLevel::WARNING, "[Countly] [RequestModule] processQueue: The server answered slowly, so sending pauses for [" + std::to_string(config->getBackoffDuration()) + "] seconds.");
+            if (healthCheck) {
+              healthCheck->logBackoffRequest();
+            }
+            break;
+          }
+          if (healthCheck) {
+            healthCheck->logConsecutiveBackoffRequest();
+          }
+        }
 
         if (processedRequestsCounter > impl->_configuration->maxProcessingBatchSize) {
           impl->_logger->log(LogLevel::DEBUG, cly::utils::format_string("[Countly] [RequestModule] processQueue: Batch limit has been reached, will do next batch later."));
           break;
         }
+      }
+      if (mergeDelivered && impl->on_merge_delivered) {
+        impl->on_merge_delivered();
       }
     }
   } catch (...) {
@@ -357,8 +470,10 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
   impl->is_queue_being_processed = false;
 }
 
+HTTPResponse RequestModule::sendImmediate(const std::string &path, const std::string &data) { return sendHTTP(path, data + "&rr=" + std::to_string(std::max(0LL, RQSize()))); }
+
 HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
-  bool use_post = impl->_configuration->forcePost || (data.size() > COUNTLY_POST_THRESHOLD);
+  const bool use_post = true;
   impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] sendHTTP, data: [" + data + "]");
   if (!impl->_configuration->salt.empty()) {
     std::string checksum = impl->calculateChecksum(impl->_configuration->salt, data);
@@ -418,22 +533,17 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
   }
 
   if (hConnect) {
-    if (!use_post) {
-      path += '?';
-      path += data;
-    }
-
     size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, path.c_str(), -1, nullptr, 0);
     wchar_t *wide_path = new wchar_t[buffer_size];
     MultiByteToWideChar(CP_ACP, 0, path.c_str(), -1, wide_path, static_cast<int>(buffer_size));
 
-    hRequest = WinHttpOpenRequest(hConnect, use_post ? L"POST" : L"GET", wide_path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, use_https ? WINHTTP_FLAG_SECURE : 0);
+    hRequest = WinHttpOpenRequest(hConnect, L"POST", wide_path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, use_https ? WINHTTP_FLAG_SECURE : 0);
     delete[] wide_path;
   }
 
   if (hRequest) {
-    LPCWSTR headers = use_post ? L"content-type:application/x-www-form-urlencoded" : WINHTTP_NO_ADDITIONAL_HEADERS;
-    bool ok = WinHttpSendRequest(hRequest, headers, 0, use_post ? (LPVOID)data.data() : WINHTTP_NO_REQUEST_DATA, use_post ? data.size() : 0, use_post ? data.size() : 0, 0) != 0;
+    LPCWSTR headers = L"content-type:application/x-www-form-urlencoded";
+    bool ok = WinHttpSendRequest(hRequest, headers, 0, (LPVOID)data.data(), static_cast<DWORD>(data.size()), static_cast<DWORD>(data.size()), 0) != 0;
     if (ok) {
       ok = WinHttpReceiveResponse(hRequest, NULL);
       if (ok) {
@@ -502,12 +612,7 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
     std::ostringstream full_url_stream;
     full_url_stream << server_url << ':' << std::dec << port << path;
 
-    if (!use_post) {
-      full_url_stream << '?' << data;
-      curl_easy_setopt(curl, CURLOPT_HTTPGET, 1);
-    } else {
-      curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.c_str());
-    }
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.c_str());
 
     impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] sendHTTP, request: [" + full_url_stream.str() + "]");
 
@@ -549,5 +654,7 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
 long long RequestModule::RQSize() { return impl->_storageModule->RQCount(); }
 
 void RequestModule::setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider) { _configProvider = std::move(provider); }
+
+void RequestModule::setOnMergeDelivered(std::function<void()> callback) { impl->on_merge_delivered = std::move(callback); }
 
 } // namespace cly

@@ -3,6 +3,9 @@
 #include "countly/storage_module_db.hpp"
 #include "countly/storage_module_memory.hpp"
 #include <algorithm>
+#include <cctype>
+#include <climits>
+#include <cstdlib>
 #include <chrono>
 #include <cmath>
 #include <iomanip>
@@ -19,6 +22,7 @@
 #endif
 
 #include "countly.hpp"
+#include "platform_info.hpp"
 
 #ifdef COUNTLY_USE_SQLITE
 #include "countly/sqlite_utils.hpp"
@@ -29,6 +33,143 @@ namespace cly {
 namespace {
 const char *const HEALTH_CHECK_AREA_SESSIONS = "sessions";
 const char *const HEALTH_CHECK_AREA_EVENTS = "events";
+
+/**
+ * Checks that the server URL is an absolute http or https URL with a host, and gives it back with a lower case scheme
+ * and without trailing '/' characters.
+ *
+ * @param url: the URL the app gave
+ * @param normalized: receives the URL to use
+ * @param trimmed: set to true when trailing '/' characters were removed
+ * @return false when the URL can't be used
+ */
+bool normalizeServerUrl(const std::string &url, std::string &normalized, bool &trimmed) {
+  const size_t separator = url.find("://");
+  if (separator == std::string::npos) {
+    return false;
+  }
+  std::string scheme = url.substr(0, separator);
+  std::transform(scheme.begin(), scheme.end(), scheme.begin(), [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+  if (scheme != "http" && scheme != "https") {
+    return false;
+  }
+  std::string rest = url.substr(separator + 3);
+  const size_t length = rest.size();
+  while (!rest.empty() && rest.back() == '/') {
+    rest.pop_back();
+  }
+  trimmed = rest.size() != length;
+  if (rest.empty() || rest.front() == '/' || rest.find_first_of(" \t\r\n") != std::string::npos) {
+    return false;
+  }
+  normalized = scheme + "://" + rest;
+  return true;
+}
+
+/**
+ * Whether the text is an ISO 3166-1 alpha-2 country code in upper case, such as "US".
+ */
+bool isCountryCode(const std::string &text) { return text.size() == 2 && std::isupper(static_cast<unsigned char>(text[0])) && std::isupper(static_cast<unsigned char>(text[1])); }
+
+/**
+ * Whether the text is a decimal number within the range, without anything else around it.
+ */
+bool isDecimalWithin(const std::string &text, double minimum, double maximum) {
+  if (text.empty() || text.find_first_not_of("+-.0123456789") != std::string::npos) {
+    return false;
+  }
+  char *end = nullptr;
+  const double value = std::strtod(text.c_str(), &end);
+  return end == text.c_str() + text.size() && value >= minimum && value <= maximum;
+}
+
+/**
+ * Whether the text is a latitude and a longitude in decimal degrees separated by a comma, such as "52.52001,13.40495".
+ */
+bool isGpsCoordinates(const std::string &text) {
+  const std::string::size_type comma = text.find(',');
+  if (comma == std::string::npos) {
+    return false;
+  }
+  std::string latitude = text.substr(0, comma);
+  std::string longitude = text.substr(comma + 1);
+  latitude.erase(std::remove(latitude.begin(), latitude.end(), ' '), latitude.end());
+  longitude.erase(std::remove(longitude.begin(), longitude.end(), ' '), longitude.end());
+  return isDecimalWithin(latitude, -90, 90) && isDecimalWithin(longitude, -180, 180);
+}
+
+/**
+ * Whether the text is an IPv4 address such as "203.0.113.7", or an IPv6 address such as "2001:db8::1".
+ */
+bool isIpAddress(const std::string &text) {
+  if (text.find(':') != std::string::npos) {
+    return text.size() <= 45 && text.find_first_not_of("0123456789abcdefABCDEF:.") == std::string::npos;
+  }
+  std::istringstream parts(text);
+  std::string part;
+  int count = 0;
+  while (std::getline(parts, part, '.')) {
+    if (part.empty() || part.size() > 3 || part.find_first_not_of("0123456789") != std::string::npos || std::stoi(part) > 255) {
+      return false;
+    }
+    count++;
+  }
+  return count == 4 && text.back() != '.';
+}
+
+/**
+ * Whether the key is one of the internal events the SDK knows. Other "[CLY]_" keys are custom events.
+ */
+bool isInternalEventKey(const std::string &key) {
+  static const char *const internal_keys[] = {"[CLY]_view", "[CLY]_nps", "[CLY]_survey", "[CLY]_star_rating", "[CLY]_orientation", "[CLY]_push_action", "[CLY]_action", "[CLY]_content_shown", "[CLY]_content_interacted"};
+  for (const char *internal_key : internal_keys) {
+    if (key == internal_key) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Replaces a count that is not a whole number from 1 to INT_MAX with 1 and removes a negative duration, logging
+ * each as a warning counted as log code w750.
+ */
+void validateEventValues(nlohmann::json &object, const std::string &key, LoggerModule &logger) {
+  nlohmann::json::iterator count = object.find("count");
+  bool validCount = false;
+  if (count != object.end() && count->is_number_unsigned()) {
+    validCount = count->get<unsigned long long>() >= 1 && count->get<unsigned long long>() <= static_cast<unsigned long long>(INT_MAX);
+  } else if (count != object.end() && count->is_number_integer()) {
+    validCount = count->get<long long>() >= 1 && count->get<long long>() <= INT_MAX;
+  }
+  if (!validCount) {
+    logger.log(LogLevel::WARNING, "[Countly] addEvent, The count of the event [" + key + "] must be a whole number from 1 to " + std::to_string(INT_MAX) + ", so the default 1 is used.");
+    logger.recordLogCode("w750");
+    object["count"] = 1;
+  }
+
+  nlohmann::json::iterator duration = object.find("dur");
+  if (duration != object.end() && (!duration->is_number() || duration->get<double>() < 0)) {
+    logger.log(LogLevel::WARNING, "[Countly] addEvent, The duration of the event [" + key + "] can't be negative, so the default 0 is used.");
+    logger.recordLogCode("w750");
+    object.erase(duration);
+  }
+}
+
+/**
+ * Adds the stored events of the in-memory event queue to the array. An entry that is not valid JSON is dropped with
+ * a warning instead of throwing out of the call that sends the events.
+ */
+void appendStoredEvents(const std::deque<std::string> &queue, nlohmann::json &events, LoggerModule &logger) {
+  for (const std::string &event_json : queue) {
+    nlohmann::json event = nlohmann::json::parse(event_json, nullptr, false);
+    if (event.is_discarded()) {
+      logger.log(LogLevel::WARNING, "[Countly] appendStoredEvents, A stored event is not valid JSON and is dropped.");
+      continue;
+    }
+    events.push_back(event);
+  }
+}
 
 /**
  * Whether the list of features contains the feature.
@@ -110,36 +251,53 @@ struct RemoteConfigFetch {
  * member precisely so it cannot reach the instance.
  */
 void runRemoteConfigFetch(std::shared_ptr<RemoteConfigFetch> fetch) {
-  // Clear the in-flight flag and the process counter however this exits. After an app key change the flag belongs to
-  // the fetches for the new key, so a fetch for the previous key leaves it alone.
+  // Lower the process counter however this exits.
   struct Guard {
-    std::shared_ptr<RemoteConfigFetch> fetch;
-    ~Guard() {
+    ~Guard() { inflight_remote_config_fetches.fetch_sub(1); }
+  } guard;
+
+  try {
+    while (true) {
+      unsigned long long generation = 0;
       {
         std::lock_guard<std::mutex> lk(fetch->store->mutex);
-        if (fetch->store->app_key == fetch->app_key) {
-          fetch->store->fetch_running.store(false);
-        }
+        generation = fetch->store->user_generation;
       }
-      inflight_remote_config_fetches.fetch_sub(1);
-    }
-  } guard{fetch};
 
-  const HTTPResponse response = fetch->requestModule->sendHTTP("/o/sdk", fetch->requestBuilder->buildFetchRequest(fetch->data));
-  if (!response.success) {
-    return;
-  }
+      const HTTPResponse response = fetch->requestModule->sendImmediate("/o/sdk", fetch->requestBuilder->buildRequest(fetch->data));
 
-  std::lock_guard<std::mutex> lk(fetch->store->mutex);
-  if (fetch->store->app_key != fetch->app_key) {
-    return;
-  }
-  if (fetch->merge) {
-    for (auto it = response.data.begin(); it != response.data.end(); ++it) {
-      fetch->store->values[it.key()] = it.value();
+      std::lock_guard<std::mutex> lk(fetch->store->mutex);
+      if (fetch->store->app_key != fetch->app_key) {
+        // after an app key change the values, the flag and the pending download belong to the fetches for the new key
+        return;
+      }
+      if (!response.success || !response.data.is_object()) {
+        fetch->logger->log(LogLevel::DEBUG, "[Countly] runRemoteConfigFetch, the remote config download failed, the stored values stay.");
+      } else if (fetch->store->user_generation != generation) {
+        fetch->logger->log(LogLevel::DEBUG, "[Countly] runRemoteConfigFetch, the device ID changed during the download, so its values are discarded.");
+      } else if (fetch->merge) {
+        for (auto it = response.data.begin(); it != response.data.end(); ++it) {
+          fetch->store->values[it.key()] = it.value();
+        }
+      } else {
+        fetch->store->values = response.data;
+      }
+
+      if (!fetch->store->has_pending) {
+        fetch->store->fetch_running.store(false);
+        return;
+      }
+      fetch->data = fetch->store->pending_data;
+      fetch->merge = fetch->store->pending_merge;
+      fetch->store->has_pending = false;
     }
-  } else {
-    fetch->store->values = response.data;
+  } catch (const std::exception &e) {
+    std::lock_guard<std::mutex> lk(fetch->store->mutex);
+    if (fetch->store->app_key == fetch->app_key) {
+      fetch->store->has_pending = false;
+      fetch->store->fetch_running.store(false);
+    }
+    fetch->logger->log(LogLevel::DEBUG, std::string("[Countly] runRemoteConfigFetch, the remote config download failed: ") + e.what());
   }
 }
 
@@ -163,12 +321,15 @@ Countly::Countly() {
     std::lock_guard<std::mutex> lk(networking_lifecycle_mutex);
     live_instance_count.fetch_add(1);
   }
-  crash_module = nullptr;
-  views_module = nullptr;
   logger.reset(new cly::LoggerModule());
   health_check->setLogger(logger);
   logger->setHealthCheck(health_check);
   configuration.reset(new cly::CountlyConfiguration("", ""));
+  // Built with the instance, so views() and crash() are usable before start(); their calls are ignored until then.
+  crash_module.reset(new cly::CrashModule(configuration, logger, nullptr, mutex));
+  views_module.reset(new cly::ViewsModule(this, logger));
+  views_module->setConsentModule(consent_module);
+  crash_module->setConsentModule(consent_module);
 }
 
 Countly::~Countly() {
@@ -459,6 +620,11 @@ void Countly::setMaxRequestQueueSize(unsigned int requestQueueSize) {
     log(LogLevel::WARNING, "[Countly] setMaxRequestQueueSize, This method can't be called after SDK initialization. Returning.");
     return;
   }
+  if (requestQueueSize < 1) {
+    log(LogLevel::WARNING, "[Countly] setMaxRequestQueueSize, The request queue size must be at least 1, so the value [0] is ignored.");
+    logger->recordLogCode("w121");
+    return;
+  }
 
   std::lock_guard<std::mutex> lk(*mutex);
   configuration->requestQueueThreshold = requestQueueSize;
@@ -475,13 +641,64 @@ void Countly::setMaxRQProcessingBatchSize(unsigned int batchSize) {
 }
 
 void Countly::alwaysUsePost(bool value) {
+  log(LogLevel::WARNING, "[Countly] alwaysUsePost, 'alwaysUsePost' is deprecated: every request is sent as POST, so the call has no effect.");
+  logger->recordLogCode("w120");
   if (is_sdk_initialized) {
-    log(LogLevel::WARNING, "[Countly] alwaysUsePost, This method can't be called after SDK initialization. Returning.");
     return;
   }
 
   std::lock_guard<std::mutex> lk(*mutex);
   configuration->forcePost = value;
+}
+
+void Countly::setFailedRequestCooldown(int seconds) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] setFailedRequestCooldown, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+  if (seconds < 1) {
+    log(LogLevel::WARNING, "[Countly] setFailedRequestCooldown, The cool-down must be at least 1 second, so the value [" + std::to_string(seconds) + "] is ignored.");
+    logger->recordLogCode("w121");
+    return;
+  }
+
+  std::lock_guard<std::mutex> lk(*mutex);
+  configuration->failedRequestCooldownSeconds = static_cast<unsigned int>(seconds);
+}
+
+void Countly::setRequestDropAgeHours(int hours) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] setRequestDropAgeHours, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+  if (hours < 0) {
+    log(LogLevel::WARNING, "[Countly] setRequestDropAgeHours, The age can't be negative, so the value [" + std::to_string(hours) + "] is ignored.");
+    logger->recordLogCode("w121");
+    return;
+  }
+
+  std::lock_guard<std::mutex> lk(*mutex);
+  configuration->requestDropAgeHours = static_cast<unsigned int>(hours);
+}
+
+void Countly::disableBackoffMechanism() {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] disableBackoffMechanism, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+
+  std::lock_guard<std::mutex> lk(*mutex);
+  configuration->backoffMechanismEnabled = false;
+}
+
+void Countly::disableGradualRequestCleaner() {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] disableGradualRequestCleaner, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+
+  std::lock_guard<std::mutex> lk(*mutex);
+  configuration->gradualRequestCleanerEnabled = false;
 }
 
 void Countly::setSalt(const std::string &value) {
@@ -565,6 +782,11 @@ void Countly::setMaxKeyLength(unsigned int value) {
     log(LogLevel::WARNING, "[Countly] setMaxKeyLength, This method can't be called after SDK initialization. Returning.");
     return;
   }
+  if (value < 1) {
+    log(LogLevel::WARNING, "[Countly] setMaxKeyLength, The limit must be at least 1, so the value [0] is ignored.");
+    logger->recordLogCode("w121");
+    return;
+  }
   std::lock_guard<std::mutex> lk(*mutex);
   configuration->maxKeyLength = value;
 }
@@ -572,6 +794,11 @@ void Countly::setMaxKeyLength(unsigned int value) {
 void Countly::setMaxValueSize(unsigned int value) {
   if (is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] setMaxValueSize, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+  if (value < 1) {
+    log(LogLevel::WARNING, "[Countly] setMaxValueSize, The limit must be at least 1, so the value [0] is ignored.");
+    logger->recordLogCode("w121");
     return;
   }
   std::lock_guard<std::mutex> lk(*mutex);
@@ -583,6 +810,11 @@ void Countly::setMaxSegmentationValues(unsigned int value) {
     log(LogLevel::WARNING, "[Countly] setMaxSegmentationValues, This method can't be called after SDK initialization. Returning.");
     return;
   }
+  if (value < 1) {
+    log(LogLevel::WARNING, "[Countly] setMaxSegmentationValues, The limit must be at least 1, so the value [0] is ignored.");
+    logger->recordLogCode("w121");
+    return;
+  }
   std::lock_guard<std::mutex> lk(*mutex);
   configuration->maxSegmentationValues = value;
 }
@@ -590,6 +822,11 @@ void Countly::setMaxSegmentationValues(unsigned int value) {
 void Countly::setMaxBreadcrumbCount(unsigned int value) {
   if (is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] setMaxBreadcrumbCount, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+  if (value < 1) {
+    log(LogLevel::WARNING, "[Countly] setMaxBreadcrumbCount, The limit must be at least 1, so the value [0] is ignored.");
+    logger->recordLogCode("w121");
     return;
   }
   std::lock_guard<std::mutex> lk(*mutex);
@@ -601,6 +838,11 @@ void Countly::setMaxStackTraceLinesPerThread(unsigned int value) {
     log(LogLevel::WARNING, "[Countly] setMaxStackTraceLinesPerThread, This method can't be called after SDK initialization. Returning.");
     return;
   }
+  if (value < 1) {
+    log(LogLevel::WARNING, "[Countly] setMaxStackTraceLinesPerThread, The limit must be at least 1, so the value [0] is ignored.");
+    logger->recordLogCode("w121");
+    return;
+  }
   std::lock_guard<std::mutex> lk(*mutex);
   configuration->maxStackTraceLinesPerThread = value;
 }
@@ -608,6 +850,11 @@ void Countly::setMaxStackTraceLinesPerThread(unsigned int value) {
 void Countly::setMaxStackTraceLineLength(unsigned int value) {
   if (is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] setMaxStackTraceLineLength, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+  if (value < 1) {
+    log(LogLevel::WARNING, "[Countly] setMaxStackTraceLineLength, The limit must be at least 1, so the value [0] is ignored.");
+    logger->recordLogCode("w121");
     return;
   }
   std::lock_guard<std::mutex> lk(*mutex);
@@ -657,13 +904,12 @@ void Countly::setUserDetails(const std::map<std::string, std::string> &value) {
   std::map<std::string, std::string> limitedDetails;
   for (const auto &kv : value) {
     unsigned int cap = (kv.first == "picture") ? COUNTLY_MAX_VALUE_SIZE_PICTURE : lim.maxValueSize;
-    limitedDetails[kv.first] = cly::limits::truncateString(kv.second, cap);
+    limitedDetails[kv.first] = cly::limits::limitValue(kv.second, cap, logger.get(), "setUserDetails", kv.first);
   }
   session_params["user_details"] = limitedDetails;
 
   if (!is_sdk_initialized) {
-    log(LogLevel::WARNING, "[Countly] setUserDetails, This method can't be called before SDK initialization. Returning.");
-    logger->recordLogCode("w101");
+    log(LogLevel::INFO, "[Countly] setUserDetails, The SDK is not started yet, the details are sent with the first session.");
     return;
   }
 
@@ -708,13 +954,12 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string> &val
   // properties (that would be the out-of-scope 'upcl').
   std::map<std::string, std::string> limitedCustom;
   for (const auto &kv : customValue) {
-    limitedCustom[cly::limits::truncateString(kv.first, lim.maxKeyLength)] = cly::limits::truncateString(kv.second, lim.maxValueSize);
+    limitedCustom[cly::limits::limitKey(kv.first, lim.maxKeyLength, logger.get(), "setCustomUserDetails")] = cly::limits::limitValue(kv.second, lim.maxValueSize, logger.get(), "setCustomUserDetails", kv.first);
   }
   session_params["user_details"]["custom"] = limitedCustom;
 
   if (!is_sdk_initialized) {
-    log(LogLevel::WARNING, "[Countly] setCustomUserDetails, This method can't be called before SDK initialization. Returning.");
-    logger->recordLogCode("w101");
+    log(LogLevel::INFO, "[Countly] setCustomUserDetails, The SDK is not started yet, the properties are sent with the first session.");
     return;
   }
 
@@ -742,7 +987,7 @@ void Countly::multiplyCustomUserDetail(const std::string &key, double value) {
     logger->recordLogCode("w700");
     return;
   }
-  const std::string truncatedKey = cly::limits::truncateString(key, configurationModule->getLimits().maxKeyLength);
+  const std::string truncatedKey = cly::limits::limitKey(key, configurationModule->getLimits().maxKeyLength, logger.get(), "multiplyCustomUserDetail");
   if (truncatedKey.empty()) {
     log(LogLevel::WARNING, "[Countly] multiplyCustomUserDetail, The parameter 'key' can't be empty. Returning.");
     logger->recordLogCode("w700");
@@ -803,38 +1048,65 @@ void Countly::setLocation(double lattitude, double longitude) {
 }
 
 void Countly::setLocation(const std::string &countryCode, const std::string &city, const std::string &gpsCoordinates, const std::string &ipAddress) {
+  log(LogLevel::INFO, "[Countly] setLocation, Setting location: countryCode = [" + countryCode + "], city = [" + city + "], gpsCoordinates = [" + gpsCoordinates + "], ipAddress = [" + ipAddress + "]");
+
+  std::string validCountryCode = countryCode;
+  if (!countryCode.empty() && !isCountryCode(countryCode)) {
+    log(LogLevel::WARNING, "[Countly] setLocation, The country code [" + countryCode + "] is not an upper case ISO 3166-1 alpha-2 code such as 'US', so it is not used.");
+    logger->recordLogCode("w700");
+    validCountryCode.clear();
+  }
+  std::string validCoordinates = gpsCoordinates;
+  if (!gpsCoordinates.empty() && !isGpsCoordinates(gpsCoordinates)) {
+    log(LogLevel::WARNING, "[Countly] setLocation, The coordinates [" + gpsCoordinates + "] are not a latitude and a longitude in decimal degrees such as '52.52001,13.40495', so they are not used.");
+    logger->recordLogCode("w700");
+    validCoordinates.clear();
+  }
+  std::string validIpAddress = ipAddress;
+  if (!ipAddress.empty() && !isIpAddress(ipAddress)) {
+    log(LogLevel::WARNING, "[Countly] setLocation, The IP address [" + ipAddress + "] is not an IPv4 or IPv6 address, so it is not used.");
+    logger->recordLogCode("w700");
+    validIpAddress.clear();
+  }
+  if (validCountryCode.empty() != city.empty()) {
+    log(LogLevel::WARNING, "[Countly] setLocation, It's required that both 'country_code' and 'city' should be set together");
+  }
+  const bool anyValue = !validCountryCode.empty() || !city.empty() || !validCoordinates.empty() || !validIpAddress.empty();
+
   if (!is_sdk_initialized) {
-    log(LogLevel::WARNING, "[Countly] setLocation, SDK is not initialized.");
-    logger->recordLogCode("w101");
+    std::lock_guard<std::mutex> lk(*mutex);
+    session_params["city"] = city;
+    session_params["ip_address"] = validIpAddress;
+    session_params["location"] = validCoordinates;
+    session_params["country_code"] = validCountryCode;
+    log(LogLevel::DEBUG, "[Countly] setLocation, The SDK is not started yet, it uses the location from start() on.");
     return;
   }
   if (!hasConsent(consent::LOCATION)) {
     log(LogLevel::DEBUG, "[Countly] setLocation, the 'location' consent is not given, the call is ignored.");
     return;
   }
-  bool isClearingLocation = countryCode.empty() && city.empty() && gpsCoordinates.empty() && ipAddress.empty();
-  // unique_lock so the mutex is released on scope exit (incl. throwing json writes);
-  // explicit unlock before the self-locking _sendIndependantLocationRequest() below.
-  std::unique_lock<std::mutex> lk(*mutex);
-  if (!isClearingLocation && configurationModule->isLocationTrackingEnabled() == false) {
-    log(LogLevel::ERROR, "[Countly] setLocation, Location tracking is disabled in server configuration, can not set location.");
+  if (configurationModule->getServerLocationTracking() == 0) {
+    log(LogLevel::DEBUG, "[Countly] setLocation, The server's SDK behavior settings turned location tracking off, the call is ignored.");
     return;
   }
-  log(LogLevel::INFO, "[Countly] setLocation, Setting location: countryCode = [" + countryCode + "], city = [" + city + "], gpsCoordinates = [" + gpsCoordinates + "], ipAddress = [" + ipAddress + "]");
 
-  if ((!countryCode.empty() && city.empty()) || (!city.empty() && countryCode.empty())) {
-    log(LogLevel::WARNING, "[Countly] setLocation, It's required that both 'country_code' and 'city' should be set together");
-    logger->recordLogCode("w700");
+  bool sendNow = false;
+  {
+    // unique_lock so the mutex is released on scope exit (incl. throwing json writes)
+    std::unique_lock<std::mutex> lk(*mutex);
+    session_params["city"] = city;
+    session_params["ip_address"] = validIpAddress;
+    session_params["location"] = validCoordinates;
+    session_params["country_code"] = validCountryCode;
+    if (anyValue) {
+      location_disabled_by_app = false;
+    }
+    // without a session start to come, the values go in a separate request right away
+    sendNow = anyValue && (began_session || !hasConsent(consent::SESSIONS) || !configurationModule->isSessionTrackingEnabled());
   }
 
-  session_params["city"] = city;
-  session_params["ip_address"] = ipAddress;
-  session_params["location"] = gpsCoordinates;
-  session_params["country_code"] = countryCode;
-
-  lk.unlock();
-
-  if (is_sdk_initialized) {
+  if (sendNow) {
     _sendIndependantLocationRequest();
   }
 }
@@ -843,56 +1115,49 @@ void Countly::_sendIndependantLocationRequest() {
   std::lock_guard<std::mutex> lk(*mutex);
   log(LogLevel::DEBUG, "[Countly] _sendIndependantLocationRequest, Start");
 
-  /*
-   * Empty country code, city and IP address can not be sent.
-   */
-
+  // the server uses an IP address only with a session start, so it goes with the next begin_session
   std::map<std::string, std::string> data;
-
-  if (session_params.contains("city") && session_params["city"].is_string() && !session_params["city"].get<std::string>().empty()) {
-    data["city"] = session_params["city"].get<std::string>();
+  for (const char *key : {"city", "location", "country_code"}) {
+    if (session_params.contains(key) && session_params[key].is_string() && !session_params[key].get<std::string>().empty()) {
+      data[key] = session_params[key].get<std::string>();
+    }
   }
-
-  if (session_params.contains("location") && session_params["location"].is_string() && !session_params["location"].get<std::string>().empty()) {
-    data["location"] = session_params["location"].get<std::string>();
-  }
-
-  if (session_params.contains("country_code") && session_params["country_code"].is_string() && !session_params["country_code"].get<std::string>().empty()) {
-    data["country_code"] = session_params["country_code"].get<std::string>();
-  }
-
-  if (session_params.contains("ip_address") && session_params["ip_address"].is_string() && !session_params["ip_address"].get<std::string>().empty()) {
-    data["ip_address"] = session_params["ip_address"].get<std::string>();
+  if (data.empty()) {
+    return;
   }
 
   const std::chrono::system_clock::time_point now = Countly::getTimestamp();
   const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
-
   data["app_key"] = session_params["app_key"].get<std::string>();
   data["device_id"] = session_params["device_id"].get<std::string>();
   data["timestamp"] = std::to_string(timestamp.count());
-
-  if (data.size() == 3) {
-    // No location fields were added — send empty location to clear server-side location
-    data["location"] = "";
-  }
-
   requestModule->addRequestToQueue(data);
+}
+
+void Countly::sendLocationErase() {
+  std::lock_guard<std::mutex> lk(*mutex);
+  log(LogLevel::DEBUG, "[Countly] sendLocationErase, erasing the location on the server");
+  requestModule->addRequestToQueue({{"location", ""}});
 }
 
 #pragma endregion User location
 
 #pragma region Device Id
 void Countly::setDeviceID(const std::string &value, bool same_user) {
+  if (value.empty()) {
+    log(LogLevel::WARNING, "[Countly] setDeviceID, The device ID can't be empty, the call is ignored.");
+    logger->recordLogCode("w601");
+    return;
+  }
   // unique_lock so the mutex is released on scope exit (incl. throwing json writes);
   // explicit unlock before the self-locking _changeDeviceId* helpers below.
   std::unique_lock<std::mutex> lk(*mutex);
   log(LogLevel::INFO, "[Countly] setDeviceID, Device ID change requested, new value = [" + value + "]");
 
-  if (!session_params.contains("device_id")) {
+  if (!is_sdk_initialized) {
     session_params["device_id"] = value;
     configuration->deviceId = value;
-    log(LogLevel::DEBUG, "[Countly] setDeviceID, No previous device id, assigning initial device id");
+    log(LogLevel::DEBUG, "[Countly] setDeviceID, The SDK is not started yet, it uses this device ID from start() on.");
     return;
   }
 
@@ -902,17 +1167,148 @@ void Countly::setDeviceID(const std::string &value, bool same_user) {
   }
 
   lk.unlock();
-  if (!is_sdk_initialized) {
-    log(LogLevel::WARNING, "[Countly] setDeviceID, Device id can't be changed while the SDK has not been initialized.");
-    logger->recordLogCode("w101");
-    return;
-  }
-
   if (same_user) {
     _changeDeviceIdWithMerge(value);
   } else {
     _changeDeviceIdWithoutMerge(value);
   }
+}
+
+bool Countly::resolveDeviceId(const std::string &given_device_id) {
+  const nlohmann::json stored = nlohmann::json::parse(storageModule->getDeviceIdState(), nullptr, false);
+  if (!stored.is_object() || !stored.contains("id") || !stored["id"].is_string() || stored["id"].get<std::string>().empty() || !stored.contains("type") || !stored["type"].is_number_integer()) {
+    useNewDeviceId(given_device_id);
+    return false;
+  }
+
+  configuration->deviceId = stored["id"].get<std::string>();
+  configuration->deviceIdType = stored["type"].get<int>() == static_cast<int>(DeviceIdType::SDK_GENERATED) ? DeviceIdType::SDK_GENERATED : DeviceIdType::DEVELOPER_SUPPLIED;
+  session_params["device_id"] = configuration->deviceId;
+  if (configuration->clearStoredDeviceID) {
+    log(LogLevel::INFO, "[Countly] start, The device ID stored by an earlier start is replaced, as asked with enableClearStoredDeviceID: [" + configuration->deviceId + "]");
+    return true;
+  }
+  if (!given_device_id.empty() && given_device_id != configuration->deviceId) {
+    log(LogLevel::WARNING, "[Countly] start, The device ID stored by an earlier start is used: [" + configuration->deviceId + "], and the device ID given with setDeviceID is ignored: [" + given_device_id +
+                               "]. To use it, call enableClearStoredDeviceID() before start(), or change the device ID with setDeviceID after start().");
+  } else {
+    log(LogLevel::DEBUG, "[Countly] start, Using the device ID stored by an earlier start: [" + configuration->deviceId + "]");
+  }
+  return false;
+}
+
+void Countly::replaceStoredDeviceId(const std::string &given_device_id) {
+  if (use_sqlite_storage) {
+    nlohmann::json events = nlohmann::json::array();
+    std::string event_ids;
+    readStoredEvents(events, event_ids);
+    sendEventsToRQ(events);
+    if (!event_ids.empty()) {
+      removeEventWithId(event_ids);
+    }
+  }
+  useNewDeviceId(given_device_id);
+}
+
+void Countly::useNewDeviceId(const std::string &given_device_id) {
+  if (!given_device_id.empty()) {
+    configuration->deviceId = given_device_id;
+    configuration->deviceIdType = DeviceIdType::DEVELOPER_SUPPLIED;
+  } else {
+    configuration->deviceId = cly::utils::generateUUID();
+    configuration->deviceIdType = DeviceIdType::SDK_GENERATED;
+    log(LogLevel::INFO, "[Countly] start, No device ID was given, so the SDK generated one: [" + configuration->deviceId + "]");
+  }
+  session_params["device_id"] = configuration->deviceId;
+  storeDeviceId();
+}
+
+void Countly::enableClearStoredDeviceID() {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] enableClearStoredDeviceID, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+  std::lock_guard<std::mutex> lk(*mutex);
+  configuration->clearStoredDeviceID = true;
+}
+
+void Countly::storeDeviceId() {
+  if (storageModule) {
+    storageModule->storeDeviceIdState(nlohmann::json({{"id", configuration->deviceId}, {"type", static_cast<int>(configuration->deviceIdType)}}).dump());
+  }
+}
+
+void Countly::setCustomCrashSegmentation(const std::map<std::string, std::string> &segmentation) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] setCustomCrashSegmentation, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+
+  std::lock_guard<std::mutex> lk(*mutex);
+  configuration->crashSegmentation = segmentation;
+}
+
+void Countly::setCrashFilterCallback(CrashFilterCallback callback) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] setCrashFilterCallback, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+
+  std::lock_guard<std::mutex> lk(*mutex);
+  configuration->crashFilter = callback;
+}
+
+void Countly::disableLocation() {
+  log(LogLevel::INFO, "[Countly] disableLocation, turning location tracking off");
+  location_disabled_by_app = true;
+  clearStoredLocation();
+  if (!is_sdk_initialized) {
+    return;
+  }
+  if (configurationModule->getServerLocationTracking() == 1) {
+    log(LogLevel::DEBUG, "[Countly] disableLocation, the server's SDK behavior settings keep location tracking on, so no erase request is sent.");
+    return;
+  }
+  sendLocationErase();
+}
+
+nlohmann::json Countly::DeviceMetrics() { return deviceMetrics(); }
+
+std::string Countly::CurrentViewId() { return views_module->currentViewId(); }
+
+void Countly::LocationSettingChanged() {
+  if (!start_finished) {
+    return;
+  }
+  const int server = configurationModule->getServerLocationTracking();
+  if (server == 0) {
+    clearStoredLocation();
+    if (hasConsent(consent::LOCATION)) {
+      sendLocationErase();
+    }
+  } else if (server < 0 && location_disabled_by_app && hasConsent(consent::LOCATION)) {
+    sendLocationErase();
+  }
+}
+
+std::string Countly::getDeviceID() {
+  if (!is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] getDeviceID, SDK is not initialized.");
+    logger->recordLogCode("w101");
+    return std::string();
+  }
+  std::lock_guard<std::mutex> lk(*mutex);
+  return configuration->deviceId;
+}
+
+DeviceIdType Countly::getDeviceIDType() {
+  if (!is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] getDeviceIDType, SDK is not initialized.");
+    logger->recordLogCode("w101");
+    return DeviceIdType::DEVELOPER_SUPPLIED;
+  }
+  std::lock_guard<std::mutex> lk(*mutex);
+  return configuration->deviceIdType;
 }
 
 /* Change device ID with merge after SDK has been initialized.*/
@@ -923,6 +1319,9 @@ void Countly::_changeDeviceIdWithMerge(const std::string &value) {
   session_params["old_device_id"] = session_params["device_id"];
   session_params["device_id"] = value;
   configuration->deviceId = value;
+  configuration->deviceIdType = DeviceIdType::DEVELOPER_SUPPLIED;
+  storeDeviceId();
+  clearRemoteConfigForNewUser();
 
   const std::chrono::system_clock::time_point now = Countly::getTimestamp();
   const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
@@ -942,7 +1341,7 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
   std::lock_guard<std::mutex> change(consent_change_mutex);
   log(LogLevel::DEBUG, "[Countly] _changeDeviceIdWithoutMerge, deviceId = [" + value + "]");
 
-  views_module->stopAllViews();
+  views_module->stopRunningViews();
   // send all event to server and end current session of old user
   flushEvents();
   if (configuration->manualSessionControl == false) {
@@ -967,12 +1366,28 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
     std::lock_guard<std::mutex> lk(*mutex);
     session_params["device_id"] = value;
     configuration->deviceId = value;
+    configuration->deviceIdType = DeviceIdType::DEVELOPER_SUPPLIED;
+    storeDeviceId();
+    previous_event_id.clear();
   }
+  views_module->forgetViews();
+  clearRemoteConfigForNewUser();
 
   // start a new session for new user
   if (configuration->manualSessionControl == false) {
     beginSessionInternal(true);
   }
+
+  configurationModule->fetchConfigFromServer(nullptr);
+  downloadRemoteConfigAutomatically();
+}
+
+void Countly::onMergeDelivered() {
+  if (is_being_disposed || stopping) {
+    return;
+  }
+  configurationModule->fetchConfigFromServer(nullptr);
+  downloadRemoteConfigAutomatically();
 }
 #pragma endregion Device Id
 
@@ -1038,10 +1453,9 @@ void Countly::changeAppKey(const std::string &appKey) {
   }
   log(LogLevel::INFO, "[Countly] changeAppKey, Changing the app key to [" + appKey + "]");
 
-  views_module->stopAllViews();
+  views_module->stopRunningViews();
   packEvents();
   bool sessionWasRunning = false;
-  bool sessionEnded = false;
   {
     // One section, so that the update loop can't begin a session with the old key after its session ended
     std::lock_guard<std::mutex> lk(*mutex);
@@ -1049,9 +1463,8 @@ void Countly::changeAppKey(const std::string &appKey) {
       queueUserDetails();
     }
     sessionWasRunning = began_session;
-    if (began_session && configurationModule->isSessionTrackingEnabled()) {
+    if (began_session) {
       queueEndSession(true);
-      sessionEnded = true;
     }
     configuration->appKey = appKey;
     session_params["app_key"] = appKey;
@@ -1060,29 +1473,26 @@ void Countly::changeAppKey(const std::string &appKey) {
     remote_config_store->app_key = appKey;
     remote_config_store->values = nlohmann::json::object();
     remote_config_store->fetch_running.store(false);
+    remote_config_store->has_pending = false;
   }
-  if (sessionEnded) {
+  if (sessionWasRunning) {
+    views_module->resetFirstView();
     health_check->saveState();
   }
 
   if (consent_module->isRequired()) {
     queueConsentState();
   }
-  const bool sessionBegan = sessionWasRunning && beginSessionInternal(true);
-  fetchAfterServerChange(sessionBegan);
+  if (sessionWasRunning) {
+    beginSessionInternal(true);
+  }
+  fetchAfterServerChange(false);
 }
 
 void Countly::fetchAfterServerChange(bool remoteConfigRequested) {
-  nlohmann::json params;
-  bool automaticDownload = false;
-  {
-    std::lock_guard<std::mutex> lk(*mutex);
-    params = session_params;
-    automaticDownload = remote_config_enabled;
-  }
-  configurationModule->fetchConfigFromServer(params);
-  if (automaticDownload && !remoteConfigRequested) {
-    updateRemoteConfig();
+  configurationModule->fetchConfigFromServer(nullptr);
+  if (!remoteConfigRequested) {
+    downloadRemoteConfigAutomatically();
   }
 }
 
@@ -1142,6 +1552,21 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
     return;
   }
 
+  if (app_key.empty() || app_key == "YOUR_APP_KEY") {
+    log(LogLevel::ERROR, "[Countly] start, The app key must be the key of your Countly app, not empty and not the placeholder 'YOUR_APP_KEY'. SDK will not be initialized.");
+    return;
+  }
+
+  std::string server_url;
+  bool trimmed_server_url = false;
+  if (!normalizeServerUrl(host, server_url, trimmed_server_url)) {
+    log(LogLevel::ERROR, "[Countly] start, The server URL [" + host + "] is not an absolute http or https URL, for example 'https://your.server.ly'. SDK will not be initialized.");
+    return;
+  }
+  if (trimmed_server_url) {
+    log(LogLevel::WARNING, "[Countly] start, The trailing '/' characters of the server URL are removed: [" + server_url + "]");
+  }
+
 #ifdef COUNTLY_USE_SQLITE
   if (configuration->databasePath == "" || configuration->databasePath == " ") {
     log(LogLevel::WARNING, "[Countly] start, No database path is set, so events and requests are kept in memory and are lost when the app closes. Call setDatabasePath() before start() to keep them.");
@@ -1187,8 +1612,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   log(LogLevel::INFO, "[Countly] start, '_WIN32' is not defined");
 #endif
 
-  enable_automatic_session = start_thread;
-  start_thread = true;
+  (void)start_thread;
 
   if (port < 0 || port > 65535) {
     log(LogLevel::WARNING, "[Countly] start, Port number is out of valid boundaries. Setting it to 0.");
@@ -1198,7 +1622,7 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
 
   configuration->port = port;
   configuration->appKey = app_key;
-  configuration->serverUrl = host;
+  configuration->serverUrl = server_url;
 
   session_params["app_key"] = app_key;
   {
@@ -1219,19 +1643,23 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
     storageModule.reset(new StorageModuleMemory(configuration, logger));
     storageModule->init();
   }
+  const std::string given_device_id = session_params.contains("device_id") ? session_params["device_id"].get<std::string>() : std::string();
+  const bool replace_stored_device_id = resolveDeviceId(given_device_id);
 
   requestBuilder.reset(new RequestBuilder(configuration, logger));
   requestModule.reset(new RequestModule(configuration, logger, requestBuilder, storageModule));
   configurationModule.reset(new cly::ConfigurationModule(this, configuration, logger, requestBuilder, storageModule, requestModule, mutex));
-  crash_module.reset(new cly::CrashModule(configuration, logger, requestModule, mutex));
-  views_module.reset(new cly::ViewsModule(this, logger));
+  crash_module->setRequestModule(requestModule);
+  crash_module->setDelegates(this);
 
   requestModule->setConfigurationProvider(configurationModule);
+  requestModule->setOnMergeDelivered([this]() { onMergeDelivered(); });
   views_module->setConfigurationProvider(configurationModule);
   crash_module->setConfigurationProvider(configurationModule);
-  views_module->setConsentModule(consent_module);
-  crash_module->setConsentModule(consent_module);
   health_check->setStorage(storageModule);
+  if (replace_stored_device_id) {
+    replaceStoredDeviceId(given_device_id);
+  }
 
   is_sdk_initialized = true; // after this point SDK is initialized.
 
@@ -1250,18 +1678,24 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
       lk.lock();
     }
 
-    if (start_thread) {
-      stop_thread = false;
+    stop_thread = false;
 
-      try {
-        thread.reset(new std::thread(&Countly::updateLoop, this));
-      } catch (const std::system_error &e) {
-        std::ostringstream log_message;
-        log_message << "[Countly] start, Could not create thread: " << e.what();
-        log(LogLevel::FATAL, log_message.str());
-      }
+    try {
+      thread.reset(new std::thread(&Countly::updateLoop, this));
+    } catch (const std::system_error &e) {
+      std::ostringstream log_message;
+      log_message << "[Countly] start, Could not create thread: " << e.what();
+      log(LogLevel::FATAL, log_message.str());
     }
   }
+
+  lk.unlock();
+  // without a session start to carry the empty location, a separate request keeps the location off
+  if (!isLocationOn() && (!hasConsent(consent::SESSIONS) || !configurationModule->isSessionTrackingEnabled())) {
+    sendLocationErase();
+  }
+  start_finished = true;
+  downloadRemoteConfigAutomatically();
 }
 
 /**
@@ -1273,32 +1707,31 @@ void Countly::startOnCloud(const std::string &app_key) {
   this->start(app_key, "https://cloud.count.ly", 443);
 }
 
-bool Countly::startRemoteConfigFetch(const std::map<std::string, std::string> &data, bool merge, const char *caller) {
+bool Countly::startRemoteConfigFetch(const std::map<std::string, std::string> &data, bool merge, const char *caller, bool queueIfRunning) {
   // Checked here rather than on the fetch thread: see RemoteConfigFetch on why it
   // must not hold the configuration module.
   if (configurationModule->isNetworkingEnabled() == false) {
-    log(LogLevel::ERROR, std::string("[Countly] ") + caller + ", Error fetching remote config, networking is disabled in SBS");
+    log(LogLevel::DEBUG, std::string("[Countly] ") + caller + ", the SDK behavior settings turned networking off, so remote config is not downloaded.");
     return false;
   }
 
-  const std::string &app_key = data.at("app_key");
-  bool current_key = false;
-  bool already_running = false;
+  std::string app_key;
   {
-    // Under the store mutex, so that no app key change comes between the key check and taking the flag
     std::lock_guard<std::mutex> lk(remote_config_store->mutex);
-    current_key = app_key == remote_config_store->app_key;
-    // exchange, not load-then-store: two threads calling updateRemoteConfig at the
-    // same moment must not both get through.
-    already_running = current_key && remote_config_store->fetch_running.exchange(true);
-  }
-  if (!current_key) {
-    log(LogLevel::DEBUG, std::string("[Countly] ") + caller + ", the app key changed meanwhile; nothing is fetched for the previous one.");
-    return false;
-  }
-  if (already_running) {
-    log(LogLevel::WARNING, std::string("[Countly] ") + caller + ", a remote config fetch is already in flight; ignoring this call.");
-    return false;
+    if (remote_config_store->fetch_running.load()) {
+      if (queueIfRunning) {
+        remote_config_store->has_pending = true;
+        remote_config_store->pending_data = data;
+        remote_config_store->pending_merge = merge;
+        log(LogLevel::DEBUG, std::string("[Countly] ") + caller + ", a remote config fetch is in flight; this one follows it.");
+        return true;
+      }
+      log(LogLevel::WARNING, std::string("[Countly] ") + caller + ", a remote config fetch is already in flight; ignoring this call.");
+      return false;
+    }
+    remote_config_store->fetch_running.store(true);
+    // taken with the flag, so that the fetch owns the flag exactly while its app key is the current one
+    app_key = remote_config_store->app_key;
   }
 
   std::shared_ptr<RemoteConfigFetch> fetch(new RemoteConfigFetch());
@@ -1317,23 +1750,60 @@ bool Countly::startRemoteConfigFetch(const std::map<std::string, std::string> &d
     std::thread(runRemoteConfigFetch, fetch).detach();
   } catch (const std::system_error &e) {
     inflight_remote_config_fetches.fetch_sub(1);
-    remote_config_store->fetch_running.store(false);
+    {
+      std::lock_guard<std::mutex> lk(remote_config_store->mutex);
+      remote_config_store->fetch_running.store(false);
+    }
     log(LogLevel::ERROR, std::string("[Countly] ") + caller + ", could not create remote config thread: " + e.what());
     return false;
   }
   return true;
 }
 
-void Countly::stop() {
-  // Deliberately unchanged from before multi-instance support. Joining the SDK
-  // Behavior Settings timer or an in-flight remote-config fetch here would make
-  // stop() block where it previously returned at once, and integrators call it
-  // on the UI thread at shutdown (see examples/qt_demo). Both joins belong in
-  // ~Countly, which is where the lifetime problem they solve actually arises.
-  _deleteThread();
-  if (configuration->manualSessionControl == false) {
-    endSessionInternal(true);
+std::map<std::string, std::string> Countly::remoteConfigRequest() {
+  std::map<std::string, std::string> data = {{"method", "rc"}};
+  if (hasConsent(consent::METRICS)) {
+    data["metrics"] = deviceMetrics().dump();
   }
+  if (configuration->enrollABOnRCDownload) {
+    data["oi"] = "1";
+  }
+  return data;
+}
+
+void Countly::downloadRemoteConfigAutomatically() {
+  bool automatic = false;
+  {
+    std::lock_guard<std::mutex> lk(*mutex);
+    automatic = remote_config_enabled;
+  }
+  if (!automatic || !hasConsent(consent::REMOTE_CONFIG)) {
+    return;
+  }
+  startRemoteConfigFetch(remoteConfigRequest(), false, "downloadRemoteConfigAutomatically", true);
+}
+
+void Countly::clearRemoteConfigForNewUser() {
+  std::lock_guard<std::mutex> lk(remote_config_store->mutex);
+  remote_config_store->values = nlohmann::json::object();
+  remote_config_store->user_generation++;
+}
+
+void Countly::stop() {
+  // Joining the SDK Behavior Settings timer or an in-flight remote-config fetch
+  // here would make stop() block where it previously returned at once, and
+  // integrators call it on the UI thread at shutdown (see examples/qt_demo). Both
+  // joins belong in ~Countly, which is where the lifetime problem they solve
+  // actually arises.
+  stopping = true;
+  if (is_sdk_initialized && !is_being_disposed) {
+    // queued while the update loop still runs, so that its last pass can send them
+    packEvents();
+    if (configuration->manualSessionControl == false) {
+      endSessionInternal(true);
+    }
+  }
+  _deleteThread();
   health_check->saveState();
 }
 
@@ -1373,18 +1843,30 @@ void Countly::addEvent(const cly::Event &event) {
     return;
   }
 
+  if (eventKey.empty()) {
+    log(LogLevel::WARNING, "[Countly] addEvent, The event key can't be empty, the event is not recorded.");
+    logger->recordLogCode("w701");
+    return;
+  }
+
   if (!hasEventConsent(eventKey)) {
     log(LogLevel::DEBUG, "[Countly] addEvent, the consent for the event [" + eventKey + "] is not given, it is not recorded.");
     return;
   }
 
-  bool isInternalEvent = eventKey.find("[CLY]_") == 0;
+  const bool isInternalEvent = isInternalEventKey(eventKey);
   if (!isInternalEvent) {
     logger->recordUsage(HEALTH_CHECK_AREA_EVENTS, "record");
   }
 
+  if (!configurationModule->isTrackingEnabled()) {
+    log(LogLevel::WARNING, "[Countly] addEvent, The SDK behavior settings turned tracking off, so the event [" + eventKey + "] is not recorded.");
+    logger->recordLogCode("w505");
+    return;
+  }
+
   // Check custom event tracking (only blocks custom events)
-  if (!configurationModule->isCustomEventTrackingEnabled() && !isInternalEvent) {
+  if (!isInternalEvent && !configurationModule->isCustomEventTrackingEnabled()) {
     log(LogLevel::DEBUG, "[Countly] addEvent, custom event tracking is disabled in server configuration, can not add event with key: [" + eventKey + "]");
     return;
   }
@@ -1397,9 +1879,10 @@ void Countly::addEvent(const cly::Event &event) {
 
   // Copy the event so we can apply segmentation filters without modifying the caller's object
   cly::Event filteredEvent = event;
+  validateEventValues(filteredEvent.object, eventKey, *logger);
 
-  // Apply segmentation filters
-  if (filteredEvent.hasSegmentation()) {
+  // Apply segmentation filters (only for custom events)
+  if (!isInternalEvent && filteredEvent.hasSegmentation()) {
     try {
       auto applySegFilter = [&filteredEvent](const std::set<std::string> &filterKeys, bool isWhitelist) {
         if (filterKeys.empty()) {
@@ -1436,14 +1919,42 @@ void Countly::addEvent(const cly::Event &event) {
     }
   }
 
-  // Apply SDK internal limits to developer-supplied events only. Internal
-  // [CLY]_* events are limited at their own module boundary (e.g. views).
+  // Custom events follow every limit. The SDK's own keys and values in internal events are not cut, but the values
+  // an app gives in them follow the value size limit.
+  SDKLimits limits = configurationModule->getLimits();
+  nlohmann::json &object = filteredEvent.object;
+  nlohmann::json::iterator segmentation = object.find("segmentation");
   if (!isInternalEvent) {
-    SDKLimits limits = configurationModule->getLimits();
-    filteredEvent.applyLimits(limits.maxKeyLength, limits.maxValueSize, limits.maxSegmentationValues);
+    object["key"] = cly::limits::limitKey(eventKey, limits.maxKeyLength, logger.get(), "addEvent");
+    if (segmentation != object.end() && segmentation->is_object()) {
+      cly::limits::limitSegmentation(*segmentation, limits, logger.get(), "addEvent");
+    }
+  } else if (segmentation != object.end() && segmentation->is_object()) {
+    for (nlohmann::json::iterator it = segmentation->begin(); it != segmentation->end(); ++it) {
+      const bool viewField = eventKey == "[CLY]_view" && (it.key() == "name" || it.key() == "_idv" || it.key() == "segment");
+      if (it.value().is_string() && !viewField) {
+        it.value() = cly::limits::limitValue(it.value().get<std::string>(), limits.maxValueSize, logger.get(), "addEvent", it.key());
+      }
+    }
   }
 
+  const std::string currentViewId = views_module->currentViewId();
   std::unique_lock<std::mutex> lk(*mutex);
+  if (!object.contains("id")) {
+    object["id"] = cly::utils::generateEventID();
+  }
+  if (eventKey == "[CLY]_view") {
+    if (!object.contains("pvid")) {
+      object["pvid"] = currentViewId;
+    }
+  } else {
+    object["cvid"] = currentViewId;
+    if (!isInternalEvent) {
+      object["peid"] = previous_event_id;
+      previous_event_id = object["id"].get<std::string>();
+    }
+  }
+
   if (use_sqlite_storage) {
     addEventToSqlite(filteredEvent);
   } else {
@@ -1453,6 +1964,32 @@ void Countly::addEvent(const cly::Event &event) {
   checkAndSendEventToRQ();
 }
 
+bool Countly::IsSessionRunning() {
+  std::lock_guard<std::mutex> lk(*mutex);
+  return began_session;
+}
+
+std::string Countly::PlatformName() {
+  nlohmann::json metrics = deviceMetrics();
+  nlohmann::json::const_iterator os = metrics.find("_os");
+  return os != metrics.end() && os->is_string() ? os->get<std::string>() : std::string();
+}
+
+nlohmann::json Countly::deviceMetrics() {
+  nlohmann::json metrics = nlohmann::json::object();
+  metrics["_os"] = cly::platform::osName();
+  const std::string osVersion = cly::platform::osVersion();
+  if (!osVersion.empty()) {
+    metrics["_os_version"] = osVersion;
+  }
+  if (configuration->metrics.is_object()) {
+    for (nlohmann::json::const_iterator it = configuration->metrics.begin(); it != configuration->metrics.end(); ++it) {
+      metrics[it.key()] = it.value();
+    }
+  }
+  return metrics;
+}
+
 void Countly::checkAndSendEventToRQ() {
   nlohmann::json events = nlohmann::json::array();
   int queueSize = checkEQSize();
@@ -1460,12 +1997,13 @@ void Countly::checkAndSendEventToRQ() {
   if (queueSize < 0) {
     return;
   }
-  // unique_lock so the mutex is released on scope exit, including when json::parse
-  // on a queued event or sendEventsToRQ throws; unlock/re-acquire around the
-  // self-locking fillEventsIntoJson().
+  // unique_lock so the mutex is released on scope exit, including when
+  // sendEventsToRQ throws; unlock/re-acquire around the self-locking
+  // fillEventsIntoJson().
   std::unique_lock<std::mutex> lk(*mutex);
+  const int threshold = static_cast<int>(std::min(configurationModule->getEventQueueSizeLimit(), static_cast<unsigned int>(COUNTLY_MAX_EVENT_QUEUE_SIZE)));
   if (use_sqlite_storage) {
-    if (queueSize >= configurationModule->getEventQueueSizeLimit()) {
+    if (queueSize >= threshold) {
       log(LogLevel::DEBUG, "[Countly] checkAndSendEventToRQ, Event queue threshold is reached");
       std::string event_ids;
 
@@ -1479,11 +2017,9 @@ void Countly::checkAndSendEventToRQ() {
       removeEventWithId(event_ids);
     }
   } else {
-    if (queueSize >= configurationModule->getEventQueueSizeLimit()) {
+    if (queueSize >= threshold) {
       log(LogLevel::DEBUG, "[Countly] checkAndSendEventToRQ, Event queue threshold is reached, sending the events to the request queue");
-      for (const auto &event_json : event_queue) {
-        events.push_back(nlohmann::json::parse(event_json));
-      }
+      appendStoredEvents(event_queue, events, *logger);
       sendEventsToRQ(events);
       event_queue.clear();
     }
@@ -1500,13 +2036,9 @@ void Countly::setEventsToRQThreshold(int value) {
   log(LogLevel::DEBUG, "[Countly] setEventsToRQThreshold, Given threshold:[" + std::to_string(value) + "]");
   std::unique_lock<std::mutex> lk(*mutex);
   if (value < 1) {
-    log(LogLevel::WARNING, "[Countly] setEventsToRQThreshold, Threshold can not be less than 1. Setting it to 1 instead of:[" + std::to_string(value) + "]");
+    log(LogLevel::WARNING, "[Countly] setEventsToRQThreshold, The threshold must be at least 1, so the value [" + std::to_string(value) + "] is ignored.");
     logger->recordLogCode("w121");
-    value = 1;
-  } else if (value > 10000) {
-    log(LogLevel::WARNING, "[Countly] setEventsToRQThreshold, Threshold can not be greater than 10000. Setting it to 10000 instead of:[" + std::to_string(value) + "]");
-    logger->recordLogCode("w121");
-    value = 10000;
+    return;
   }
 
   // set the value
@@ -1517,41 +2049,14 @@ void Countly::setEventsToRQThreshold(int value) {
 }
 
 void Countly::flushEvents(std::chrono::seconds timeout) {
-  log(LogLevel::DEBUG, "[Countly] flushEvents, timeout: [" + std::to_string(timeout.count()) + "] seconds");
-
-  try {
-    auto wait_duration = std::chrono::seconds(1);
-    bool update_failed;
-
-    // Try to update session
-    while (timeout.count() != 0) {
-
-      // try to update session if event queue is not empty
-      update_failed = attemptSessionUpdateEQ();
-
-      // if update is successful or EQ is empty, break the loop
-      if (!update_failed) {
-        break;
-      }
-
-      // wait for a while
-      std::this_thread::sleep_for(wait_duration);
-      // increase wait/retry duration	(exponential backoff: 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, ...)
-      wait_duration *= 2;
-      // if wait/retry time is bigger than timeout stop trying, else decrease timeout
-      timeout = (wait_duration > timeout) ? std::chrono::seconds(0) : (timeout - wait_duration);
-    }
-
-    // Clear the event queue
-    clearEQInternal(); // TODO: Check if this is necessary
-
-    // TODO: Check if we capture anything other than a system_error
-  } catch (const std::system_error &e) {
-    std::ostringstream log_message;
-    log_message << "[Countly] flushEvents, error: " << e.what();
-    log(LogLevel::FATAL, log_message.str());
-    logger->recordLogCode("e901");
+  (void)timeout;
+  if (!is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] flushEvents, SDK is not initialized.");
+    logger->recordLogCode("w101");
+    return;
   }
+  log(LogLevel::DEBUG, "[Countly] flushEvents, moving the waiting events into a request");
+  packEvents();
 }
 
 bool Countly::attemptSessionUpdateEQ() {
@@ -1645,7 +2150,24 @@ void Countly::debugInjectRawEvent(const std::string &raw) {
 }
 #endif
 
-bool Countly::beginSession() { return beginSessionInternal(false); }
+bool Countly::beginSession() {
+  if (rejectSessionCallInAutomaticMode("beginSession", "begin")) {
+    return false;
+  }
+  return beginSessionInternal(false);
+}
+
+bool Countly::rejectSessionCallInAutomaticMode(const char *caller, const char *usage) {
+  if (!is_sdk_initialized || configuration->manualSessionControl) {
+    return false;
+  }
+  if (hasConsent(consent::SESSIONS)) {
+    logger->recordUsage(HEALTH_CHECK_AREA_SESSIONS, usage);
+    logger->recordLogCode("w740");
+  }
+  log(LogLevel::WARNING, std::string("[Countly] ") + caller + ", The SDK tracks sessions automatically, so the call is ignored. To make session calls, call enableManualSessionControl() before start().");
+  return true;
+}
 
 bool Countly::beginSessionInternal(bool automatic) {
   if (!is_sdk_initialized) {
@@ -1669,6 +2191,10 @@ bool Countly::beginSessionInternal(bool automatic) {
   log(LogLevel::INFO, "[Countly] beginSession, Starting session");
   if (configurationModule->isSessionTrackingEnabled() == false) {
     log(LogLevel::DEBUG, "[Countly] beginSession, Session tracking is disabled in server configuration, can not begin session.");
+    return false;
+  }
+  if (automatic && stopping) {
+    log(LogLevel::DEBUG, "[Countly] beginSession, The SDK is stopping, no session begins.");
     return false;
   }
   if (began_session == true) {
@@ -1715,8 +2241,8 @@ bool Countly::beginSessionInternal(bool automatic) {
     session_params.erase("user_details");
   }
 
-  if (configuration->metrics.size() > 0 && hasConsent(consent::METRICS)) {
-    data["metrics"] = configuration->metrics.dump();
+  if (hasConsent(consent::METRICS)) {
+    data["metrics"] = deviceMetrics().dump();
   }
 
   requestModule->addRequestToQueue(data);
@@ -1726,20 +2252,19 @@ bool Countly::beginSessionInternal(bool automatic) {
   if (automatic) {
     logger->recordUsage(HEALTH_CHECK_AREA_SESSIONS, "begin:a");
   }
-  // snapshot guarded state before releasing the lock
-  bool shouldUpdateRemoteConfig = remote_config_enabled;
   lk.unlock();
-
-  if (shouldUpdateRemoteConfig) {
-    updateRemoteConfig();
-  }
   return true;
 }
 
 /**
  * @brief Update session
  */
-bool Countly::updateSession() { return updateSessionInternal(false); }
+bool Countly::updateSession() {
+  if (rejectSessionCallInAutomaticMode("updateSession", "update")) {
+    return false;
+  }
+  return updateSessionInternal(false);
+}
 
 bool Countly::updateSessionInternal(bool automatic) {
   if (!is_sdk_initialized) {
@@ -1767,20 +2292,25 @@ bool Countly::updateSessionInternal(bool automatic) {
     // Check if there was a session, if not try to start one
     lk.lock();
     if (configurationModule->isSessionTrackingEnabled() == false) {
-      log(LogLevel::DEBUG, "[Countly] updateSession, Session tracking is disabled in server configuration, can not update session.");
       lk.unlock();
+      if (automatic) {
+        // sessions are off, but the update timer still sends the events
+        packEvents();
+        return true;
+      }
+      log(LogLevel::DEBUG, "[Countly] updateSession, Session tracking is disabled in server configuration, can not update session.");
       return false;
     }
     if (began_session == false) {
       lk.unlock();
-      if (configuration->manualSessionControl == true) {
+      if (!automatic) {
         log(LogLevel::WARNING, "[Countly] updateSession, SDK is in manual session control mode and there is no active session. Please start a session first.");
         logger->recordLogCode("w760");
         return false;
       }
       if (!beginSessionInternal(true)) {
         log(LogLevel::DEBUG, "[Countly] updateSession, Failed to begin session.");
-        // if beginSession fails, we should not try to update session
+        packEvents();
         return false;
       }
       lk.lock();
@@ -1800,9 +2330,7 @@ bool Countly::updateSessionInternal(bool automatic) {
         fillEventsIntoJson(events, event_ids);
         lk.lock();
       } else {
-        for (const auto &event_json : event_queue) {
-          events.push_back(nlohmann::json::parse(event_json));
-        }
+        appendStoredEvents(event_queue, events, *logger);
       }
     } else {
       log(LogLevel::DEBUG, "[Countly] updateSession, EQ empty.");
@@ -1811,8 +2339,8 @@ bool Countly::updateSessionInternal(bool automatic) {
     auto duration = std::chrono::duration_cast<std::chrono::seconds>(getSessionDuration());
     lk.lock();
 
-    // report session duration if it is greater than the configured session duration value
-    if (duration.count() >= configurationModule->getSessionUpdateInterval()) {
+    // the update timer reports the session once an update interval passed; the app's own call always does
+    if (!automatic || duration.count() >= configurationModule->getSessionUpdateInterval()) {
       log(LogLevel::DEBUG, "[Countly] updateSession, Sending session update.");
       std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"session_duration", std::to_string(duration.count())}};
       requestModule->addRequestToQueue(data);
@@ -1838,7 +2366,7 @@ bool Countly::updateSessionInternal(bool automatic) {
     } else {
       event_queue.clear();
     }
-  } catch (const std::system_error &e) {
+  } catch (const std::exception &e) {
     std::ostringstream log_message;
     log_message << "[Countly] updateSession, error: " << e.what();
     log(LogLevel::FATAL, log_message.str());
@@ -1867,9 +2395,7 @@ void Countly::packEvents() {
         fillEventsIntoJson(events, event_ids);
         lk.lock();
       } else {
-        for (const auto &event_json : event_queue) {
-          events.push_back(nlohmann::json::parse(event_json));
-        }
+        appendStoredEvents(event_queue, events, *logger);
       }
     } else {
       log(LogLevel::DEBUG, "[Countly] packEvents, EQ empty.");
@@ -1889,10 +2415,11 @@ void Countly::packEvents() {
     } else {
       event_queue.clear();
     }
-  } catch (const std::system_error &e) {
+  } catch (const std::exception &e) {
     std::ostringstream log_message;
     log_message << "[Countly] packEvents, error: " << e.what();
     log(LogLevel::FATAL, log_message.str());
+    logger->recordLogCode("e901");
   }
   // lk releases the mutex on scope exit if it is still held.
 }
@@ -1912,7 +2439,12 @@ void Countly::sendEventsToRQ(const nlohmann::json &events) {
   requestModule->addRequestToQueue(data);
 }
 
-bool Countly::endSession() { return endSessionInternal(false); }
+bool Countly::endSession() {
+  if (rejectSessionCallInAutomaticMode("endSession", "end")) {
+    return false;
+  }
+  return endSessionInternal(false);
+}
 
 bool Countly::endSessionInternal(bool automatic) {
   if (!is_sdk_initialized && !is_being_disposed) {
@@ -1930,10 +2462,20 @@ bool Countly::endSessionInternal(bool automatic) {
     logger->recordUsage(HEALTH_CHECK_AREA_SESSIONS, "end");
   }
   log(LogLevel::INFO, "[Countly] endSession, Ending session");
-  if (is_being_disposed == false && configurationModule->isSessionTrackingEnabled() == false) {
-    log(LogLevel::DEBUG, "[Countly] endSession, Session tracking is disabled in server configuration, can not end session.");
+  bool sessionRunning = false;
+  {
+    std::lock_guard<std::mutex> lk(*mutex);
+    sessionRunning = began_session;
+  }
+  if (!sessionRunning && !is_being_disposed && configurationModule->isSessionTrackingEnabled() == false) {
+    log(LogLevel::DEBUG, "[Countly] endSession, Session tracking is disabled in server configuration, there is no session to end.");
     return false;
   }
+  // the events recorded during the session reach the server before its end
+  if (sessionRunning && !is_being_disposed) {
+    packEvents();
+  }
+
   // lock_guard so the mutex is released on scope exit, including the early
   // returns below and any exception (e.g. a json type_error from a session_params
   // access, or addRequestToQueue) thrown while it is held.
@@ -1960,6 +2502,7 @@ bool Countly::endSessionInternal(bool automatic) {
 
   queueEndSession(automatic);
   lk.unlock();
+  views_module->resetFirstView();
   health_check->saveState();
   return true;
 }
@@ -2072,13 +2615,16 @@ void Countly::removeEventWithId(const std::string &event_ids) {
 }
 
 void Countly::fillEventsIntoJson(nlohmann::json &events, std::string &event_ids) {
-  // lock_guard so the mutex is released on every exit path, including the early
-  // return below and any exception (e.g. nlohmann::json::parse on a corrupt
-  // stored row at the loop below) thrown while it is held.
+  // lock_guard so the mutex is released on every exit path, including an
+  // exception thrown while it is held.
   std::lock_guard<std::mutex> lk(*mutex);
+  readStoredEvents(events, event_ids);
+}
+
+void Countly::readStoredEvents(nlohmann::json &events, std::string &event_ids) {
+  event_ids = "";
   if (database_path.empty()) {
     log(LogLevel::FATAL, "[Countly] fillEventsIntoJson, SQLite database path is not set.");
-    event_ids = "";
     return;
   }
 
@@ -2106,16 +2652,24 @@ void Countly::fillEventsIntoJson(nlohmann::json &events, std::string &event_ids)
       for (int event_index = 1; event_index < row_count + 1; event_index++) {
         event_id_stream << table[event_index * column_count] << ',';
         // add event to the events array
-        events.push_back(nlohmann::json::parse(table[(event_index * column_count) + 1]));
+        const char *stored_event = table[(event_index * column_count) + 1];
+        nlohmann::json event = nlohmann::json::parse(stored_event ? stored_event : "", nullptr, false);
+        if (event.is_discarded()) {
+          log(LogLevel::WARNING, "[Countly] fillEventsIntoJson, A stored event is not valid JSON and is dropped.");
+          continue;
+        }
+        events.push_back(event);
       }
 
       log(LogLevel::DEBUG, "[Countly] fillEventsIntoJson, Events count = [" + std::to_string(events.size()) + "]");
 
-      event_id_stream.seekp(-1, event_id_stream.cur);
-      event_id_stream << ')';
+      if (row_count > 0) {
+        event_id_stream.seekp(-1, event_id_stream.cur);
+        event_id_stream << ')';
 
-      // write event ids to a string stream (or more like copy out that stream here) to be used in the delete statement
-      event_ids = event_id_stream.str();
+        // write event ids to a string stream (or more like copy out that stream here) to be used in the delete statement
+        event_ids = event_id_stream.str();
+      }
     } else {
       log(LogLevel::ERROR, "[Countly] fillEventsIntoJson, SQLite error: " + std::string(error_message));
       sqlite3_free(error_message);
@@ -2284,6 +2838,11 @@ void Countly::fillEventsIntoJson(nlohmann::json &events, std::string &event_ids)
   (void)event_ids;
 }
 
+void Countly::readStoredEvents(nlohmann::json &events, std::string &event_ids) {
+  (void)events;
+  (void)event_ids;
+}
+
 void Countly::addEventToSqlite(const cly::Event &event) { (void)event; }
 
 bool Countly::createEventTableSchema() { return false; }
@@ -2343,29 +2902,19 @@ void Countly::updateLoop() {
   }
   try {
     sendHealthCheck();
-    if (configuration->immediateRequestOnStop) {
-      while (true) {
-        {
-          std::unique_lock<std::mutex> lk(*mutex);
-          stop_cv.wait_for(lk, std::chrono::milliseconds(wait_milliseconds), [this] {
-            return stop_thread.load();
-          });
-          if (stop_thread) {
-            stop_thread = false;
-            running = false;
-            return;
-          }
+    std::chrono::steady_clock::time_point last_update = std::chrono::steady_clock::now();
+    while (true) {
+      if (configuration->immediateRequestOnStop) {
+        std::unique_lock<std::mutex> lk(*mutex);
+        stop_cv.wait_for(lk, std::chrono::milliseconds(wait_milliseconds), [this] {
+          return stop_thread.load();
+        });
+        if (stop_thread) {
+          stop_thread = false;
+          running = false;
+          return;
         }
-        if (enable_automatic_session == true && configuration->manualSessionControl == false) {
-          updateSessionInternal(true);
-        } else if (configuration->manualSessionControl == true) {
-          packEvents();
-        }
-        requestModule->processQueue(mutex);
-        saveHealthCheckOnTimer();
-      }
-    } else {
-      while (true) {
+      } else {
         size_t last_wait_milliseconds;
         {
           std::lock_guard<std::mutex> lk(*mutex);
@@ -2376,17 +2925,11 @@ void Countly::updateLoop() {
           last_wait_milliseconds = wait_milliseconds;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(last_wait_milliseconds));
-        if (enable_automatic_session == true && configuration->manualSessionControl == false) {
-          updateSessionInternal(true);
-        } else if (configuration->manualSessionControl == true) {
-          packEvents();
-        }
-        requestModule->processQueue(mutex);
-        saveHealthCheckOnTimer();
       }
-      std::lock_guard<std::mutex> lk(*mutex);
-      running = false;
+      updateTick(last_update);
     }
+    std::lock_guard<std::mutex> lk(*mutex);
+    running = false;
   } catch (const std::exception &e) {
     running = false;
     log(LogLevel::ERROR, std::string("[Countly][updateLoop] exception in update loop: ") + e.what());
@@ -2394,6 +2937,22 @@ void Countly::updateLoop() {
     running = false;
     log(LogLevel::FATAL, "[Countly][updateLoop] unknown non-std::exception caught, stopping update loop");
   }
+}
+
+void Countly::updateTick(std::chrono::steady_clock::time_point &last_update) {
+  if (!stopping) {
+    const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+    if (now - last_update >= std::chrono::seconds(configurationModule->getSessionUpdateInterval())) {
+      last_update = now;
+      if (configuration->manualSessionControl == false) {
+        updateSessionInternal(true);
+      } else {
+        packEvents();
+      }
+    }
+  }
+  requestModule->processQueue(mutex);
+  saveHealthCheckOnTimer();
 }
 
 void Countly::disableHealthCheck() {
@@ -2437,7 +2996,7 @@ void Countly::sendHealthCheck() {
       request = requestBuilder->buildRequest(data);
     }
     log(LogLevel::DEBUG, "[Countly] sendHealthCheck, sending the health check");
-    const HTTPResponse response = requestModule->sendHTTP("/i", request);
+    const HTTPResponse response = requestModule->sendImmediate("/i", request);
     if (response.success && response.data.is_object() && response.data.contains("result")) {
       log(LogLevel::DEBUG, "[Countly] sendHealthCheck, the server accepted the health check");
       health_check->clearSentValues(snapshot);
@@ -2462,6 +3021,16 @@ void Countly::enableRemoteConfig() {
   remote_config_enabled = true;
 }
 
+void Countly::enrollABOnRCDownload() {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] enrollABOnRCDownload, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+
+  std::lock_guard<std::mutex> lk(*mutex);
+  configuration->enrollABOnRCDownload = true;
+}
+
 void Countly::updateRemoteConfig() {
   if (!is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] updateRemoteConfig, SDK is not initialized.");
@@ -2472,19 +3041,10 @@ void Countly::updateRemoteConfig() {
     log(LogLevel::DEBUG, "[Countly] updateRemoteConfig, the 'remote-config' consent is not given, nothing is downloaded.");
     return;
   }
-  std::unique_lock<std::mutex> lk(*mutex);
-  if (!session_params["app_key"].is_string() || !session_params["device_id"].is_string()) {
-
-    log(LogLevel::ERROR, "[Countly] updateRemoteConfig, Error updating remote config, app key or device id is missing");
-    return;
-  }
-  std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
-
-  lk.unlock();
 
   // Asynchronous and detached: neither this call nor destruction waits for it.
   // Replaces the stored values wholesale, since this fetches all of them.
-  startRemoteConfigFetch(data, false, "updateRemoteConfig");
+  startRemoteConfigFetch(remoteConfigRequest(), false, "updateRemoteConfig");
 }
 
 nlohmann::json Countly::getRemoteConfigValue(const std::string &key) {
@@ -2505,17 +3065,22 @@ void Countly::updateRemoteConfigFor(std::string *keys, size_t key_count) {
     log(LogLevel::DEBUG, "[Countly] updateRemoteConfigFor, the 'remote-config' consent is not given, nothing is downloaded.");
     return;
   }
-  std::unique_lock<std::mutex> lk(*mutex);
-  std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
-
-  {
-    nlohmann::json keys_json = nlohmann::json::array();
-    for (size_t key_index = 0; key_index < key_count; key_index++) {
-      keys_json.push_back(keys[key_index]);
+  std::map<std::string, std::string> data = remoteConfigRequest();
+  nlohmann::json keys_json = nlohmann::json::array();
+  for (size_t key_index = 0; keys != nullptr && key_index < key_count; key_index++) {
+    if (keys[key_index].empty()) {
+      log(LogLevel::WARNING, "[Countly] updateRemoteConfigFor, An empty key is ignored.");
+      logger->recordLogCode("w700");
+      continue;
     }
-    data["keys"] = keys_json.dump();
+    keys_json.push_back(keys[key_index]);
   }
-  lk.unlock();
+  if (keys_json.empty()) {
+    // without a valid key this is a download of every value
+    startRemoteConfigFetch(data, false, "updateRemoteConfigFor");
+    return;
+  }
+  data["keys"] = keys_json.dump();
 
   // Asynchronous and detached: neither this call nor destruction waits for it.
   // Merges into the stored values, since this fetches only some of them.
@@ -2532,17 +3097,22 @@ void Countly::updateRemoteConfigExcept(std::string *keys, size_t key_count) {
     log(LogLevel::DEBUG, "[Countly] updateRemoteConfigExcept, the 'remote-config' consent is not given, nothing is downloaded.");
     return;
   }
-  std::unique_lock<std::mutex> lk(*mutex);
-  std::map<std::string, std::string> data = {{"method", "fetch_remote_config"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
-
-  {
-    nlohmann::json keys_json = nlohmann::json::array();
-    for (size_t key_index = 0; key_index < key_count; key_index++) {
-      keys_json.push_back(keys[key_index]);
+  std::map<std::string, std::string> data = remoteConfigRequest();
+  nlohmann::json keys_json = nlohmann::json::array();
+  for (size_t key_index = 0; keys != nullptr && key_index < key_count; key_index++) {
+    if (keys[key_index].empty()) {
+      log(LogLevel::WARNING, "[Countly] updateRemoteConfigExcept, An empty key is ignored.");
+      logger->recordLogCode("w700");
+      continue;
     }
-    data["omit_keys"] = keys_json.dump();
+    keys_json.push_back(keys[key_index]);
   }
-  lk.unlock();
+  if (keys_json.empty()) {
+    // without a valid key this is a download of every value
+    startRemoteConfigFetch(data, false, "updateRemoteConfigExcept");
+    return;
+  }
+  data["omit_keys"] = keys_json.dump();
 
   // Asynchronous and detached: neither this call nor destruction waits for it.
   // Merges into the stored values, since this fetches only some of them.
@@ -2712,7 +3282,13 @@ bool Countly::hasEventConsent(const std::string &key) const {
   return hasConsent(consent::EVENTS);
 }
 
-bool Countly::isLocationOn() { return hasConsent(consent::LOCATION) && configurationModule->isLocationTrackingEnabled(); }
+bool Countly::isLocationOn() {
+  if (!hasConsent(consent::LOCATION)) {
+    return false;
+  }
+  const int server = configurationModule->getServerLocationTracking();
+  return server >= 0 ? server == 1 : !location_disabled_by_app;
+}
 
 void Countly::changeConsent(const std::vector<std::string> &names, bool given, const char *caller) {
   if (LoggerModule::isInsideCallback()) {
@@ -2767,7 +3343,7 @@ void Countly::runConsentChange(const std::vector<std::string> &features, bool gi
 
 void Countly::consentWillBeRemoved(const std::vector<std::string> &features) {
   if (containsFeature(features, consent::VIEWS)) {
-    views_module->stopAllViews();
+    views_module->stopRunningViews();
   }
   if (containsFeature(features, consent::SESSIONS)) {
     endSessionInternal(true);
@@ -2777,7 +3353,7 @@ void Countly::consentWillBeRemoved(const std::vector<std::string> &features) {
 void Countly::consentChanged(const std::vector<std::string> &features, bool given, ConsentChangeSource source) {
   if (!given) {
     if (containsFeature(features, consent::CRASHES)) {
-      crash_module->clearBreadcrumbs();
+      crash_module->forgetBreadcrumbs();
     }
     if (containsFeature(features, consent::USERS)) {
       std::lock_guard<std::mutex> lk(*mutex);
@@ -2786,7 +3362,7 @@ void Countly::consentChanged(const std::vector<std::string> &features, bool give
     if (containsFeature(features, consent::LOCATION)) {
       clearStoredLocation();
       if (source != ConsentChangeSource::DeviceIdChangedWithoutMerge) {
-        _sendIndependantLocationRequest();
+        sendLocationErase();
       }
     }
     return;
@@ -2801,15 +3377,18 @@ void Countly::consentChanged(const std::vector<std::string> &features, bool give
     }
     sessionBegan = !sessionRunning && beginSessionInternal(true);
   }
-  if (containsFeature(features, consent::REMOTE_CONFIG)) {
-    bool automaticDownload = false;
+  if (containsFeature(features, consent::LOCATION) && !sessionBegan && isLocationOn()) {
+    bool sendNow = false;
     {
       std::lock_guard<std::mutex> lk(*mutex);
-      automaticDownload = remote_config_enabled;
+      sendNow = began_session || !hasConsent(consent::SESSIONS) || !configurationModule->isSessionTrackingEnabled();
     }
-    if (automaticDownload && !sessionBegan) {
-      updateRemoteConfig();
+    if (sendNow) {
+      _sendIndependantLocationRequest();
     }
+  }
+  if (containsFeature(features, consent::REMOTE_CONFIG)) {
+    downloadRemoteConfigAutomatically();
   }
 }
 
@@ -2837,9 +3416,5 @@ void Countly::activateConsent() {
   }
 
   queueConsentState();
-  if (!hasConsent(consent::LOCATION) && (!hasConsent(consent::SESSIONS) || !configurationModule->isSessionTrackingEnabled())) {
-    clearStoredLocation();
-    _sendIndependantLocationRequest();
-  }
 }
 } // namespace cly

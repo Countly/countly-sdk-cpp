@@ -80,12 +80,12 @@ TEST_CASE("Validate setting configuration values") {
     ct.setMaxRQProcessingBatchSize(10);
     ct.enableManualSessionControl();
     ct.enableImmediateRequestOnStop();
-    ct.start("YOUR_APP_KEY", "https://try.count.ly", -1, false);
+    ct.start(COUNTLY_TEST_APP_KEY, "https://try.count.ly", -1, false);
 
     // Get configuration values using Countly getters
     const CountlyConfiguration config = ct.getConfiguration();
     CHECK(config.serverUrl == "https://try.count.ly");
-    CHECK(config.appKey == "YOUR_APP_KEY");
+    CHECK(config.appKey == COUNTLY_TEST_APP_KEY);
     CHECK(config.deviceId == "test-device-id");
     CHECK(config.salt == "salt");
 #ifdef COUNTLY_USE_SQLITE
@@ -140,13 +140,13 @@ TEST_CASE("Validate setting configuration values") {
     ct.SetPath(TEST_DATABASE_NAME);
 
     // Server and port
-    ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, false);
+    ct.start(COUNTLY_TEST_APP_KEY, "https://try.count.ly", 443, false);
 
     CountlyConfiguration config = ct.getConfiguration();
 
     // Validate configuration values
     CHECK(config.serverUrl == "https://try.count.ly");
-    CHECK(config.appKey == "YOUR_APP_KEY");
+    CHECK(config.appKey == COUNTLY_TEST_APP_KEY);
     CHECK(config.deviceId == "test-device-id");
     CHECK(config.salt == "salt");
 #ifdef COUNTLY_USE_SQLITE
@@ -190,7 +190,7 @@ TEST_CASE("Validate setting configuration values") {
     // get SDK configuration again and make sure that they haven't changed
     config = ct.getConfiguration();
     CHECK(config.serverUrl == "https://try.count.ly");
-    CHECK(config.appKey == "YOUR_APP_KEY");
+    CHECK(config.appKey == COUNTLY_TEST_APP_KEY);
     CHECK(config.deviceId == "test-device-id");
     CHECK(config.salt == "salt");
 #ifdef COUNTLY_USE_SQLITE
@@ -224,7 +224,6 @@ TEST_CASE("Validate setting configuration values") {
     const std::vector<std::pair<std::string, std::string>> server_urls = {
         {"https://try.count.ly/", "https://try.count.ly"},
         {"https://try.count.ly//", "https://try.count.ly"},
-        {"try.count.ly/", "http://try.count.ly"},
         {"https://try.count.ly", "https://try.count.ly"},
     };
 
@@ -234,7 +233,7 @@ TEST_CASE("Validate setting configuration values") {
       ct.setHTTPClient(customClient);
       ct.setDeviceID("test-device-id");
       ct.SetPath(TEST_DATABASE_NAME);
-      ct.start("YOUR_APP_KEY", server_url.first, 443, false);
+      ct.start(COUNTLY_TEST_APP_KEY, server_url.first, 443, false);
 
       CHECK(ct.getConfiguration().serverUrl == server_url.second);
     }
@@ -253,7 +252,7 @@ TEST_CASE("setDatabasePath is accepted and ignored in builds without SQLite") {
   CHECK(capturedLogContains("does not include SQLite storage"));
 
   ct.setDeviceID("test-device-id");
-  ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, false);
+  ct.start(COUNTLY_TEST_APP_KEY, "https://try.count.ly", 443, false);
   CHECK(ct.checkEQSize() == 0);
   CHECK(ct.getConfiguration().databasePath.empty());
   ct.setLogger(nullptr);

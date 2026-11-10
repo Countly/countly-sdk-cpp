@@ -30,6 +30,8 @@ public:
   std::string getSDKBehaviorSettings() override;
   void storeHealthCheckState(const std::string &state) override;
   std::string getHealthCheckState() override;
+  void storeDeviceIdState(const std::string &state) override;
+  std::string getDeviceIdState() override;
 };
 } // namespace cly
 #endif

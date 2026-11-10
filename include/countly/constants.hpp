@@ -23,6 +23,7 @@ static_assert(NLOHMANN_JSON_VERSION_MAJOR == 3 && NLOHMANN_JSON_VERSION_MINOR >=
 #define COUNTLY_POST_THRESHOLD 2000
 #define COUNTLY_KEEPALIVE_INTERVAL 3000
 #define COUNTLY_MAX_EVENTS_DEFAULT 200
+#define COUNTLY_MAX_EVENT_QUEUE_SIZE 1000
 #define COUNTLY_MAX_KEY_LENGTH_DEFAULT 128
 #define COUNTLY_MAX_VALUE_SIZE_DEFAULT 256
 #define COUNTLY_MAX_SEGMENTATION_VALUES_DEFAULT 100
@@ -148,10 +149,79 @@ inline std::string generateEventID() {
   return r.str();
 }
 
+/**
+ * Generates a random version 4 UUID in lower case, for example "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed".
+ *
+ * The engine is seeded from std::random_device together with the clocks and the thread, because some standard
+ * libraries implement std::random_device with a fixed sequence.
+ *
+ * @return the UUID text
+ */
+inline std::string generateUUID() {
+  static thread_local std::mt19937_64 engine([] {
+    std::random_device device;
+    std::seed_seq seed{static_cast<unsigned long long>(device()), static_cast<unsigned long long>(device()), static_cast<unsigned long long>(std::chrono::system_clock::now().time_since_epoch().count()),
+                       static_cast<unsigned long long>(std::chrono::steady_clock::now().time_since_epoch().count()), static_cast<unsigned long long>(std::hash<std::thread::id>()(std::this_thread::get_id()))};
+    return std::mt19937_64(seed);
+  }());
+  std::uniform_int_distribution<int> byte(0, 255);
+
+  unsigned char bytes[16];
+  for (unsigned char &value : bytes) {
+    value = static_cast<unsigned char>(byte(engine));
+  }
+  bytes[6] = static_cast<unsigned char>((bytes[6] & 0x0F) | 0x40);
+  bytes[8] = static_cast<unsigned char>((bytes[8] & 0x3F) | 0x80);
+
+  static const char digits[] = "0123456789abcdef";
+  std::string uuid;
+  uuid.reserve(36);
+  for (int index = 0; index < 16; index++) {
+    if (index == 4 || index == 6 || index == 8 || index == 10) {
+      uuid += '-';
+    }
+    uuid += digits[bytes[index] >> 4];
+    uuid += digits[bytes[index] & 0x0F];
+  }
+  return uuid;
+}
+
 } // namespace utils
+
+class Event;
 
 class CountlyDelegates {
 public:
+  /**
+   * Records an event, with the event-level fields the SDK set on it, such as the ID of a view.
+   */
+  virtual void addEvent(const cly::Event &event) = 0;
+
+  /**
+   * Whether a session is running, so that the first view of a session can be marked.
+   */
+  virtual bool IsSessionRunning() { return false; }
+
+  /**
+   * The platform name, the same value as the "_os" metric, sent as the "segment" of view events.
+   */
+  virtual std::string PlatformName() { return std::string(); }
+
+  /**
+   * The device metrics, such as "_os" and "_app_version", for crash reports.
+   */
+  virtual nlohmann::json DeviceMetrics() { return nlohmann::json::object(); }
+
+  /**
+   * The ID of the view started last, for the "_cvid" of crash reports. Empty before the first view.
+   */
+  virtual std::string CurrentViewId() { return std::string(); }
+
+  /**
+   * Called by the SDK behavior settings when the server's "Allow Location Tracking" setting changes.
+   */
+  virtual void LocationSettingChanged() {}
+
   virtual void RecordEvent(const std::string &key, int count) = 0;
 
   virtual void RecordEvent(const std::string &key, int count, double sum) = 0;

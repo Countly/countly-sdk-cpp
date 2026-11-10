@@ -46,10 +46,16 @@ std::string RequestBuilder::buildRequest(const std::map<std::string, std::string
 
   std::map<std::string, std::string> request = {{"app_key", _configuration->appKey},
                                                  {"device_id", _configuration->deviceId},
+                                                 {"t", std::to_string(static_cast<int>(_configuration->deviceIdType))},
                                                  {"timestamp", std::to_string(timestamp.count())},
                                                  {"dow", std::to_string(local_tm.tm_wday)},
                                                  {"hour", std::to_string(local_tm.tm_hour)},
                                                  {"tz", std::to_string(tz_offset_minutes)}};
+
+  nlohmann::json::const_iterator appVersion = _configuration->metrics.find("_app_version");
+  if (appVersion != _configuration->metrics.end() && appVersion->is_string() && !appVersion->get<std::string>().empty()) {
+    request["av"] = appVersion->get<std::string>();
+  }
 
   request.insert(data.begin(), data.end());
   return buildFetchRequest(request);

@@ -86,7 +86,6 @@ struct DevConfig {
     std::string sbsJson    = "";
     bool manualSession     = false;
     bool disableSBSUpdates = false;
-    bool alwaysPost        = false;
     bool enableRemoteConfig = false;
     bool disableAutoEventsOnUP = false;
 };

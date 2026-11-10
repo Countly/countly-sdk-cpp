@@ -45,14 +45,12 @@ TEST_CASE("mutex exception safety - malformed event in updateSession does not de
   // Let the loop run a couple of cycles so the session has begun.
   std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-  // Inject a string that is NOT valid JSON. On the next cycle, updateSession()
-  // iterates the event queue and calls nlohmann::json::parse on it WHILE holding
-  // the mutex, which throws. With RAII the unique_lock releases on unwind; the
-  // exception reaches updateLoop's catch, the loop ends, and the thread returns
-  // WITHOUT owning the mutex.
+  // Inject a string that is NOT valid JSON. Moving the event queue into a request
+  // parses it while holding the mutex; the entry is dropped with a warning, and
+  // nothing may leave the mutex owned.
   ct.debugInjectRawEvent("{not valid json");
 
-  // Give the loop time to pick up the bad event and throw.
+  // Give the loop time to pick up the bad event.
   std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
   // stop() must return. Run it on another thread so a deadlock fails the test
@@ -82,22 +80,27 @@ TEST_CASE("mutex exception safety - throwing user-API path does not leak the mut
   ct.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
 
   // Seed a malformed event, then add a valid one. addEvent -> checkAndSendEventToRQ
-  // iterates the queue (size >= threshold) and json::parse throws while the mutex is held.
+  // parses the queue (size >= threshold) while the mutex is held; the malformed entry
+  // is dropped with a warning instead of throwing out of addEvent.
   ct.debugInjectRawEvent("{not valid json");
   bool threw = false;
   try {
     cly::Event ev("trigger", 1);
     ct.addEvent(ev);
   } catch (...) {
-    threw = true; // exception propagating out is expected; the point is the mutex is released
+    threw = true;
   }
+  CHECK_FALSE(threw);
 
   // If the mutex had leaked, this locking call would block forever.
   auto fut = std::async(std::launch::async, [&]() { return ct.checkEQSize(); });
   bool returned = fut.wait_for(std::chrono::seconds(5)) == std::future_status::ready;
   REQUIRE(returned);
   fut.get();
-  (void)threw;
+
+  // the valid event still reaches the server
+  ct.processRQDebug();
+  CHECK(httpQueueContainsEvent("trigger"));
 }
 #endif
 
@@ -143,26 +146,28 @@ TEST_CASE("the SDK can be called from the log callback") {
   static std::atomic<int> callback_invocations(0);
   static std::atomic<int> rq_non_negative(0);
   static std::atomic<int> eq_refusals(0);
-  static Countly *target = nullptr;
+  // The update loop calls the callback from its own thread, so the test may clear this while a call is running.
+  static std::atomic<Countly *> target(nullptr);
   callback_invocations.store(0);
   rq_non_negative.store(0);
   eq_refusals.store(0);
 
   Countly &ct = Countly::getInstance();
-  target = &ct;
+  target.store(&ct);
   // No recursion guard of its own on purpose: the SDK has to be the one that
   // stops the recursion.
   ct.setLogger([](LogLevel level, const std::string &message) {
     (void)level;
     (void)message;
-    if (target == nullptr) {
+    Countly *instance = target.load();
+    if (instance == nullptr) {
       return;
     }
     callback_invocations.fetch_add(1);
-    if (target->checkRQSize() >= 0) {
+    if (instance->checkRQSize() >= 0) {
       rq_non_negative.fetch_add(1);
     }
-    if (target->checkEQSize() < 0) {
+    if (instance->checkEQSize() < 0) {
       eq_refusals.fetch_add(1);
     }
   });
@@ -186,6 +191,6 @@ TEST_CASE("the SDK can be called from the log callback") {
   // checkEQSize cannot, and reports "cannot determine" rather than deadlocking.
   CHECK(eq_refusals.load() > 0);
 
-  target = nullptr;
+  target.store(nullptr);
   ct.setLogger(nullptr);
 }
