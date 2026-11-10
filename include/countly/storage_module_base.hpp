@@ -95,6 +95,22 @@ public:
    */
   virtual void RQInsertAtEnd(const std::string &request) = 0;
 
+  /**
+   * Replace the content of a stored request, keeping its id and its place in the queue.
+   * @param id: id of the request
+   * @param request: new content of the request
+   */
+  virtual void RQUpdate(long long id, const std::string &request) {
+    (void)id;
+    (void)request;
+  }
+
+  /**
+   * Remove the stored request with the id, wherever it is in the queue.
+   * @param id: id of the request
+   */
+  virtual void RQRemove(long long id) { (void)id; }
+
   virtual void storeSDKBehaviorSettings(const std::string &sdk_behavior_settings) = 0;
 
   virtual std::string getSDKBehaviorSettings() = 0;

@@ -693,4 +693,71 @@ TEST_CASE("Built-in HTTP client") {
     CHECK(open_durations[0] <= request_timeout + std::chrono::seconds(5));
   }
 }
+
+/**
+ * Whether one of the request bodies a server received contains the text.
+ */
+static bool receivedRequestWith(const LocalHTTPServer &server, const std::string &text) {
+  for (const std::string &request_body : server.requestBodies()) {
+    if (request_body.find(text) != std::string::npos) {
+      return true;
+    }
+  }
+  return false;
+}
+
+TEST_CASE("Changing the server URL with the built-in HTTP client") {
+  const std::string database_path = "test-countly-http.db";
+  remove(database_path.c_str());
+  LocalHTTPServer first_server(true);
+  LocalHTTPServer second_server(true);
+  std::shared_ptr<cly::Countly> countly = std::make_shared<cly::Countly>();
+  countly->setDeviceID(COUNTLY_TEST_DEVICE_ID);
+  countly->SetPath(database_path);
+  // Only processRQDebug() sends: the update loop sleeps through the test, and immediate stop still ends it at once
+  countly->enableImmediateRequestOnStop();
+  countly->setUpdateInterval(60000);
+  countly->start(COUNTLY_TEST_APP_KEY, "http://127.0.0.1", first_server.port(), false);
+  countly->addEvent(cly::Event("recorded_before_the_change", 1));
+  countly->flushEvents();
+
+  countly->changeServerUrl("ftp://127.0.0.1", second_server.port());
+  countly->changeServerUrl("127.0.0.1", second_server.port());
+  countly->changeServerUrl("http://", second_server.port());
+  const std::string url_before_the_change = countly->getConfiguration().serverUrl;
+  const unsigned int port_before_the_change = countly->getConfiguration().port;
+  countly->changeServerUrl("http://127.0.0.1///", second_server.port());
+  const std::string changed_url = countly->getConfiguration().serverUrl;
+
+  const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+  while (std::chrono::steady_clock::now() < deadline) {
+    countly->processRQDebug();
+    if (receivedRequestWith(second_server, "begin_session=1") && receivedRequestWith(second_server, "recorded_before_the_change") && receivedRequestWith(second_server, "method=sc") && countly->checkRQSize() == 0) {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+  const int queued_requests = countly->checkRQSize();
+
+  countly.reset();
+  first_server.stop();
+  second_server.stop();
+  remove(database_path.c_str());
+
+  CHECK(url_before_the_change == "http://127.0.0.1");
+  CHECK(port_before_the_change == static_cast<unsigned int>(first_server.port()));
+  CHECK(changed_url == "http://127.0.0.1");
+  CHECK(queued_requests == 0);
+  // The requests queued before the change, and the SDK behavior settings fetch that follows it, reach the new server
+  CHECK(receivedRequestWith(second_server, "begin_session=1"));
+  CHECK(receivedRequestWith(second_server, "recorded_before_the_change"));
+  CHECK(receivedRequestWith(second_server, "method=sc"));
+  for (const std::string &request_line : second_server.requestLines()) {
+    CHECK((request_line.rfind("POST /i ", 0) == 0 || request_line.rfind("POST /o/sdk ", 0) == 0));
+  }
+  // The first server got at most what the SDK sent before the change: the SDK behavior settings fetch and the health check
+  for (const std::string &request_body : first_server.requestBodies()) {
+    CHECK((request_body.find("method=sc") != std::string::npos || request_body.find("hc=") != std::string::npos));
+  }
+}
 #endif

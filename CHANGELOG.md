@@ -14,6 +14,12 @@
 - Added the health check feature. The SDK now sends a health check request once after `start()`. Like any request, it updates the user's last seen time on the server.
 - Added the SDK name and version (`sdk_name` and `sdk_version`) to every request, including the remote config and SDK Behavior Settings fetches. Before, only the begin session request carried them.
 - Added `multiplyCustomUserDetail` for multiplying the numeric value of a custom user property on the server.
+- Added `changeServerUrl` to change the server URL after init.
+- Added `changeAppKey` to change the app key after init.
+- Added `flushQueues` to clear the request and event queues.
+- Added `replaceAllAppKeysInQueueWithCurrentAppKey` to give the queued requests the current app key.
+- Added `removeDifferentAppKeysFromQueue` to remove the queued requests of other app keys.
+- Added `attemptToSendStoredRequests` to send the stored requests now.
 - Added `disableHealthCheck()` for turning off the health check request.
 - Added `status_code` and `body` to `HTTPResponse`. A custom HTTP client can fill them so that the health check reports the last request the server refused; a client that leaves them empty works as before.
 - Calls made before `start()`, a second `start()`, beginning a session that already runs and ending one that does not are now logged at warning level. Failed and non-JSON server answers, and session calls ignored because the SDK Behavior Settings turned session tracking off, are now logged at debug level.

@@ -98,6 +98,38 @@ void StorageModuleMemory::RQInsertAtEnd(const std::string &request) {
   }
 }
 
+void StorageModuleMemory::RQUpdate(long long id, const std::string &request) {
+  if (!_is_initialized) {
+    _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleMemory] RQUpdate, Module is not initialized");
+    return;
+  }
+
+  _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleMemory] RQUpdate, id = [" + std::to_string(id) + "], request = [" + request + "]");
+  std::lock_guard<std::mutex> lk(_mutex);
+  for (std::shared_ptr<DataEntry> &entry : request_queue) {
+    if (entry->getId() == id) {
+      entry = std::make_shared<DataEntry>(id, request);
+      return;
+    }
+  }
+}
+
+void StorageModuleMemory::RQRemove(long long id) {
+  if (!_is_initialized) {
+    _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleMemory] RQRemove, Module is not initialized");
+    return;
+  }
+
+  _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleMemory] RQRemove, id = [" + std::to_string(id) + "]");
+  std::lock_guard<std::mutex> lk(_mutex);
+  for (auto entry = request_queue.begin(); entry != request_queue.end(); ++entry) {
+    if ((*entry)->getId() == id) {
+      request_queue.erase(entry);
+      return;
+    }
+  }
+}
+
 std::vector<std::shared_ptr<DataEntry>> StorageModuleMemory::RQPeekAll() {
   if (!_is_initialized) {
     _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleMemory] RQPeekAll, Module is not initialized");

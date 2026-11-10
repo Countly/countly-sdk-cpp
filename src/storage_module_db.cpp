@@ -381,6 +381,78 @@ void StorageModuleDB::RQInsertAtEnd(const std::string &request) {
   }
 }
 
+void StorageModuleDB::RQUpdate(long long id, const std::string &request) {
+  try {
+    if (!_is_initialized) {
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQUpdate, Module is not initialized");
+      return;
+    }
+
+    _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] RQUpdate, RequestID = " + std::to_string(id) + ", request = [" + request + "]");
+
+#ifdef COUNTLY_USE_SQLITE
+    sqlite3 *database;
+    int return_value = cly::utils::openDatabase(_configuration->databasePath, &database);
+    if (return_value == SQLITE_OK) {
+      std::ostringstream sql_statement_stream;
+      sql_statement_stream << "UPDATE " << REQUESTS_TABLE_NAME << " SET " << REQUESTS_TABLE_REQUEST_DATA << " = ? WHERE " << REQUESTS_TABLE_REQUEST_ID << " = ?;";
+      std::string sql_statement = sql_statement_stream.str();
+
+      sqlite3_stmt *statement = nullptr;
+      return_value = sqlite3_prepare_v2(database, sql_statement.c_str(), -1, &statement, nullptr);
+      if (return_value == SQLITE_OK) {
+        sqlite3_bind_text(statement, 1, request.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int64(statement, 2, id);
+        return_value = sqlite3_step(statement);
+      }
+      if (return_value != SQLITE_DONE) {
+        _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQUpdate, error = " + std::string(sqlite3_errmsg(database)));
+      }
+      sqlite3_finalize(statement);
+    }
+    sqlite3_close(database);
+#endif
+  } catch (const std::system_error &e) {
+    std::ostringstream log_message;
+    log_message << "[Countly] [StorageModuleDB] RQUpdate, error: " << e.what();
+    _logger->log(LogLevel::FATAL, log_message.str());
+  }
+}
+
+void StorageModuleDB::RQRemove(long long id) {
+  try {
+    if (!_is_initialized) {
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQRemove, Module is not initialized");
+      return;
+    }
+
+    _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] RQRemove, RequestID = " + std::to_string(id));
+
+#ifdef COUNTLY_USE_SQLITE
+    sqlite3 *database;
+    char *error_message;
+    int return_value = cly::utils::openDatabase(_configuration->databasePath, &database);
+    if (return_value == SQLITE_OK) {
+      std::ostringstream sql_statement_stream;
+      sql_statement_stream << "DELETE FROM " << REQUESTS_TABLE_NAME << " WHERE " << REQUESTS_TABLE_REQUEST_ID << " = " << id << ';';
+      std::string sql_statement = sql_statement_stream.str();
+
+      return_value = sqlite3_exec(database, sql_statement.c_str(), nullptr, nullptr, &error_message);
+      if (return_value != SQLITE_OK) {
+        std::string error(error_message);
+        _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] RQRemove, error = " + error);
+        sqlite3_free(error_message);
+      }
+    }
+    sqlite3_close(database);
+#endif
+  } catch (const std::system_error &e) {
+    std::ostringstream log_message;
+    log_message << "[Countly] [StorageModuleDB] RQRemove, error: " << e.what();
+    _logger->log(LogLevel::FATAL, log_message.str());
+  }
+}
+
 void StorageModuleDB::RQClearAll() {
   try {
     if (!_is_initialized) {

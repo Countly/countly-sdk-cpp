@@ -175,6 +175,21 @@ void appendStoredEvents(const std::deque<std::string> &queue, nlohmann::json &ev
  * Whether the list of features contains the feature.
  */
 bool containsFeature(const std::vector<std::string> &features, const char *feature) { return std::find(features.begin(), features.end(), feature) != features.end(); }
+
+/**
+ * Whether the URL is absolute, with the http or https scheme and a host.
+ */
+bool isValidServerUrl(const std::string &url) {
+  std::string::size_type hostStart;
+  if (url.compare(0, 7, "http://") == 0) {
+    hostStart = 7;
+  } else if (url.compare(0, 8, "https://") == 0) {
+    hostStart = 8;
+  } else {
+    return false;
+  }
+  return hostStart < url.size() && std::string(":/?#").find(url[hostStart]) == std::string::npos;
+}
 } // namespace
 
 
@@ -227,6 +242,8 @@ struct RemoteConfigFetch {
   std::map<std::string, std::string> data;
   // true merges the response into the stored values, false replaces them.
   bool merge = false;
+  // The app key of the request.
+  std::string app_key;
 };
 
 /**
@@ -250,6 +267,10 @@ void runRemoteConfigFetch(std::shared_ptr<RemoteConfigFetch> fetch) {
       const HTTPResponse response = fetch->requestModule->sendImmediate("/o/sdk", fetch->requestBuilder->buildRequest(fetch->data));
 
       std::lock_guard<std::mutex> lk(fetch->store->mutex);
+      if (fetch->store->app_key != fetch->app_key) {
+        // after an app key change the values, the flag and the pending download belong to the fetches for the new key
+        return;
+      }
       if (!response.success || !response.data.is_object()) {
         fetch->logger->log(LogLevel::DEBUG, "[Countly] runRemoteConfigFetch, the remote config download failed, the stored values stay.");
       } else if (fetch->store->user_generation != generation) {
@@ -272,8 +293,10 @@ void runRemoteConfigFetch(std::shared_ptr<RemoteConfigFetch> fetch) {
     }
   } catch (const std::exception &e) {
     std::lock_guard<std::mutex> lk(fetch->store->mutex);
-    fetch->store->has_pending = false;
-    fetch->store->fetch_running.store(false);
+    if (fetch->store->app_key == fetch->app_key) {
+      fetch->store->has_pending = false;
+      fetch->store->fetch_running.store(false);
+    }
     fetch->logger->log(LogLevel::DEBUG, std::string("[Countly] runRemoteConfigFetch, the remote config download failed: ") + e.what());
   }
 }
@@ -1368,6 +1391,156 @@ void Countly::onMergeDelivered() {
 }
 #pragma endregion Device Id
 
+bool Countly::isCallAllowed(const char *caller) {
+  if (LoggerModule::isInsideCallback()) {
+    return false;
+  }
+  if (!is_sdk_initialized) {
+    log(LogLevel::WARNING, std::string("[Countly] ") + caller + ", SDK is not initialized.");
+    logger->recordLogCode("w101");
+    return false;
+  }
+  return true;
+}
+
+void Countly::changeServerUrl(const std::string &host, int port) {
+  if (!isCallAllowed("changeServerUrl")) {
+    return;
+  }
+  if (!isValidServerUrl(host)) {
+    log(LogLevel::ERROR, "[Countly] changeServerUrl, The server URL [" + host + "] is not an absolute http:// or https:// URL, the current server URL stays.");
+    logger->recordLogCode("e102");
+    return;
+  }
+  if (port < 0 || port > 65535) {
+    log(LogLevel::WARNING, "[Countly] changeServerUrl, Port number is out of valid boundaries. Setting it to 0.");
+    logger->recordLogCode("w121");
+    port = 0;
+  }
+
+  std::lock_guard<std::mutex> change(consent_change_mutex);
+  if (is_being_disposed) {
+    return;
+  }
+  log(LogLevel::INFO, "[Countly] changeServerUrl, Changing the server URL to [" + host + "], port = [" + std::to_string(port) + "]");
+  requestModule->setServerUrl(host, static_cast<unsigned int>(port));
+  if (consent_module->isRequired()) {
+    queueConsentState();
+  }
+  fetchAfterServerChange(false);
+}
+
+void Countly::changeAppKey(const std::string &appKey) {
+  if (!isCallAllowed("changeAppKey")) {
+    return;
+  }
+  if (appKey.empty() || appKey == "YOUR_APP_KEY") {
+    log(LogLevel::ERROR, "[Countly] changeAppKey, The app key can't be empty or the placeholder \"YOUR_APP_KEY\", the current app key stays.");
+    logger->recordLogCode("e103");
+    return;
+  }
+
+  std::lock_guard<std::mutex> change(consent_change_mutex);
+  if (is_being_disposed) {
+    return;
+  }
+  {
+    std::lock_guard<std::mutex> lk(*mutex);
+    if (configuration->appKey == appKey) {
+      log(LogLevel::DEBUG, "[Countly] changeAppKey, The new app key is the current one, the call is ignored.");
+      return;
+    }
+  }
+  log(LogLevel::INFO, "[Countly] changeAppKey, Changing the app key to [" + appKey + "]");
+
+  views_module->stopRunningViews();
+  packEvents();
+  bool sessionWasRunning = false;
+  {
+    // One section, so that the update loop can't begin a session with the old key after its session ended
+    std::lock_guard<std::mutex> lk(*mutex);
+    if (session_params.contains("user_details")) {
+      queueUserDetails();
+    }
+    sessionWasRunning = began_session;
+    if (began_session) {
+      queueEndSession(true);
+    }
+    configuration->appKey = appKey;
+    session_params["app_key"] = appKey;
+    // In the same section, so that a fetch built with the new key always finds that key in the store
+    std::lock_guard<std::mutex> store_lock(remote_config_store->mutex);
+    remote_config_store->app_key = appKey;
+    remote_config_store->values = nlohmann::json::object();
+    remote_config_store->fetch_running.store(false);
+    remote_config_store->has_pending = false;
+  }
+  if (sessionWasRunning) {
+    views_module->resetFirstView();
+    health_check->saveState();
+  }
+
+  if (consent_module->isRequired()) {
+    queueConsentState();
+  }
+  if (sessionWasRunning) {
+    beginSessionInternal(true);
+  }
+  fetchAfterServerChange(false);
+}
+
+void Countly::fetchAfterServerChange(bool remoteConfigRequested) {
+  configurationModule->fetchConfigFromServer(nullptr);
+  if (!remoteConfigRequested) {
+    downloadRemoteConfigAutomatically();
+  }
+}
+
+void Countly::flushQueues() {
+  if (!isCallAllowed("flushQueues")) {
+    return;
+  }
+
+  std::lock_guard<std::mutex> lk(*mutex);
+  log(LogLevel::INFO, "[Countly] flushQueues, Clearing the request queue and the event queue.");
+  requestModule->clearRequestQueue();
+  if (use_sqlite_storage) {
+    clearPersistentEQ();
+  } else {
+    event_queue.clear();
+  }
+}
+
+void Countly::replaceAllAppKeysInQueueWithCurrentAppKey() {
+  if (!isCallAllowed("replaceAllAppKeysInQueueWithCurrentAppKey")) {
+    return;
+  }
+
+  std::lock_guard<std::mutex> lk(*mutex);
+  log(LogLevel::INFO, "[Countly] replaceAllAppKeysInQueueWithCurrentAppKey, Giving every queued request the current app key.");
+  requestModule->replaceAppKeysInQueue(configuration->appKey);
+}
+
+void Countly::removeDifferentAppKeysFromQueue() {
+  if (!isCallAllowed("removeDifferentAppKeysFromQueue")) {
+    return;
+  }
+
+  std::lock_guard<std::mutex> lk(*mutex);
+  const long long removed = requestModule->removeOtherAppKeysFromQueue(configuration->appKey);
+  log(LogLevel::INFO, "[Countly] removeDifferentAppKeysFromQueue, Removed [" + std::to_string(removed) + "] queued requests with another app key.");
+}
+
+void Countly::attemptToSendStoredRequests() {
+  if (!isCallAllowed("attemptToSendStoredRequests")) {
+    return;
+  }
+
+  log(LogLevel::INFO, "[Countly] attemptToSendStoredRequests, Sending the stored requests now.");
+  packEvents();
+  requestModule->processQueue(mutex);
+}
+
 void Countly::start(const std::string &app_key, const std::string &host, int port, bool start_thread) {
   // unique_lock so the mutex is released on scope exit (incl. allocation/json
   // throws while constructing modules); unlock/re-acquire around the self-locking
@@ -1452,6 +1625,10 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   configuration->serverUrl = server_url;
 
   session_params["app_key"] = app_key;
+  {
+    std::lock_guard<std::mutex> store_lock(remote_config_store->mutex);
+    remote_config_store->app_key = app_key;
+  }
 
   if (use_sqlite_storage) {
     storageModule.reset(new StorageModuleDB(configuration, logger));
@@ -1538,6 +1715,7 @@ bool Countly::startRemoteConfigFetch(const std::map<std::string, std::string> &d
     return false;
   }
 
+  std::string app_key;
   {
     std::lock_guard<std::mutex> lk(remote_config_store->mutex);
     if (remote_config_store->fetch_running.load()) {
@@ -1552,6 +1730,8 @@ bool Countly::startRemoteConfigFetch(const std::map<std::string, std::string> &d
       return false;
     }
     remote_config_store->fetch_running.store(true);
+    // taken with the flag, so that the fetch owns the flag exactly while its app key is the current one
+    app_key = remote_config_store->app_key;
   }
 
   std::shared_ptr<RemoteConfigFetch> fetch(new RemoteConfigFetch());
@@ -1561,6 +1741,7 @@ bool Countly::startRemoteConfigFetch(const std::map<std::string, std::string> &d
   fetch->store = remote_config_store;
   fetch->data = data;
   fetch->merge = merge;
+  fetch->app_key = app_key;
 
   inflight_remote_config_fetches.fetch_add(1);
   try {
@@ -2294,8 +2475,6 @@ bool Countly::endSessionInternal(bool automatic) {
   if (sessionRunning && !is_being_disposed) {
     packEvents();
   }
-  const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(Countly::getTimestamp().time_since_epoch());
-  const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
 
   // lock_guard so the mutex is released on scope exit, including the early
   // returns below and any exception (e.g. a json type_error from a session_params
@@ -2316,27 +2495,32 @@ bool Countly::endSessionInternal(bool automatic) {
     return true;
   }
 
-  // getSessionDuration() takes this same mutex, so compute it inline here.
-  const auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - last_sent_session_request);
-
-  std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"session_duration", std::to_string(duration.count())}, {"timestamp", std::to_string(timestamp.count())}, {"end_session", "1"}};
-
   if (is_being_disposed) {
     // if SDK is being destroyed, don't attempt to send the end-session request.
     return false;
   }
 
+  queueEndSession(automatic);
+  lk.unlock();
+  views_module->resetFirstView();
+  health_check->saveState();
+  return true;
+}
+
+void Countly::queueEndSession(bool automatic) {
+  const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(Countly::getTimestamp().time_since_epoch());
+  const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+  // getSessionDuration() takes this same mutex, so compute it inline here.
+  const auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - last_sent_session_request);
+
+  std::map<std::string, std::string> data = {{"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}, {"session_duration", std::to_string(duration.count())}, {"timestamp", std::to_string(timestamp.count())}, {"end_session", "1"}};
   requestModule->addRequestToQueue(data);
 
   last_sent_session_request = now;
   began_session = false;
-  lk.unlock();
-  views_module->resetFirstView();
   if (automatic) {
     logger->recordUsage(HEALTH_CHECK_AREA_SESSIONS, "end:a");
   }
-  health_check->saveState();
-  return true;
 }
 
 std::chrono::system_clock::time_point Countly::getTimestamp() { return std::chrono::system_clock::now(); }
@@ -2805,8 +2989,14 @@ void Countly::sendHealthCheck() {
       data["metrics"] = nlohmann::json({{"_app_version", appVersion->get<std::string>()}}).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
     }
 
+    std::string request;
+    {
+      // buildRequest reads the app key and the device ID, which other threads change under the instance mutex
+      std::lock_guard<std::mutex> lk(*mutex);
+      request = requestBuilder->buildRequest(data);
+    }
     log(LogLevel::DEBUG, "[Countly] sendHealthCheck, sending the health check");
-    const HTTPResponse response = requestModule->sendImmediate("/i", requestBuilder->buildRequest(data));
+    const HTTPResponse response = requestModule->sendImmediate("/i", request);
     if (response.success && response.data.is_object() && response.data.contains("result")) {
       log(LogLevel::DEBUG, "[Countly] sendHealthCheck, the server accepted the health check");
       health_check->clearSentValues(snapshot);

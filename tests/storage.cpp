@@ -495,6 +495,33 @@ void RQClearAll_WithNonEmptyQueue(std::shared_ptr<StorageModuleBase> storageModu
   CHECK(storageModule->RQPeekAll().size() == 0);
 }
 
+/**
+ * Validate methods 'RQUpdate' and 'RQRemove'.
+ * Result: the updated request keeps its id and place, the removed one is gone, unknown ids change nothing.
+ * @param *storageModule: a pointer to the storage module.
+ */
+void RQUpdateAndRemove(std::shared_ptr<StorageModuleBase> storageModule) {
+  storageModule->RQInsertAtEnd("request 1");
+  storageModule->RQInsertAtEnd("request 2");
+  storageModule->RQInsertAtEnd("request 3");
+  std::vector<std::shared_ptr<DataEntry>> before = storageModule->RQPeekAll();
+  REQUIRE(before.size() == 3);
+
+  storageModule->RQUpdate(before[0]->getId(), "request 1 updated");
+  storageModule->RQRemove(before[1]->getId());
+  storageModule->RQUpdate(12345, "unknown request");
+  storageModule->RQRemove(12345);
+
+  std::vector<std::shared_ptr<DataEntry>> after = storageModule->RQPeekAll();
+  REQUIRE(after.size() == 2);
+  CHECK(after[0]->getId() == before[0]->getId());
+  CHECK(after[0]->getData() == "request 1 updated");
+  CHECK(after[1]->getId() == before[2]->getId());
+  CHECK(after[1]->getData() == "request 3");
+  CHECK(storageModule->RQPeekFront()->getData() == "request 1 updated");
+  validateSizes(storageModule, 2);
+}
+
 TEST_CASE("Test Memory Storage Module") {
   test_utils::clearSDK();
   shared_ptr<cly::LoggerModule> logger;
@@ -531,6 +558,7 @@ TEST_CASE("Test Memory Storage Module") {
 
   SUBCASE("Validate method 'RQClearAll' when the request queue is empty.") { RQClearAll_WithEmptyQueue(storageModule); }
   SUBCASE("Validate method 'RQClearAll' when the request queue is not empty.") { RQClearAll_WithNonEmptyQueue(storageModule); }
+  SUBCASE("Validate methods 'RQUpdate' and 'RQRemove'.") { RQUpdateAndRemove(storageModule); }
 }
 
 TEST_CASE("Test Memory Storage Module without calling 'init'") {
@@ -582,6 +610,7 @@ TEST_CASE("Test Sqlite Storage Module") {
 
   SUBCASE("Validate method 'RQClearAll' when the request queue is empty.") { RQClearAll_WithEmptyQueue(storageModule); }
   SUBCASE("Validate method 'RQClearAll' when the request queue is not empty.") { RQClearAll_WithNonEmptyQueue(storageModule); }
+  SUBCASE("Validate methods 'RQUpdate' and 'RQRemove'.") { RQUpdateAndRemove(storageModule); }
 }
 
 TEST_CASE("Test SQlite Storage Module without calling 'init'") {

@@ -274,6 +274,24 @@ public:
 
   void stop();
 
+  /**
+   * Changes the server URL, in memory only. Host and port work as in start(): port 0 is the scheme's default and
+   * trailing slashes are removed. A host that is not an absolute http:// or https:// URL is ignored and logged. Queued
+   * requests go to the new server; a request already on its way finishes at the old one. The SDK then sends the consent
+   * state (when consent is required), fetches the SDK behavior settings and, with enableRemoteConfig(), downloads
+   * remote config. A custom HTTP client gets only the path, so it does not follow the change. Call after start().
+   */
+  void changeServerUrl(const std::string &host, int port = 0);
+
+  /**
+   * Changes the app key, in memory only. Running views end, and their end events, the queued events, waiting user
+   * details and the end of the running session go with the old key; a session that was running then begins with the
+   * new key. Queued requests keep their key (see replaceAllAppKeysInQueueWithCurrentAppKey() and
+   * removeDifferentAppKeysFromQueue()). The old app's remote config values are cleared and the new app is caught up as
+   * in changeServerUrl(). An empty key, "YOUR_APP_KEY" and the current key are ignored and logged. Call after start().
+   */
+  void changeAppKey(const std::string &appKey);
+
   void setUpdateInterval(size_t milliseconds);
 
   void addEvent(const cly::Event &event) override;
@@ -314,6 +332,28 @@ public:
    * Checks and returns the size of the request queue in memory or persistent storage.
    */
   int checkRQSize();
+
+  /**
+   * Clears the request queue and the event queue. Running views, timed events, user details still waiting for the
+   * first session and the health check counters stay. A request already on its way is still delivered.
+   */
+  void flushQueues();
+
+  /**
+   * Gives every queued request the current app key, so that requests queued before changeAppKey() go to the new app.
+   */
+  void replaceAllAppKeysInQueueWithCurrentAppKey();
+
+  /**
+   * Removes the queued requests whose app key is not the current one, such as those queued before changeAppKey().
+   */
+  void removeDifferentAppKeysFromQueue();
+
+  /**
+   * Moves the queued events into a request and sends the request queue now, on the calling thread, like each update:
+   * until the queue is empty, a request fails or a batch is sent. Returns at once if the SDK's own thread is sending.
+   */
+  void attemptToSendStoredRequests();
 
   /**
    * Checks and returns the size of the event queue in persistent storage.
@@ -816,6 +856,25 @@ private:
    * A call of the app without a running session is reported as log code w760.
    */
   bool endSessionInternal(bool automatic);
+
+  /**
+   * Whether the public call 'caller' may run: never inside the log callback, and not before start(), which is logged
+   * with w101.
+   */
+  bool isCallAllowed(const char *caller);
+
+  /**
+   * Queues the end_session request of the running session and marks the session ended, counted in the health check as
+   * a call of the SDK with 'automatic'. The caller holds the instance mutex.
+   */
+  void queueEndSession(bool automatic);
+
+  /**
+   * After a server URL or app key change, fetches the SDK behavior settings and, with enableRemoteConfig(), remote
+   * config, unless 'remoteConfigRequested' says a session start downloads it already. The caller does not hold the
+   * instance mutex.
+   */
+  void fetchAfterServerChange(bool remoteConfigRequested);
 
   /**
    * Sends the health check once, as an immediate request to /i, unless it is disabled, the SDK behavior settings
