@@ -5,6 +5,8 @@
 #include <string>
 
 namespace cly {
+class Countly;
+class ViewsModule;
 
 class Event {
 public:
@@ -39,6 +41,15 @@ public:
   void applyLimits(unsigned int maxKeyLength, unsigned int maxValueSize, unsigned int maxSegmentationValues);
 
 private:
+  // The SDK adds the event-level fields an app can't set itself, such as the event ID.
+  friend class Countly;
+  friend class ViewsModule;
+
+  /**
+   * Sets the timestamp, hour and day of week of the event to the current time.
+   */
+  void setRecordingTime();
+
   nlohmann::json object;
   bool timer_running;
   std::chrono::system_clock::time_point timestamp;

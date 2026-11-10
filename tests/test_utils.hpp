@@ -187,7 +187,8 @@ static HTTPResponse fakeSendHTTPInto(ThreadSafeHTTPCallQueue &queue, bool use_po
 
   if (http_call.url == "/i") {
     response.success = true;
-  } else if ((http_call.url == "/o/sdk") && (http_call.data["method"] == "fetch_remote_config")) {
+    response.data = {{"result", "Success"}};
+  } else if ((http_call.url == "/o/sdk") && (http_call.data["method"] == "rc")) {
     nlohmann::json remote_config = {{"color", "#FF9900"}, {"playerQueueTimeout", 32}, {"isChristmas", true}};
 
     response.success = true;

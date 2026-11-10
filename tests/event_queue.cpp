@@ -80,30 +80,19 @@ TEST_CASE("Tests setting 'setEventsToRQThreshold' before we start the SDK") {
     test_utils::checkTopRequestEventSize(90, countly); // RQ should have the 90 events
   }
 
-  SUBCASE("Internal constraints (1) should be used instead of the negative custom value") {
+  SUBCASE("A negative threshold is ignored and the default stays") {
     countly.setEventsToRQThreshold(-6); // before start
     test_utils::initCountlyWithFakeNetworking(true, countly);
     // generate 3 events
     test_utils::generateEvents(3, countly);
 
-    // threshold is now set to 1 so we should have 0 events still in the EQ
-    CHECK(countly.checkEQSize() == 0);
-
-    // queue should have 3 requests
+    // the default threshold of 100 is still in use, so the 3 events wait in the EQ
+    CHECK(countly.checkEQSize() == 3);
     countly.processRQDebug();
-    CHECK(!http_call_queue.empty());
-    int count = 3;
-
-    while (count--) {
-      CHECK(http_call_queue.size() == count + 1);
-      HTTPCall oldest_call1 = http_call_queue.front();
-      nlohmann::json events1 = nlohmann::json::parse(oldest_call1.data["events"]);
-      CHECK(events1.size() == 1);
-      http_call_queue.pop_front();
-    }
+    CHECK(http_call_queue.empty());
   }
 
-  SUBCASE("Internal constraints (10000) should be used instead of the positive large custom value") {
+  SUBCASE("A large threshold is kept, and the event queue still sends at 1000 events") {
 #ifdef COUNTLY_USE_SQLITE
     // Use 205 instead of 10005 so we can observe the clamp at a scale SQLite handles
     countly.setEventsToRQThreshold(205); // before start — clamped to 205 (within [1, 10000])
@@ -118,7 +107,8 @@ TEST_CASE("Tests setting 'setEventsToRQThreshold' before we start the SDK") {
 
     test_utils::generateEvents(10003, countly);
     CHECK(countly.checkEQSize() == 3);
-    test_utils::checkTopRequestEventSize(10000, countly);
+    // the event queue never holds more than 1000 events, whatever the threshold
+    test_utils::checkTopRequestEventSize(1000, countly);
 #endif
   }
 }
@@ -137,30 +127,19 @@ TEST_CASE("Tests setting 'setEventsToRQThreshold' after we start the SDK") {
     test_utils::checkTopRequestEventSize(90, countly); // RQ should have the 90 events
   }
 
-  SUBCASE("Internal constraints (1) should be used instead of the negative custom value") {
+  SUBCASE("A negative threshold is ignored and the default stays") {
     test_utils::initCountlyWithFakeNetworking(true, countly);
     countly.setEventsToRQThreshold(-6);
     // generate 3 events
     test_utils::generateEvents(3, countly);
 
-    // threshold is now set to 1 so we should have 0 events still in the EQ
-    CHECK(countly.checkEQSize() == 0);
-
-    // queue should have 3 requests
+    // the default threshold of 100 is still in use, so the 3 events wait in the EQ
+    CHECK(countly.checkEQSize() == 3);
     countly.processRQDebug();
-    CHECK(!http_call_queue.empty());
-
-    int count = 3;
-    while (count--) {
-      CHECK(http_call_queue.size() == count + 1);
-      HTTPCall oldest_call1 = http_call_queue.front();
-      nlohmann::json events1 = nlohmann::json::parse(oldest_call1.data["events"]);
-      CHECK(events1.size() == 1);
-      http_call_queue.pop_front();
-    }
+    CHECK(http_call_queue.empty());
   }
 
-  SUBCASE("Internal constraints (10000) should be used instead of the positive large custom value") {
+  SUBCASE("A large threshold is kept, and the event queue still sends at 1000 events") {
     test_utils::initCountlyWithFakeNetworking(true, countly);
 #ifdef COUNTLY_USE_SQLITE
     countly.setEventsToRQThreshold(205);
@@ -173,7 +152,8 @@ TEST_CASE("Tests setting 'setEventsToRQThreshold' after we start the SDK") {
 
     test_utils::generateEvents(10003, countly);
     CHECK(countly.checkEQSize() == 3);
-    test_utils::checkTopRequestEventSize(10000, countly);
+    // the event queue never holds more than 1000 events, whatever the threshold
+    test_utils::checkTopRequestEventSize(1000, countly);
 #endif
   }
 }
@@ -218,11 +198,10 @@ TEST_CASE("Tests that sets 'setEventsToRQThreshold' before and after SDK starts"
   SUBCASE("Only the latest set threshold must be used, negative last") {
     countly.setEventsToRQThreshold(90); // before start
     test_utils::initCountlyWithFakeNetworking(true, countly);
-    countly.setEventsToRQThreshold(-5); // after start
+    countly.setEventsToRQThreshold(-5); // after start, ignored
 
     test_utils::generateEvents(1, countly);
-    CHECK(countly.checkEQSize() == 0);
-    test_utils::checkTopRequestEventSize(1, countly);
+    CHECK(countly.checkEQSize() == 1);
   }
 
   // Setting threshold size both before and after start, with update session in between
@@ -249,19 +228,23 @@ TEST_CASE("Tests that sets 'setEventsToRQThreshold' before and after SDK starts"
     test_utils::generateEvents(4, countly);
     CHECK(countly.checkEQSize() == 1);
 
-    // RQ should have the 3 events
     // trigger RQ to send requests to http_call_queue
     countly.processRQDebug();
-    // queue should have 3 requests
-    CHECK(!http_call_queue.empty());
-    CHECK(http_call_queue.size() == 3);
-    http_call_queue.pop_front(); // begin session
-    http_call_queue.pop_front(); // change device ID
-    HTTPCall oldest_call = http_call_queue.front();
-    CHECK(http_call_queue.size() == 1);
+    // the queued requests: the old ID's session end, the new ID's session start and the 3 events; the settings
+    // fetch for the new ID goes to /o/sdk
+    std::vector<HTTPCall> queued;
+    for (size_t index = 0; index < http_call_queue.size(); index++) {
+      HTTPCall call = http_call_queue.at(index);
+      if (call.url == "/i") {
+        queued.push_back(call);
+      }
+    }
+    REQUIRE(queued.size() == 3);
+    CHECK(queued[0].data.count("end_session") == 1);
+    CHECK(queued[1].data.count("begin_session") == 1);
 
     // last call should have 3 events
-    nlohmann::json events = nlohmann::json::parse(oldest_call.data["events"]);
+    nlohmann::json events = nlohmann::json::parse(queued[2].data["events"]);
     CHECK(events.size() == 3);
   }
 }

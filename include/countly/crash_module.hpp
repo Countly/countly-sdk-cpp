@@ -36,6 +36,11 @@ public:
    */
   void recordException(const std::string &title, const std::string &stackTrace, const bool fatal, const std::map<std::string, std::string> &crashMetrics, const std::map<std::string, std::string> &segmentation = {});
 
+  /**
+   * Removes every breadcrumb recorded so far, so that the next crash report starts with an empty trail.
+   */
+  void clearBreadcrumbs();
+
 private:
   friend class Countly;
   class CrashModuleImpl;
@@ -43,14 +48,24 @@ private:
   void setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider); // try injecting
 
   /**
+   * Sets the request queue that crash reports go to. Set by start(); until then crash calls are ignored.
+   */
+  void setRequestModule(std::shared_ptr<RequestModule> requestModule);
+
+  /**
+   * Sets the SDK instance the module asks for the device metrics and the current view.
+   */
+  void setDelegates(cly::CountlyDelegates *cly);
+
+  /**
    * Sets the consent state the crash calls check for the "crashes" consent.
    */
   void setConsentModule(std::shared_ptr<ConsentModule> consent);
 
   /**
-   * Forgets every breadcrumb.
+   * Forgets every breadcrumb, without counting it as a call of the app.
    */
-  void clearBreadcrumbs();
+  void forgetBreadcrumbs();
 };
 } // namespace cly
 #endif

@@ -37,6 +37,44 @@ static void initWithSBSConfig(const json &sbsConfig, Countly &countly) {
 }
 
 /**
+ * The settings the fake server answers a settings fetch with, for initWithServerAnswer.
+ */
+static json server_settings_answer;
+
+/**
+ * Fake HTTP client that answers the settings fetch with server_settings_answer, like the server does.
+ */
+static HTTPResponse sendHTTPWithServerSettings(bool use_post, const std::string &url, const std::string &data) {
+  HTTPResponse response = test_utils::fakeSendHTTP(use_post, url, data);
+  if (url == "/o/sdk" && data.find("method=sc") != std::string::npos) {
+    return HTTPResponse{true, json({{"v", 2}, {"t", 1}, {"c", server_settings_answer}}), 200, ""};
+  }
+  return response;
+}
+
+/**
+ * Helper to initialize the SDK with settings that the server answers and the SDK stores, as after a real fetch.
+ * Uses manual session control and clears the HTTP call queue after setup.
+ */
+static void initWithServerAnswer(const json &sbsConfig, Countly &countly) {
+  server_settings_answer = sbsConfig;
+  countly.setHTTPClient(sendHTTPWithServerSettings);
+  countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+  countly.SetPath(TEST_DATABASE_NAME);
+  countly.enableManualSessionControl();
+  countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+  const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (!httpQueueContains("method", "sc") && std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  // the answer is applied right after the fake client returns it
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+  countly.processRQDebug();
+  countly.clearRequestQueue();
+  http_call_queue.clear();
+}
+
+/**
  * Helper to initialize the SDK WITHOUT providing SBS config.
  * Uses whatever SBS is already stored in the database (or defaults).
  * Uses manual session control to avoid automatic session begin requests.
@@ -969,6 +1007,8 @@ TEST_CASE("SBS Feature Flags") {
     Countly &countly = Countly::getInstance();
     json sbs = {{"lt", true}};
     initWithSBSConfig(sbs, countly);
+    // with a running session the location goes in a separate request right away
+    countly.beginSession();
 
     countly.setLocation("US", "New York", "40.7128,-74.0060", "192.168.1.1");
 
@@ -1557,6 +1597,8 @@ TEST_CASE("SBS Scenarios") {
     Countly &countly1 = Countly::getInstance();
     json sbs1 = json::object();
     initWithSBSConfig(sbs1, countly1);
+    // with a running session the location goes in a separate request right away
+    countly1.beginSession();
 
     // setLocation should succeed
     countly1.setLocation("US", "New York", "40.7128,-74.0060", "192.168.1.1");
@@ -1852,11 +1894,11 @@ TEST_CASE("SBS Storage Behavior") {
   http_call_queue.clear();
 
   SUBCASE("Stored SBS is loaded on re-init without provided SBS") {
-    // Step 1: Init SDK with provided SBS that disables custom event tracking
+    // Step 1: Init SDK with a server answer that disables custom event tracking; the SDK stores it
     clearSDK();
     Countly &countly1 = Countly::getInstance();
     json sbs = {{"cet", false}, {"eqs", 1}};
-    initWithSBSConfig(sbs, countly1);
+    initWithServerAnswer(sbs, countly1);
 
     // Verify that custom events are blocked in this session
     cly::Event e1("custom_event", 1);
@@ -1882,11 +1924,11 @@ TEST_CASE("SBS Storage Behavior") {
   }
 
   SUBCASE("Stored SBS takes precedence over provided SBS") {
-    // Step 1: Init SDK with SBS that disables session tracking (st=false)
+    // Step 1: Init SDK with a server answer that disables session tracking (st=false); the SDK stores it
     clearSDK();
     Countly &countly1 = Countly::getInstance();
     json sbs1 = {{"st", false}};
-    initWithSBSConfig(sbs1, countly1);
+    initWithServerAnswer(sbs1, countly1);
 
     // Verify session tracking is disabled
     CHECK(countly1.beginSession() == false);
@@ -1979,11 +2021,11 @@ TEST_CASE("SBS Storage Behavior") {
   }
 
   SUBCASE("Stored SBS feature flag persists across multiple re-inits") {
-    // Step 1: Init with SBS that disables crash reporting and sets eqs=2
+    // Step 1: Init with a server answer that disables crash reporting and sets eqs=2; the SDK stores it
     clearSDK();
     Countly &countly1 = Countly::getInstance();
     json sbs = {{"crt", false}, {"eqs", 2}};
-    initWithSBSConfig(sbs, countly1);
+    initWithServerAnswer(sbs, countly1);
 
     // Verify crash reporting is disabled
     countly1.crash().recordException("crash1", "trace1", false, {{"_os", "TestOS"}}, {});
@@ -2047,7 +2089,7 @@ TEST_CASE("SBS Location Clearing") {
   clearSDK();
   http_call_queue.clear();
 
-  SUBCASE("setLocation clearing (all empty) is allowed when lt=false") {
+  SUBCASE("setLocation is ignored when lt=false, also a call that only clears") {
     clearSDK();
     Countly &countly = Countly::getInstance();
     json sbs = {{"lt", false}};
@@ -2065,7 +2107,7 @@ TEST_CASE("SBS Location Clearing") {
     }
     CHECK_FALSE(hasLocationSet);
 
-    // But clearing location (all empty) should be allowed even when lt=false
+    // a call without values only clears the stored values; the server's setting already keeps location off
     countly.setLocation("", "", "", "");
     countly.processRQDebug();
     bool hasClearRequest = false;
@@ -2075,7 +2117,7 @@ TEST_CASE("SBS Location Clearing") {
         hasClearRequest = true;
       }
     }
-    CHECK(hasClearRequest);
+    CHECK_FALSE(hasClearRequest);
   }
 }
 
@@ -2149,7 +2191,7 @@ TEST_CASE("SBS Session Update Interval Override") {
     CHECK(hasSessionUpdate);
   }
 
-  SUBCASE("Large sui prevents premature session updates") {
+  SUBCASE("A large sui does not hold back the app's own session update") {
     clearSDK();
     Countly &countly = Countly::getInstance();
     json sbs = {{"sui", 300}};
@@ -2165,7 +2207,7 @@ TEST_CASE("SBS Session Update Interval Override") {
     countly.updateSession();
     countly.processRQDebug();
 
-    // No session update should be sent (duration < sui)
+    // sui paces the SDK's update timer; a manual updateSession() always reports the duration
     bool hasSessionUpdate = false;
     while (!http_call_queue.empty()) {
       HTTPCall call = popCall();
@@ -2173,7 +2215,7 @@ TEST_CASE("SBS Session Update Interval Override") {
         hasSessionUpdate = true;
       }
     }
-    CHECK_FALSE(hasSessionUpdate);
+    CHECK(hasSessionUpdate);
   }
 }
 

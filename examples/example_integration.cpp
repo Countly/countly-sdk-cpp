@@ -183,13 +183,12 @@ static void configureAndStart(Countly &instance, const string &appKey, const str
   // Custom HTTP client
   // HTTPClientFunction clientPtr = customClient;
   // instance.setHTTPClient(clientPtr);
-  // instance.alwaysUsePost(true);
   instance.setLogger(printLog);
   instance.SetPath(dbPath); // this will be only built into account if the correct configurations are set
   instance.setDeviceID(deviceId);
   // instance.setSalt("test-salt");
   // OS, OS_version, device, resolution, carrier, app_version);
-  instance.SetMetrics("Windows 10", "10.22", "Mac", "800x600", "Carrier", "1.0");
+  instance.SetMetrics("Windows", "10.0", "Mac", "800x600", "Carrier", "1.0");
 
   instance.setAutomaticSessionUpdateInterval(5); // The value is set so low just for internal validation. Has to be set before start.
   instance.setMaxRQProcessingBatchSize(2);       // in most cases not needed to be set. The value is set so low just for internal validation
@@ -257,7 +256,7 @@ static void stressBothInstances(int threadsPerInstance, int iterations) {
           }
 
           if (i % 5 == 0) {
-            target->updateSession();
+            target->flushEvents();
           }
 
           recorded.fetch_add(2);
@@ -308,7 +307,7 @@ int main() {
     cout << "2) Event with count and sum" << endl;
     cout << "3) Event with count, sum, duration" << endl;
     cout << "4) Event with sum, count, duration and segmentation" << endl;
-    cout << "5) Update Session" << endl;
+    cout << "5) Send waiting events now" << endl;
     cout << "6) Download remote config" << endl;
     cout << "7) Send user detail to server" << endl;
     cout << "8) Change device id with server merge" << endl;
@@ -347,7 +346,7 @@ int main() {
       break;
     }
     case 5:
-      ct.updateSession();
+      ct.flushEvents();
       break;
     case 6: {
       ct.updateRemoteConfig();

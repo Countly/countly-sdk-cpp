@@ -75,18 +75,20 @@ TEST_CASE("crash unit tests") {
     validateCrashParams("Divided By Zero", "stackTrack", true, "", crashMetrics, {});
   }
 
-  SUBCASE("record crash without title, stackTrace, metrics and bread crumbs") {
+  SUBCASE("a crash without a stack trace is not recorded, one without title and metrics is") {
     // clear the request queue, it contains session begin request
     countly.clearRequestQueue();
 
-    // record fatal exception with empty title and stack trace
+    // the server needs the stack trace, so a crash without one is ignored
     countly.crash().recordException("", "", true, {});
-
-    // start processing request queue
     countly.processRQDebug();
+    CHECK(http_call_queue.size() == 1);
 
-    // validate crash request
-    validateCrashParams("", "", true, "", {}, {});
+    // without a title the server uses the first line of the stack trace; the SDK adds the device metrics
+    countly.crash().recordException("", "stackTrack", true, {});
+    countly.processRQDebug();
+    validateCrashParams("", "stackTrack", true, "", {}, {});
+    CHECK(nlohmann::json::parse(http_call_queue.at(1).data["crash"]).contains("_os"));
   }
 
   SUBCASE("record crash with bread crumbs") {
@@ -123,7 +125,7 @@ TEST_CASE("crash unit tests") {
     // start processing request queue
     countly.processRQDebug();
 
-    // validate crash request
-    validateCrashParams("Divided By Zero", "stackTrack", true, "first\nsecond\n", crashMetrics, segmentation, 1);
+    // validate crash request: the first crash took the first breadcrumb with it
+    validateCrashParams("Divided By Zero", "stackTrack", true, "second\n", crashMetrics, segmentation, 1);
   }
 }

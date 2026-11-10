@@ -28,6 +28,8 @@ public:
   // Set once, before the instance logs from other threads, and never cleared.
   std::shared_ptr<HealthCheckModule> health_check;
   std::atomic<bool> has_health_check{false};
+  // Set once the listener threw, so that the console gets one line about it, not one per log.
+  std::atomic<bool> reported_listener_failure{false};
 };
 
 LoggerModule::LoggerModule() { impl = std::make_unique<LoggerModuleImpl>(); }
@@ -85,7 +87,13 @@ void LoggerModule::log(LogLevel level, const std::string &message) {
       ~FlagGuard() { inside_log_callback = false; }
     } guard;
     inside_log_callback = true;
-    callback(level, message);
+    try {
+      callback(level, message);
+    } catch (...) {
+      if (!impl->reported_listener_failure.exchange(true)) {
+        std::cerr << "[Countly] [LoggerModule] log, The log listener threw an exception. Its exceptions are ignored, so that the SDK keeps working." << std::endl;
+      }
+    }
   }
 }
 

@@ -88,7 +88,7 @@ struct ReleaseSettingsOnExit {
  */
 HTTPResponse consentSendHTTP(bool use_post, const std::string &url, const std::string &data) {
   HTTPResponse response = fakeSendHTTP(use_post, url, data);
-  if (url == "/o/sdk" && data.find("method=fetch_remote_config") != std::string::npos && data.find("keys=") == std::string::npos) {
+  if (url == "/o/sdk" && data.find("method=rc") != std::string::npos && data.find("keys=") == std::string::npos) {
     return HTTPResponse{true, json({{"color", "#FF9900"}, {"playerQueueTimeout", 32}}), 200, ""};
   }
   if (url != "/o/sdk" || data.find("method=sc") == std::string::npos) {
@@ -118,13 +118,16 @@ template <typename Condition> bool waitUntil(Condition condition) {
 
 /**
  * Sets the instance up for a consent test: the fake client, the test device ID and database, no
- * periodic settings fetch, and an update loop that stays out of the test's way and stops at once.
+ * settings fetch unless the test serves settings, and an update loop that stays out of the test's way
+ * and stops at once.
  */
-void prepare(Countly &countly) {
+void prepare(Countly &countly, bool fetchSettings = false) {
   countly.setHTTPClient(consentSendHTTP);
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   countly.SetPath(TEST_DATABASE_NAME);
-  countly.disableSDKBehaviorSettingsUpdates();
+  if (!fetchSettings) {
+    countly.disableSDKBehaviorSettingsUpdates();
+  }
   countly.enableImmediateRequestOnStop();
   countly.setUpdateInterval(60000);
 }
@@ -138,7 +141,7 @@ Countly &freshInstance(const json &settingsAnswer = nullptr, bool holdSettings =
   clearSDK();
   settings_server.reset(settingsAnswer, holdSettings);
   Countly &countly = Countly::getInstance();
-  prepare(countly);
+  prepare(countly, !settingsAnswer.is_null());
   return countly;
 }
 
@@ -205,7 +208,7 @@ size_t remoteConfigFetches() {
   size_t count = 0;
   for (size_t index = 0; index < http_call_queue.size(); index++) {
     HTTPCall call = http_call_queue.at(index);
-    if (call.url == "/o/sdk" && valueOf(call, "method") == "fetch_remote_config") {
+    if (call.url == "/o/sdk" && valueOf(call, "method") == "rc") {
       count++;
     }
   }
@@ -343,18 +346,17 @@ TEST_CASE("consent: removing consent stops the feature and runs its clean-up") {
     countly.addEvent(Event("before", 1));
     countly.removeConsent({cly::consent::SESSIONS});
     requests = takeRequests(countly);
-    REQUIRE(requests.size() == 2);
-    CHECK(valueOf(requests[0], "end_session") == "1");
-    CHECK(consentOf(requests[1]) == stateWith(allExcept("sessions")));
+    // the events recorded in the session go out before the session ends
+    REQUIRE(requests.size() == 3);
+    std::vector<json> events = eventsIn({requests[0]});
+    REQUIRE(events.size() == 1);
+    CHECK(events[0]["key"] == "before");
+    CHECK(valueOf(requests[1], "end_session") == "1");
+    CHECK(consentOf(requests[2]) == stateWith(allExcept("sessions")));
 
     CHECK_FALSE(countly.updateSession());
     countly.flushEvents(std::chrono::seconds(1));
-    requests = takeRequests(countly);
-    REQUIRE(requests.size() == 1);
-    CHECK(!has(requests[0], "session_duration"));
-    std::vector<json> events = eventsIn(requests);
-    REQUIRE(events.size() == 1);
-    CHECK(events[0]["key"] == "before");
+    CHECK(takeRequests(countly).empty());
     clearSDK();
   }
 
@@ -364,6 +366,8 @@ TEST_CASE("consent: removing consent stops the feature and runs its clean-up") {
     countly.setRequiresConsent(true);
     countly.setConsentEnabled(cly::consent::allFeatures());
     start(countly);
+    // with a running session the location goes in a separate request right away
+    REQUIRE(countly.beginSession());
     takeRequests(countly);
 
     countly.setLocation("TR", "Istanbul", "41.0082,28.9784", "");
@@ -380,6 +384,8 @@ TEST_CASE("consent: removing consent stops the feature and runs its clean-up") {
     CHECK(!has(requests[1], "country_code"));
     CHECK(!has(requests[1], "city"));
 
+    REQUIRE(countly.endSession());
+    takeRequests(countly);
     REQUIRE(countly.beginSession());
     requests = takeRequests(countly);
     REQUIRE(requests.size() == 1);
@@ -561,19 +567,21 @@ TEST_CASE("consent: the server's consent requirement (cr)") {
     CHECK(countly.getConsent(cly::consent::EVENTS));
 
     settings_server.release();
-    REQUIRE(waitUntil([&countly] { return countly.checkRQSize() == 3; }));
+    REQUIRE(waitUntil([&countly] { return countly.checkRQSize() == 4; }));
     requests = takeRequests(countly);
-    REQUIRE(requests.size() == 3);
-    CHECK(valueOf(requests[0], "end_session") == "1");
-    CHECK(consentOf(requests[1]) == stateWith({}));
-    CHECK(valueOf(requests[2], "location") == "");
+    REQUIRE(requests.size() == 4);
+    // the events recorded in the session go out before the session ends
+    std::vector<json> events = eventsIn({requests[0]});
+    REQUIRE(events.size() == 1);
+    CHECK(events[0]["key"] == "before");
+    CHECK(valueOf(requests[1], "end_session") == "1");
+    CHECK(consentOf(requests[2]) == stateWith({}));
+    CHECK(valueOf(requests[3], "location") == "");
     CHECK_FALSE(countly.getConsent(cly::consent::EVENTS));
 
     countly.addEvent(Event("after", 1));
     countly.flushEvents(std::chrono::seconds(1));
-    std::vector<json> events = eventsIn(takeRequests(countly));
-    REQUIRE(events.size() == 1);
-    CHECK(events[0]["key"] == "before");
+    CHECK(eventsIn(takeRequests(countly)).empty());
     clearSDK();
   }
 

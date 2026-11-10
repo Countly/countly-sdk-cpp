@@ -7,6 +7,11 @@ string(REGEX REPLACE "#define COUNTLY_SDK_VERSION \"([^\"]+)\"" "\\1" COUNTLY_SD
 
 project(countly VERSION ${COUNTLY_SDK_VERSION} LANGUAGES CXX)
 
+# C++14 by default; a newer standard set with CMAKE_CXX_STANDARD is used, an older one is raised to C++14
+if(NOT DEFINED CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 14)
+endif()
+
 # setup configuration options and their default values
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS  "Create a module definition (.def) on Windows." ON)
@@ -59,7 +64,8 @@ add_library(countly
   ${CMAKE_CURRENT_SOURCE_DIR}/src/event.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/configuration_module.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/consent_module.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/health_check_module.cpp)
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/health_check_module.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/platform_info.cpp)
 add_library(countly::countly ALIAS countly)
 
 target_include_directories(countly
@@ -68,9 +74,9 @@ target_include_directories(countly
 
 set_target_properties(countly PROPERTIES
     PUBLIC_HEADER "${COUNTLY_PUBLIC_HEADERS}"
-    CXX_STANDARD 14
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO)
+target_compile_features(countly PRIVATE cxx_std_14)
 
 find_package(Threads)
 target_link_libraries(countly Threads::Threads)
@@ -159,7 +165,15 @@ if(COUNTLY_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/multi_instance.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/user_details.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/health_check.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/consent.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/consent.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/init.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/request_pipeline.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/event_recording.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/session_lifecycle.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/behavior_settings.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/remote_config.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/crash_reporting.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/location.cpp)
     
     target_compile_options(countly-tests PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-g>)
     target_compile_definitions(countly-tests PRIVATE COUNTLY_BUILD_TESTS)
@@ -181,9 +195,9 @@ if(COUNTLY_BUILD_TESTS)
   target_include_directories(countly-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/doctest/doctest)
   target_link_libraries(countly-tests countly)
   set_target_properties(countly-tests PROPERTIES
-    CXX_STANDARD 14
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO)
+  target_compile_features(countly-tests PRIVATE cxx_std_14)
 endif()
 
 if(COUNTLY_BUILD_SAMPLE)
@@ -201,9 +215,9 @@ endif()
   target_include_directories(countly-sample PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/doctest/doctest)
   target_link_libraries(countly-sample countly)
   set_target_properties(countly-sample PROPERTIES
-    CXX_STANDARD 14
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO)
+  target_compile_features(countly-sample PRIVATE cxx_std_14)
 endif()
 
 install(TARGETS countly

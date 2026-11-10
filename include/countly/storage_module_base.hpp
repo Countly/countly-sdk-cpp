@@ -110,6 +110,18 @@ public:
    * @return the counters as JSON text, empty when none are stored
    */
   virtual std::string getHealthCheckState() { return std::string(); }
+
+  /**
+   * Store the device ID in use and its type, for a later start that is given no device ID.
+   * @param state: the device ID and its type as JSON text
+   */
+  virtual void storeDeviceIdState(const std::string &state) { (void)state; }
+
+  /**
+   * Read the stored device ID and its type.
+   * @return the device ID and its type as JSON text, empty when none are stored
+   */
+  virtual std::string getDeviceIdState() { return std::string(); }
 };
 
 } // namespace cly

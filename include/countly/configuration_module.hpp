@@ -35,6 +35,11 @@ public:
   bool isNetworkingEnabled() const override;
 
   bool isLocationTrackingEnabled();
+
+  /**
+   * The server's "lt" setting: -1 while the settings don't contain it, otherwise 0 or 1.
+   */
+  int getServerLocationTracking() const;
   bool isViewTrackingEnabled() const override;
   bool isSessionTrackingEnabled();
   bool isCustomEventTrackingEnabled();
@@ -46,6 +51,12 @@ public:
   int getConsentRequired() const;
 
   unsigned int getRequestQueueSizeLimit() const override;
+  unsigned int getRequestDropAgeHours() const override;
+  bool isBackoffEnabled() const override;
+  unsigned int getBackoffAcceptedTimeout() const override;
+  double getBackoffRequestQueuePercentage() const override;
+  unsigned int getBackoffRequestAge() const override;
+  unsigned int getBackoffDuration() const override;
   SDKLimits getLimits() const override;
   unsigned int getEventQueueSizeLimit();
   unsigned int getSessionUpdateInterval();

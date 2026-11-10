@@ -151,7 +151,7 @@ TEST_CASE("Internal Limits Views") {
     int devCount = 0;
     for (auto it = seg.begin(); it != seg.end(); ++it) {
       const std::string &k = it.key();
-      if (k == "visit" || k == "start" || k == "_idv" || k == "name") {
+      if (k == "visit" || k == "start" || k == "_idv" || k == "name" || k == "segment") {
         continue;
       }
       devCount++;

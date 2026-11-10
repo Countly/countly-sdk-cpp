@@ -3,7 +3,9 @@
 
 #include "nlohmann/json.hpp"
 #include <atomic>
+#include <map>
 #include <mutex>
+#include <string>
 
 namespace cly {
 
@@ -27,6 +29,14 @@ struct RemoteConfigStore {
 
   // True from the moment a fetch is started until its thread body returns.
   std::atomic<bool> fetch_running{false};
+
+  // Bumped when the device ID changes, so that a download that started for an earlier user is discarded.
+  unsigned long long user_generation = 0;
+
+  // A download the SDK asked for while another one ran, made right after it.
+  bool has_pending = false;
+  std::map<std::string, std::string> pending_data;
+  bool pending_merge = false;
 };
 
 } // namespace cly

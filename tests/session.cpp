@@ -54,9 +54,12 @@ TEST_CASE("sessions unit tests") {
     countly.clearRequestQueue(); // request queue contains session begin request
     http_call_queue.clear();     // clear local HTTP request queue.
 
-    std::this_thread::sleep_for(3s);
-    countly.updateSession();
-    countly.processRQDebug();
+    // the update timer reports the automatic session once the 2 second update interval passed
+    const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + 10s;
+    while (http_call_queue.empty() && std::chrono::steady_clock::now() < deadline) {
+      std::this_thread::sleep_for(100ms);
+      countly.processRQDebug();
+    }
 
     HTTPCall http_call = popHTTPCall();
     CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
@@ -69,12 +72,13 @@ TEST_CASE("sessions unit tests") {
     countly.clearRequestQueue(); // request queue contains session begin request
     http_call_queue.clear();     // clear local HTTP request queue.
 
-    countly.endSession();
+    // automatic sessions end when the SDK stops
+    const long long stopped = getUnixTimestamp();
+    countly.stop();
     countly.processRQDebug();
 
     HTTPCall http_call = popHTTPCall();
-    long long timestamp = getUnixTimestamp();
-    long long timestampDiff = timestamp - stoll(http_call.data["timestamp"]);
+    long long timestampDiff = stoll(http_call.data["timestamp"]) - stopped;
     CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
     CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
     CHECK(!http_call.data["session_duration"].empty());
@@ -105,12 +109,12 @@ TEST_CASE("event request unit tests") {
     event.addSegmentation("points", 100);
     countly.addEvent(event);
 
-    countly.updateSession();
+    countly.flushEvents();
     countly.processRQDebug();
 
     HTTPCall http_call = popHTTPCall();
 
-    CHECK(!http_call.use_post);
+    CHECK(http_call.use_post);
     CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
     CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
 
@@ -130,11 +134,11 @@ TEST_CASE("event request unit tests") {
     countly.addEvent(event1);
     countly.addEvent(event2);
 
-    countly.updateSession();
+    countly.flushEvents();
 
     countly.processRQDebug();
     HTTPCall http_call = popHTTPCall();
-    CHECK(!http_call.use_post);
+    CHECK(http_call.use_post);
     CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
     CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
 
@@ -155,11 +159,11 @@ TEST_CASE("event request unit tests") {
     event.addSegmentation("points", 2000);
     countly.addEvent(event);
 
-    countly.updateSession();
+    countly.flushEvents();
 
     countly.processRQDebug();
     HTTPCall http_call = popHTTPCall();
-    CHECK(!http_call.use_post);
+    CHECK(http_call.use_post);
     CHECK(http_call.data["app_key"] == COUNTLY_TEST_APP_KEY);
     CHECK(http_call.data["device_id"] == COUNTLY_TEST_DEVICE_ID);
 
@@ -180,7 +184,7 @@ TEST_CASE("event request unit tests") {
       countly.addEvent(event);
     }
 
-    countly.updateSession();
+    countly.flushEvents();
 
     countly.processRQDebug();
     HTTPCall http_call = popHTTPCall();
@@ -199,7 +203,7 @@ TEST_CASE("event request unit tests") {
     countly.addEvent(event);
     REQUIRE(countly.checkEQSize() == 1);
 
-    countly.updateSession();
+    countly.flushEvents();
     countly.processRQDebug();
     HTTPCall http_call = popHTTPCall();
 
@@ -231,7 +235,10 @@ TEST_CASE("concurrent endSession calls end the session only once") {
   });
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   countly.SetPath(TEST_DATABASE_NAME);
+  // the app's session calls work only with manual session control
+  countly.enableManualSessionControl();
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+  REQUIRE(countly.beginSession());
 
   const int rq_before = countly.checkRQSize(); // holds the begin_session request
   REQUIRE(rq_before >= 0);
