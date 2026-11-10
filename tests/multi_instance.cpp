@@ -210,7 +210,7 @@ TEST_CASE("a second remote config fetch is dropped rather than blocking the call
     cly::HTTPResponse response;
     response.success = true;
     response.data = nlohmann::json::object();
-    if (data.find("fetch_remote_config") != std::string::npos) {
+    if (data.find("method=rc") != std::string::npos) {
       fetches_started.fetch_add(1);
       while (!release_fetch.load()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -338,7 +338,7 @@ TEST_CASE("destruction does not wait for an in-flight remote config fetch") {
     response.data = nlohmann::json::object();
     // Only the remote-config fetch is held. The SDK Behavior Settings fetch also
     // targets /o/sdk (with method=sc) and must not be blocked.
-    if (data.find("fetch_remote_config") != std::string::npos) {
+    if (data.find("method=rc") != std::string::npos) {
       fetch_entered.store(true);
       while (!release_fetch.load()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));

@@ -1,5 +1,7 @@
 #include "countly/configuration_module.hpp"
+#include <algorithm>
 #include <atomic>
+#include <climits>
 #include <condition_variable>
 #include <thread>
 
@@ -94,8 +96,19 @@ public:
   std::atomic<unsigned int> maxStackTraceLinesPerThread{COUNTLY_MAX_STACK_TRACE_LINES_PER_THREAD_DEFAULT};
   std::atomic<unsigned int> maxStackTraceLineLength{COUNTLY_MAX_STACK_TRACE_LINE_LENGTH_DEFAULT};
 
+  std::atomic<unsigned int> requestDropAgeHours{0};
+  std::atomic<bool> backoffEnabled{true};
+  std::atomic<unsigned int> backoffAcceptedTimeout{10};
+  std::atomic<double> backoffRequestQueuePercentage{0.5};
+  std::atomic<unsigned int> backoffRequestAge{24};
+  std::atomic<unsigned int> backoffDuration{60};
+
   mutable std::mutex sbsMutex;
   std::thread configFetchThread;
+  std::atomic<bool> fetchRunning{false};
+  std::atomic<bool> fetchAgain{false};
+  // -1 while the settings don't contain "lt", otherwise 0 or 1
+  std::atomic<int> serverLocationTracking{-1};
 
   mutable std::mutex filterMutex;
   FilterList<std::set<std::string>> eventFilter;
@@ -134,38 +147,60 @@ public:
   // Helper to populate a list filter from blacklist/whitelist keys, reducing duplication
   template <typename T, typename ParseFunc>
   void populateListFilter(FilterList<T> &filter, const char *blacklistKey, const char *whitelistKey, ParseFunc parseFunc) {
-    if (sdk_behavior_settings.contains(blacklistKey)) {
+    T blacklist = sdk_behavior_settings.contains(blacklistKey) ? parseFunc(sdk_behavior_settings[blacklistKey]) : T();
+    T whitelist = sdk_behavior_settings.contains(whitelistKey) ? parseFunc(sdk_behavior_settings[whitelistKey]) : T();
+    if (!blacklist.empty()) {
       filter.isWhitelist = false;
-      filter.filterList = parseFunc(sdk_behavior_settings[blacklistKey]);
-    } else if (sdk_behavior_settings.contains(whitelistKey)) {
+      filter.filterList = blacklist;
+    } else if (!whitelist.empty()) {
       filter.isWhitelist = true;
-      filter.filterList = parseFunc(sdk_behavior_settings[whitelistKey]);
+      filter.filterList = whitelist;
     } else {
       filter.filterList.clear();
       filter.isWhitelist = false;
     }
   }
 
-  void _fetchConfigFromServerHTTP(const std::map<std::string, std::string> &data, const nlohmann::json &session_params) {
+  /**
+   * Fetches the settings for the device ID in use, and again while another fetch was asked for during it.
+   */
+  void _fetchLoop() {
+    do {
+      fetchAgain = false;
+      _fetchConfigFromServerHTTP();
+    } while (fetchAgain.load());
+    fetchRunning = false;
+  }
+
+  /**
+   * Whether the answer is a valid settings answer: a JSON object with a numeric "v", a numeric "t" and an object "c".
+   */
+  static bool isValidAnswer(const nlohmann::json &answer) {
+    return answer.is_object() && answer.contains(KEY_VERSION) && answer[KEY_VERSION].is_number() && answer.contains(KEY_TIMESTAMP) && answer[KEY_TIMESTAMP].is_number() && answer.contains(KEY_CONFIG) && answer[KEY_CONFIG].is_object();
+  }
+
+  void _fetchConfigFromServerHTTP() {
     try {
-      HTTPResponse response = _requestModule->sendHTTP("/o/sdk", _requestBuilder->buildFetchRequest(data));
-      if (response.success && response.data.is_object() && response.data.contains(KEY_CONFIG)) {
+      std::map<std::string, std::string> data;
+      {
+        std::lock_guard<std::mutex> mutexLock(*_mutex);
+        data = {{"method", "sc"}, {"app_key", _configuration->appKey}, {"device_id", _configuration->deviceId}};
+      }
+      HTTPResponse response = _requestModule->sendImmediate("/o/sdk", _requestBuilder->buildRequest(data));
+      if (response.success && isValidAnswer(response.data)) {
         nlohmann::json changedSettings;
         {
           std::lock_guard<std::mutex> lock(sbsMutex);
-          sanitizeConfig(response.data[KEY_CONFIG]);
-          sdk_behavior_settings = response.data[KEY_CONFIG];
+          nlohmann::json settings = response.data[KEY_CONFIG];
+          sanitizeConfig(settings);
+          sdk_behavior_settings = settings;
           _storageModule->storeSDKBehaviorSettings(sdk_behavior_settings.dump());
           _logger->log(LogLevel::INFO, "[Countly] [ConfigurationModule] _fetchConfigFromServerHTTP, SDK config:\n" + sdk_behavior_settings.dump(2));
           changedSettings = _populateConfigValues();
         }
-        _onSBSChanged(changedSettings, session_params);
+        _onSBSChanged(changedSettings);
       } else {
-        _logger->log(LogLevel::WARNING,
-                     "[Countly] [ConfigurationModule] _fetchConfigFromServerHTTP, failed to fetch."
-                     " success=" +
-                         std::string(response.success ? "true" : "false") + ", is_object=" + std::string(response.data.is_object() ? "true" : "false") +
-                         ", has_config=" + std::string((response.data.is_object() && response.data.contains(KEY_CONFIG)) ? "true" : "false") + ", response=" + response.data.dump());
+        _logger->log(LogLevel::DEBUG, "[Countly] [ConfigurationModule] _fetchConfigFromServerHTTP, the settings could not be fetched, the ones in use stay. success=" + std::string(response.success ? "true" : "false") + ", response=" + response.data.dump());
       }
     } catch (const std::exception &e) {
       _logger->log(LogLevel::ERROR, "[Countly] [ConfigurationModule] _fetchConfigFromServerHTTP, exception: [" + std::string(e.what()) + "]");
@@ -181,9 +216,13 @@ public:
       _logger->log(LogLevel::INFO, "[Countly] [ConfigurationModule] _initializeSBSFromStorage, initialized SDK behavior settings from storage.");
       return changed;
     } else if (!_configuration->sdkBehaviorSettings.empty()) {
-      nlohmann::json changed = _processSDKBehaviorSettings(_configuration->sdkBehaviorSettings);
-      // Persist the provided SBS so it's available on future re-inits
-      _storageModule->storeSDKBehaviorSettings(sdk_behavior_settings.dump());
+      const nlohmann::json provided = nlohmann::json::parse(_configuration->sdkBehaviorSettings, nullptr, false);
+      if (provided.is_discarded() || !provided.is_object()) {
+        _logger->log(LogLevel::WARNING, "[Countly] [ConfigurationModule] _initializeSBSFromStorage, The provided SDK behavior settings are not a JSON object and are ignored.");
+        return nlohmann::json{};
+      }
+      const nlohmann::json settings = provided.contains(KEY_CONFIG) && provided[KEY_CONFIG].is_object() ? provided[KEY_CONFIG] : provided;
+      nlohmann::json changed = _processSDKBehaviorSettings(settings.dump());
       _logger->log(LogLevel::INFO, "[Countly] [ConfigurationModule] _initializeSBSFromStorage, initialized SDK behavior settings from configuration.");
       return changed;
     }
@@ -200,6 +239,9 @@ public:
     maxBreadcrumbCount.store(_configuration->breadcrumbsThreshold, std::memory_order_release);
     maxStackTraceLinesPerThread.store(_configuration->maxStackTraceLinesPerThread, std::memory_order_release);
     maxStackTraceLineLength.store(_configuration->maxStackTraceLineLength, std::memory_order_release);
+
+    requestDropAgeHours.store(_configuration->requestDropAgeHours, std::memory_order_release);
+    backoffEnabled.store(_configuration->backoffMechanismEnabled, std::memory_order_release);
   }
 
   nlohmann::json _processSDKBehaviorSettings(const std::string &settings) {
@@ -228,23 +270,25 @@ public:
       _cly->ConsentRequirementChanged();
     }
 
-    if (changedSettings.contains(KEY_LOCATION_TRACKING) && changedSettings[KEY_LOCATION_TRACKING] == false) {
-      // disable location - safe because _onSBSChanged is called outside of _mutex
-      _cly->RecordLocation("", "", "", "");
+    if (changedSettings.contains(KEY_LOCATION_TRACKING)) {
+      // safe because _onSBSChanged is called outside of _mutex
+      _cly->LocationSettingChanged();
     }
   }
 
   nlohmann::json _populateConfigValues() {
-    bool trackingEnabledVal = trackingEnabled.load(std::memory_order_acquire);
-    bool networkingEnabledVal = networkingEnabled.load(std::memory_order_acquire);
-    bool sessionTrackingEnabledVal = sessionTrackingEnabled.load(std::memory_order_acquire);
-    bool viewTrackingEnabledVal = viewTrackingEnabled.load(std::memory_order_acquire);
-    bool locationTrackingEnabledVal = locationTrackingEnabled.load(std::memory_order_acquire);
-    bool customEventTrackingEnabledVal = customEventTrackingEnabled.load(std::memory_order_acquire);
-    bool crashReportingEnabledVal = crashReportingEnabled.load(std::memory_order_acquire);
     unsigned int serverConfigUpdateIntervalVal = serverConfigUpdateInterval.load(std::memory_order_acquire);
 
-    bool locationTrackingCurrent = getBool(KEY_LOCATION_TRACKING, locationTrackingEnabledVal);
+    bool locationTrackingCurrent = getBool(KEY_LOCATION_TRACKING, true);
+    const int previousServerLocation = serverLocationTracking.load(std::memory_order_acquire);
+    int serverLocation = -1;
+    if (sdk_behavior_settings.is_object()) {
+      nlohmann::json::const_iterator locationSetting = sdk_behavior_settings.find(KEY_LOCATION_TRACKING);
+      if (locationSetting != sdk_behavior_settings.end() && locationSetting->is_boolean()) {
+        serverLocation = locationSetting->get<bool>() ? 1 : 0;
+      }
+    }
+    serverLocationTracking.store(serverLocation, std::memory_order_release);
     unsigned int serverConfigUpdateIntervalCurrent = getUInt(KEY_SERVER_CONFIG_UPDATE_INTERVAL, serverConfigUpdateIntervalVal);
     int consentRequiredVal = consentRequired.load(std::memory_order_acquire);
     int consentRequiredCurrent = -1;
@@ -256,13 +300,13 @@ public:
     }
     consentRequired.store(consentRequiredCurrent, std::memory_order_release);
 
-    trackingEnabled.store(getBool(KEY_TRACKING, trackingEnabledVal), std::memory_order_release);
-    networkingEnabled.store(getBool(KEY_NETWORKING, networkingEnabledVal), std::memory_order_release);
-    sessionTrackingEnabled.store(getBool(KEY_SESSION_TRACKING, sessionTrackingEnabledVal), std::memory_order_release);
-    viewTrackingEnabled.store(getBool(KEY_VIEW_TRACKING, viewTrackingEnabledVal), std::memory_order_release);
+    trackingEnabled.store(getBool(KEY_TRACKING, true), std::memory_order_release);
+    networkingEnabled.store(getBool(KEY_NETWORKING, true), std::memory_order_release);
+    sessionTrackingEnabled.store(getBool(KEY_SESSION_TRACKING, true), std::memory_order_release);
+    viewTrackingEnabled.store(getBool(KEY_VIEW_TRACKING, true), std::memory_order_release);
     locationTrackingEnabled.store(locationTrackingCurrent, std::memory_order_release);
-    customEventTrackingEnabled.store(getBool(KEY_CUSTOM_EVENT_TRACKING, customEventTrackingEnabledVal), std::memory_order_release);
-    crashReportingEnabled.store(getBool(KEY_CRASH_REPORTING, crashReportingEnabledVal), std::memory_order_release);
+    customEventTrackingEnabled.store(getBool(KEY_CUSTOM_EVENT_TRACKING, true), std::memory_order_release);
+    crashReportingEnabled.store(getBool(KEY_CRASH_REPORTING, true), std::memory_order_release);
     eventQueueThreshold.store(getUInt(KEY_EVENT_QUEUE_SIZE, 0), std::memory_order_release);
 
     unsigned int rqs = getUInt(KEY_REQ_QUEUE_SIZE, _configuration->requestQueueThreshold);
@@ -280,8 +324,6 @@ public:
     unsigned int scui = getUInt(KEY_SERVER_CONFIG_UPDATE_INTERVAL, 4);
     if (scui < 1) {
       scui = 4;
-    } else if (scui > 720) {
-      scui = 720; // cap at 30 days
     }
     serverConfigUpdateInterval.store(scui, std::memory_order_release);
 
@@ -307,9 +349,23 @@ public:
     maxStackTraceLinesPerThread.store(readLimit(KEY_LIMIT_TRACE_LINE, _configuration->maxStackTraceLinesPerThread), std::memory_order_release);
     maxStackTraceLineLength.store(readLimit(KEY_LIMIT_TRACE_LENGTH, _configuration->maxStackTraceLineLength), std::memory_order_release);
 
+    requestDropAgeHours.store(getUInt(KEY_DROP_OLD_REQUEST_TIME, _configuration->requestDropAgeHours), std::memory_order_release);
+    backoffEnabled.store(getBool(KEY_BACKOFF_MECHANISM, _configuration->backoffMechanismEnabled), std::memory_order_release);
+    backoffAcceptedTimeout.store(readLimit(KEY_BOM_ACCEPTED_TIMEOUT, 10), std::memory_order_release);
+    backoffRequestAge.store(readLimit(KEY_BOM_REQUEST_AGE, 24), std::memory_order_release);
+    backoffDuration.store(readLimit(KEY_BOM_DURATION, 60), std::memory_order_release);
+    double queuePercentage = 0.5;
+    if (sdk_behavior_settings.is_object()) {
+      nlohmann::json::const_iterator setting = sdk_behavior_settings.find(KEY_BOM_RQ_PERCENTAGE);
+      if (setting != sdk_behavior_settings.end() && setting->is_number()) {
+        queuePercentage = setting->get<double>();
+      }
+    }
+    backoffRequestQueuePercentage.store(queuePercentage, std::memory_order_release);
+
     nlohmann::json changedSettings;
-    if (locationTrackingCurrent != locationTrackingEnabledVal) {
-      changedSettings[KEY_LOCATION_TRACKING] = locationTrackingCurrent;
+    if (serverLocation != previousServerLocation) {
+      changedSettings[KEY_LOCATION_TRACKING] = serverLocation;
     }
     if (serverConfigUpdateIntervalCurrent != serverConfigUpdateIntervalVal) {
       changedSettings[KEY_SERVER_CONFIG_UPDATE_INTERVAL] = serverConfigUpdateIntervalCurrent;
@@ -329,29 +385,33 @@ public:
     for (auto it = c.begin(); it != c.end();) {
       std::string key = it.key();
       auto value = it.value();
+      bool known = true;
+      bool valid = true;
       if (key == KEY_REQ_QUEUE_SIZE || key == KEY_EVENT_QUEUE_SIZE || key == KEY_SESSION_UPDATE_INTERVAL || key == KEY_LIMIT_KEY_LENGTH || key == KEY_LIMIT_VALUE_SIZE || key == KEY_LIMIT_SEG_VALUES || key == KEY_LIMIT_BREADCRUMB || key == KEY_LIMIT_TRACE_LINE || key == KEY_LIMIT_TRACE_LENGTH ||
-          key == KEY_USER_PROPERTY_CACHE_LIMIT || key == KEY_DROP_OLD_REQUEST_TIME || key == KEY_SERVER_CONFIG_UPDATE_INTERVAL) {
-        if (!value.is_number_unsigned()) {
-          it = c.erase(it);
-          continue;
-        }
-      } else if (key == KEY_TRACKING || key == KEY_NETWORKING || key == KEY_LOGGING || key == KEY_SESSION_TRACKING || key == KEY_VIEW_TRACKING || key == KEY_LOCATION_TRACKING || key == KEY_CUSTOM_EVENT_TRACKING || key == KEY_CONSENT_REQUIRED || key == KEY_CRASH_REPORTING) {
-        if (!value.is_boolean()) {
-          it = c.erase(it);
-          continue;
-        }
+          key == KEY_USER_PROPERTY_CACHE_LIMIT || key == KEY_SERVER_CONFIG_UPDATE_INTERVAL || key == KEY_BOM_ACCEPTED_TIMEOUT || key == KEY_BOM_REQUEST_AGE || key == KEY_BOM_DURATION) {
+        valid = value.is_number_unsigned() && value.get<unsigned long long>() >= 1 && value.get<unsigned long long>() <= UINT_MAX;
+      } else if (key == KEY_DROP_OLD_REQUEST_TIME) {
+        valid = value.is_number_unsigned() && value.get<unsigned long long>() <= UINT_MAX;
+      } else if (key == KEY_BOM_RQ_PERCENTAGE) {
+        valid = value.is_number() && value.get<double>() > 0 && value.get<double>() <= 1;
+      } else if (key == KEY_TRACKING || key == KEY_NETWORKING || key == KEY_LOGGING || key == KEY_SESSION_TRACKING || key == KEY_VIEW_TRACKING || key == KEY_LOCATION_TRACKING || key == KEY_CUSTOM_EVENT_TRACKING || key == KEY_CONSENT_REQUIRED || key == KEY_CRASH_REPORTING || key == KEY_BACKOFF_MECHANISM) {
+        valid = value.is_boolean();
       } else if (key == KEY_EVENT_BLACKLIST || key == KEY_USER_PROPERTY_BLACKLIST || key == KEY_SEGMENTATION_BLACKLIST || key == KEY_EVENT_WHITELIST || key == KEY_USER_PROPERTY_WHITELIST || key == KEY_SEGMENTATION_WHITELIST) {
-        if (!value.is_array()) {
-          it = c.erase(it);
-          continue;
-        }
+        valid = value.is_array();
       } else if (key == KEY_EVENT_SEGMENTATION_BLACKLIST || key == KEY_EVENT_SEGMENTATION_WHITELIST) {
-        if (!value.is_object()) {
-          it = c.erase(it);
-          continue;
-        }
+        valid = value.is_object();
       } else {
+        known = false;
+      }
+
+      if (!known) {
         _logger->log(LogLevel::DEBUG, "[Countly] [ConfigurationModule] sanitizeConfig, removing unknown key: [" + key + "]");
+        it = c.erase(it);
+        continue;
+      }
+      if (!valid) {
+        _logger->log(LogLevel::WARNING, "[Countly] [ConfigurationModule] sanitizeConfig, The SDK behavior setting [" + key + "] has an invalid value [" + value.dump() + "] and is ignored.");
+        _logger->recordLogCode("w121");
         it = c.erase(it);
         continue;
       }
@@ -372,7 +432,8 @@ public:
           interval = 4;
         }
 
-        auto deadline = std::chrono::steady_clock::now() + std::chrono::hours(interval);
+        // about 11 years at most, so that a huge interval can't overflow the clock
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::hours(std::min(interval, 100000u));
         bool stopped = configUpdateCv.wait_until(lock, deadline, [&] { return stopConfigThread.load(std::memory_order_acquire); });
         if (stopped) {
           return;
@@ -383,12 +444,7 @@ public:
         }
 
         lock.unlock();
-        std::map<std::string, std::string> data;
-        {
-          std::lock_guard<std::mutex> mutexLock(*_mutex);
-          data = {{"method", "sc"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
-        }
-        _fetchConfigFromServerHTTP(data, session_params);
+        _fetchConfigFromServerHTTP();
         lock.lock();
       } catch (const std::exception &e) {
         _logger->log(LogLevel::ERROR, "[Countly] [ConfigurationModule] _updateConfigPeriodically, exception: [" + std::string(e.what()) + "]");
@@ -480,18 +536,20 @@ ConfigurationModule::ConfigurationModule(cly::CountlyDelegates *cly, std::shared
 ConfigurationModule::~ConfigurationModule() { impl.reset(); }
 
 void ConfigurationModule::fetchConfigFromServer(nlohmann::json session_params) {
-  // Join any previous fetch thread before starting a new one
+  (void)session_params;
+  if (impl->_configuration->sdkBehaviorSettingsUpdatesDisabled) {
+    impl->_logger->log(LogLevel::DEBUG, "[Countly] [ConfigurationModule] fetchConfigFromServer, SDK behavior settings updates are disabled.");
+    return;
+  }
+  if (impl->fetchRunning.exchange(true)) {
+    impl->fetchAgain = true;
+    return;
+  }
+  // the previous fetch thread has finished, so this returns at once
   if (impl->configFetchThread.joinable()) {
     impl->configFetchThread.join();
   }
-
-  std::map<std::string, std::string> data;
-  {
-    std::lock_guard<std::mutex> lock(*impl->_mutex);
-    data = {{"method", "sc"}, {"app_key", session_params["app_key"].get<std::string>()}, {"device_id", session_params["device_id"].get<std::string>()}};
-  }
-
-  impl->configFetchThread = std::thread(&ConfigurationModule::ConfigurationModuleImpl::_fetchConfigFromServerHTTP, impl.get(), data, session_params);
+  impl->configFetchThread = std::thread(&ConfigurationModule::ConfigurationModuleImpl::_fetchLoop, impl.get());
 }
 
 void ConfigurationModule::fetchConfigFromStorage() {
@@ -517,6 +575,8 @@ bool ConfigurationModule::isNetworkingEnabled() const { return impl->networkingE
 
 bool ConfigurationModule::isLocationTrackingEnabled() { return impl->locationTrackingEnabled.load(std::memory_order_acquire); }
 
+int ConfigurationModule::getServerLocationTracking() const { return impl->serverLocationTracking.load(std::memory_order_acquire); }
+
 bool ConfigurationModule::isViewTrackingEnabled() const { return impl->viewTrackingEnabled.load(std::memory_order_acquire); }
 
 bool ConfigurationModule::isSessionTrackingEnabled() { return impl->sessionTrackingEnabled.load(std::memory_order_acquire); }
@@ -528,6 +588,18 @@ bool ConfigurationModule::isCrashReportingEnabled() const { return impl->crashRe
 int ConfigurationModule::getConsentRequired() const { return impl->consentRequired.load(std::memory_order_acquire); }
 
 unsigned int ConfigurationModule::getRequestQueueSizeLimit() const { return impl->requestQueueSizeLimit.load(std::memory_order_acquire); }
+
+unsigned int ConfigurationModule::getRequestDropAgeHours() const { return impl->requestDropAgeHours.load(std::memory_order_acquire); }
+
+bool ConfigurationModule::isBackoffEnabled() const { return impl->backoffEnabled.load(std::memory_order_acquire); }
+
+unsigned int ConfigurationModule::getBackoffAcceptedTimeout() const { return impl->backoffAcceptedTimeout.load(std::memory_order_acquire); }
+
+double ConfigurationModule::getBackoffRequestQueuePercentage() const { return impl->backoffRequestQueuePercentage.load(std::memory_order_acquire); }
+
+unsigned int ConfigurationModule::getBackoffRequestAge() const { return impl->backoffRequestAge.load(std::memory_order_acquire); }
+
+unsigned int ConfigurationModule::getBackoffDuration() const { return impl->backoffDuration.load(std::memory_order_acquire); }
 
 SDKLimits ConfigurationModule::getLimits() const {
   SDKLimits lim;

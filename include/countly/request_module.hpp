@@ -1,5 +1,6 @@
 #ifndef REQUEST_MODULE_HPP_
 #define REQUEST_MODULE_HPP_
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -21,6 +22,16 @@ public:
   HTTPResponse sendHTTP(std::string path, std::string data);
 
   /**
+   * Sends a request that does not go through the request queue, such as a remote config download or the health
+   * check, with the number of queued requests as "rr".
+   *
+   * @param path: endpoint path, for example "/o/sdk"
+   * @param data: the request built with the base request parameters
+   * @return the server's answer
+   */
+  HTTPResponse sendImmediate(const std::string &path, const std::string &data);
+
+  /**
    * SDK central execution call for processing requests in the request queue.
    * Only one sender is active at a time. Requests are processed in order.
    */
@@ -38,6 +49,12 @@ public:
 
   long long RQSize();
   void setConfigurationProvider(std::weak_ptr<ConfigurationProvider> provider); // try injecting
+
+  /**
+   * Sets what runs after a queued merge request (one with "old_device_id") was delivered, on the thread that sent
+   * it and without the instance mutex held.
+   */
+  void setOnMergeDelivered(std::function<void()> callback);
 
   /**
    * Process-wide network initialisation. Idempotent and harmless to call at any

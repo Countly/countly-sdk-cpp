@@ -1,5 +1,13 @@
 ## XX.XX.XX
 - ! Minor breaking change ! The "Consent required" option of the SDK Behavior Settings now applies. While it is on, the SDK collects nothing until the app gives consent; while it is off, the SDK works as if every consent were given, also in apps that require consent.
+- ! Minor breaking change ! Every request is now sent as POST, with its data in the request body. A client set with `setHTTPClient` gets `usePost` true for every request and must support POST. `alwaysUsePost` is deprecated and has no effect.
+- ! Minor breaking change ! `start()` now refuses a server URL without `http://` or `https://` or without a host, an empty app key and the placeholder `YOUR_APP_KEY`: it logs an error and the SDK stays off. Before, a URL without a scheme was used over plain HTTP.
+- ! Minor breaking change ! Recorded events are now sent on the session update interval (60 seconds by default) or when the event queue threshold is reached, instead of every 3 seconds. `flushEvents()` moves them into a request right away.
+- ! Minor breaking change ! `beginSession`, `updateSession` and `endSession` now work only with `enableManualSessionControl()`; with automatic sessions they are ignored with a warning. A manual `updateSession()` now always reports the session duration, also when called sooner than the session update interval.
+- ! Minor breaking change ! Remote config downloads now use the current remote config request and no longer enroll the user in A/B tests; call `enrollABOnRCDownload()` before `start()` to keep enrolling. With `enableRemoteConfig()`, values are downloaded at the end of `start()`, after a device ID change and when the consent is given, instead of at every session start.
+- ! Minor breaking change ! Config values below their minimum are now ignored with a warning instead of being raised: 0 for the internal limits, `setMaxRequestQueueSize` and `setAutomaticSessionUpdateInterval`, and values below 1 for `setEventsToRQThreshold`. `setEventsToRQThreshold` also keeps values above 10000; the event queue still sends at 1000 events.
+- ! Minor breaking change ! `setLocation` no longer uses values that don't fit their form, such as a lower case country code, coordinates that are not decimal degrees or an invalid IP address; it logs a warning for each.
+- ! Minor breaking change ! SQLite builds now keep the device ID in use between starts, and at `start()` a stored device ID wins: a different device ID given with `setDeviceID` before `start()` is ignored with a warning. To use the given device ID, call `enableClearStoredDeviceID()` before `start()`, or change the device ID with `setDeviceID` after `start()`.
 
 - Added user consent. With `setRequiresConsent(true)` a feature works only after its consent is given, at start with `setConsentEnabled` or later with `giveConsent`, `giveConsentAll` or `setConsent`, and stops when the consent is removed with `removeConsent`, `removeConsentAll` or `setConsent`. The SDK sends every change to the server. The feature names are in `cly::consent`, and `cly::consent::allFeatures()` lists them all. `createFeatureGroup` and `setConsentFeatureGroup` handle groups of features; `getConsent` and `checkAllConsent` show the current state.
 - While consent is required, changing the device ID without merge removes all consent, so the app gives it again for the new user.
@@ -9,10 +17,48 @@
 - Added `disableHealthCheck()` for turning off the health check request.
 - Added `status_code` and `body` to `HTTPResponse`. A custom HTTP client can fill them so that the health check reports the last request the server refused; a client that leaves them empty works as before.
 - Calls made before `start()`, a second `start()`, beginning a session that already runs and ending one that does not are now logged at warning level. Failed and non-JSON server answers, and session calls ignored because the SDK Behavior Settings turned session tracking off, are now logged at debug level.
+- Added device ID generation: when no device ID is stored and the app gives none before `start()`, the SDK generates one. `getDeviceID()` and `getDeviceIDType()` return the device ID in use and where it came from. Every request carries the device ID type (`t`).
+- Added `enableClearStoredDeviceID()` for replacing the stored device ID at `start()` with the given or a newly generated one. The events the stored user left are first sent under the stored device ID. It is meant for testing and forced user resets: left on, every start creates a new user.
+- Added the app version (`av`) and the number of waiting requests (`rr`) to every request.
+- Added the operating system name and version (`_os`, `_os_version`) to the device metrics the SDK sends; values given with `setMetrics` still win.
+- Added event IDs: every event carries its own ID and the current view (`cvid`), custom events the previous custom event (`peid`), view events the previous view (`pvid`) and the platform (`segment`), and crash reports the current view (`_cvid`).
+- Added `setFailedRequestCooldown`: a failed request is tried again after this cool-down, 60 seconds by default, instead of on every update.
+- Added `setRequestDropAgeHours` and the server's "dort" setting for dropping stored requests older than the given age.
+- Added the backoff mechanism: when the server answers slowly, sending pauses for a while. `disableBackoffMechanism()` turns it off, and the SDK Behavior Settings can configure it.
+- Added gradual trimming of a request queue far over its size limit, at most 100 requests at a time; `disableGradualRequestCleaner()` drops the whole overflow at once.
+- Added `setCrashFilterCallback` for changing or dropping crash reports before they are queued, and `setCustomCrashSegmentation` for segmentation added to every crash report.
+- Added `crash().clearBreadcrumbs()`, `views().stopAllViews()`, and segmentation for `closeViewWithName` and `closeViewWithID`.
+- Added `disableLocation()`. A location given with `setLocation` before `start()` is now used from `start()` on.
 
 - Mitigated an issue where reaching the event queue threshold logged a warning that events were dropped, although they were sent.
 - Mitigated an issue where a view that was open during a device ID change without merge was ended under the new device ID.
 - Mitigated an issue where session starts let the server work out the user's location from the IP address while the SDK Behavior Settings turned location tracking off.
+- Mitigated an issue where `start()` threw an exception when the app had set no device ID.
+- Mitigated an issue where calling `views()` or `crash()` before `start()` crashed the app.
+- Mitigated an issue where a log callback that threw an exception broke SDK calls or ended the app.
+- Mitigated an issue where a segmentation whitelist or blacklist in the SDK Behavior Settings removed the names of views, so the views were missing from the dashboard.
+- Mitigated an issue where, while the SDK Behavior Settings turned session tracking off, setting user details or changing the device ID blocked for 15 seconds and then deleted the waiting events, and a running session never ended.
+- Mitigated an issue where any 2xx answer, such as a proxy's HTML page, counted as delivered, so the request was deleted.
+- Mitigated an issue where a negative event count was sent as a very large number. Counts below 1 now become 1, and events with an empty key are ignored, with a warning.
+- Mitigated an issue where an empty device ID was accepted and the server rejected every request.
+- Mitigated an issue where `stop()` left the session open; it now sends the waiting events and ends the session before the SDK stops.
+- Mitigated an issue where sessions were not updated and events were not sent until 100 were waiting when `start()` was called without its last parameter.
+- Mitigated an issue where crash reports lacked the operating system and app version, so the server rejected them. A crash without a stack trace is now ignored with a warning.
+- Mitigated an issue where breadcrumbs stayed after a crash and appeared in the next crash report.
+- Mitigated an issue where an event timed with `startTimer` and `stopTimer` was recorded at its start instead of its end.
+- Mitigated an issue where only the first view after `start()` was marked as the first view of a session, also without a running session.
+- Mitigated an issue where custom view segmentation could replace the view's own keys, and `closeViewWithName` closed any one of several views with that name instead of the last one started.
+- Mitigated an issue where a setting removed from the SDK Behavior Settings kept its last server value until the next start.
+- Mitigated an issue where an empty blacklist in the SDK Behavior Settings switched off the matching whitelist.
+- Mitigated an issue where events with a `[CLY]_` key the SDK does not know skipped the custom event switch, the event filters and the size limits.
+- Mitigated an issue where `setSDKBehaviorSettings` ignored settings given as a copied server answer, and kept the given settings like a server answer for later starts.
+- Mitigated an issue where `disableSDKBehaviorSettingsUpdates()` still let one settings request go out at start.
+- Mitigated an issue where the periodic settings fetch used the device ID from `start()`. The settings are now also fetched after a device ID change.
+- Mitigated an issue where remote config values downloaded for the previous user stayed after a device ID change.
+- Mitigated an issue where a separate location request carried the IP address.
+- Mitigated an issue where values cut to the internal limits were not logged.
+- Mitigated an issue where `setUserDetails` and `setCustomUserDetails` called before `start()` logged that the call was ignored, although the details are sent with the first session.
+- Mitigated an issue where a C++ standard set with `CMAKE_CXX_STANDARD`, for example by a Conan profile, was ignored and the SDK was always compiled as C++14. C++14 stays the default and the minimum.
 
 ## 26.8.1
 - ! Minor breaking change ! Builds now stop with a clear error when the SDK headers find a nlohmann/json older than 3.11 first on the include path, instead of mixing two versions of the library.

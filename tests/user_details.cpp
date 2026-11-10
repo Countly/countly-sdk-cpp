@@ -41,7 +41,6 @@ static void startForUserDetails(Countly &countly, const json &sbs = json::object
   countly.SetPath(TEST_DATABASE_NAME);
   countly.enableManualSessionControl();
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-  waitForConfigFetch();
   countly.clearRequestQueue();
   http_call_queue.clear();
 }

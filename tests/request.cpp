@@ -230,7 +230,7 @@ TEST_CASE("Requests contain the SDK name and version") {
     for (const char *clock_key : {"timestamp", "dow", "hour", "tz"}) {
       CHECK(parsed.erase(clock_key) == 1);
     }
-    CHECK(parsed == std::map<std::string, std::string>{{"app_key", "test_app_key"}, {"device_id", "test_device_id"}, {"sdk_name", EXPECTED_SDK_NAME}, {"sdk_version", COUNTLY_SDK_VERSION}});
+    CHECK(parsed == std::map<std::string, std::string>{{"app_key", "test_app_key"}, {"device_id", "test_device_id"}, {"t", "0"}, {"sdk_name", EXPECTED_SDK_NAME}, {"sdk_version", COUNTLY_SDK_VERSION}});
   }
 
   SUBCASE("a fetch request carries them and gains no other parameter") {
@@ -294,8 +294,8 @@ TEST_CASE("Every request carries the SDK name and version") {
   Countly &countly = Countly::getInstance();
   countly.setHTTPClient(test_utils::fakeSendHTTP);
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
-  // 0 makes updateSession() report the session duration now rather than after a minute
-  countly.setAutomaticSessionUpdateInterval(0);
+  // the session calls below work only with manual session control
+  countly.enableManualSessionControl();
   countly.SetPath(TEST_DATABASE_NAME);
   // Only processRQDebug() sends: the update loop sleeps through the test, and immediate stop still ends it at once
   countly.enableImmediateRequestOnStop();
@@ -304,8 +304,9 @@ TEST_CASE("Every request carries the SDK name and version") {
   // Both fetches run on threads of their own, so each is awaited to keep the order fixed
   REQUIRE(waitForRequestWith("method", "sc"));
   countly.updateRemoteConfig();
-  REQUIRE(waitForRequestWith("method", "fetch_remote_config"));
+  REQUIRE(waitForRequestWith("method", "rc"));
 
+  countly.beginSession();
   countly.addEvent(cly::Event("click", 1));
   countly.updateSession();
   countly.setUserDetails({{"name", "Jane Doe"}});
@@ -314,15 +315,35 @@ TEST_CASE("Every request carries the SDK name and version") {
   countly.setDeviceID("merged-device-id", true);
   countly.endSession();
   countly.processRQDebug();
+  // once the merge request was delivered, the settings are fetched for the merged user
+  const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (test_utils::http_call_queue.size() < 11 && std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
 
-  std::vector<std::string> kinds;
+  std::vector<std::string> queued;
+  std::vector<std::string> fetches;
+  size_t merge_index = 0;
+  size_t last_fetch_index = 0;
   for (size_t index = 0; index < test_utils::http_call_queue.size(); index++) {
     test_utils::HTTPCall call = test_utils::http_call_queue.at(index);
-    kinds.push_back(requestKind(call));
+    const std::string kind = requestKind(call);
+    if (call.url == "/o/sdk") {
+      fetches.push_back(kind);
+      last_fetch_index = index;
+    } else {
+      queued.push_back(kind);
+    }
+    if (kind == "old_device_id") {
+      merge_index = index;
+    }
     CHECK(call.data["sdk_name"] == EXPECTED_SDK_NAME);
     CHECK(call.data["sdk_version"] == COUNTLY_SDK_VERSION);
   }
-  CHECK(kinds == std::vector<std::string>{"sc", "fetch_remote_config", "begin_session", "session_duration", "events", "user_details", "location", "crash", "old_device_id", "end_session"});
+  CHECK(queued == std::vector<std::string>{"begin_session", "session_duration", "events", "user_details", "location", "crash", "old_device_id", "end_session"});
+  // the fetch for the merged user runs on its own thread, so only its place after the merge request is fixed
+  CHECK(fetches == std::vector<std::string>{"sc", "rc", "sc"});
+  CHECK(last_fetch_index > merge_index);
 }
 
 /**
@@ -347,6 +368,7 @@ TEST_CASE("A request the server failed is sent again with the SDK name and versi
   countly.setHTTPClient(sendHTTPToFlakyServer);
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   countly.SetPath(TEST_DATABASE_NAME);
+  countly.setFailedRequestCooldown(1);
   // Only processRQDebug() sends: the update loop sleeps through the test, and immediate stop still ends it at once
   countly.enableImmediateRequestOnStop();
   countly.setUpdateInterval(60000);
@@ -356,10 +378,14 @@ TEST_CASE("A request the server failed is sent again with the SDK name and versi
   test_utils::http_call_queue.clear();
 
   countly.addEvent(cly::Event("click", 1));
-  countly.updateSession();
+  countly.flushEvents();
   server_fails_requests.store(true);
   countly.processRQDebug();
   server_fails_requests.store(false);
+  // a failed request is tried again only after the cool-down
+  countly.processRQDebug();
+  CHECK(test_utils::http_call_queue.size() == 1);
+  std::this_thread::sleep_for(std::chrono::milliseconds(1100));
   countly.processRQDebug();
 
   REQUIRE(test_utils::http_call_queue.size() == 2);
@@ -377,8 +403,8 @@ namespace {
 /**
  * HTTP server on 127.0.0.1 for exercising the SDK's built-in libcurl client.
  *
- * An answering server replies to every request with 200 and "{}" and records its
- * request line. A silent server accepts connections and never replies; it records
+ * An answering server replies to every request with 200 and {"result":"Success"}
+ * and records its request line and body. A silent server accepts connections and never replies; it records
  * how long each connection stayed open until the client closed it.
  */
 class LocalHTTPServer {
@@ -421,11 +447,19 @@ public:
   int port() const { return _port; }
 
   /**
-   * Request lines received so far, such as "GET /i?app_key=... HTTP/1.1".
+   * Request lines received so far, such as "POST /i HTTP/1.1".
    */
   std::vector<std::string> requestLines() const {
     std::lock_guard<std::mutex> lock(_mutex);
     return _request_lines;
+  }
+
+  /**
+   * Request bodies received so far, in the order of requestLines().
+   */
+  std::vector<std::string> requestBodies() const {
+    std::lock_guard<std::mutex> lock(_mutex);
+    return _request_bodies;
   }
 
   /**
@@ -522,9 +556,10 @@ private:
     {
       std::lock_guard<std::mutex> lock(_mutex);
       _request_lines.push_back(request.substr(0, request.find("\r\n")));
+      _request_bodies.push_back(request.substr(header_end + 4));
     }
 
-    const std::string response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}";
+    const std::string response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 20\r\nConnection: close\r\n\r\n{\"result\":\"Success\"}";
 #ifdef SO_NOSIGPIPE
     int no_sigpipe = 1;
     ::setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe, sizeof(no_sigpipe));
@@ -544,6 +579,7 @@ private:
   std::atomic<bool> _stopping{false};
   mutable std::mutex _mutex;
   std::vector<std::string> _request_lines;
+  std::vector<std::string> _request_bodies;
   std::vector<std::chrono::milliseconds> _closed_durations;
 };
 } // namespace
@@ -564,8 +600,10 @@ TEST_CASE("Built-in HTTP client") {
     const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     while (std::chrono::steady_clock::now() < deadline) {
       countly->processRQDebug();
-      for (const std::string &request_line : server.requestLines()) {
-        if (request_line.rfind("GET /i?", 0) == 0 && request_line.find("begin_session=1") != std::string::npos) {
+      const std::vector<std::string> request_lines = server.requestLines();
+      const std::vector<std::string> request_bodies = server.requestBodies();
+      for (size_t index = 0; index < request_lines.size() && index < request_bodies.size(); index++) {
+        if (request_lines[index].rfind("POST /i ", 0) == 0 && request_bodies[index].find("begin_session=1") != std::string::npos) {
           begin_session_received = true;
         }
       }
@@ -592,13 +630,15 @@ TEST_CASE("Built-in HTTP client") {
     countly->enableRemoteConfig();
     countly->start(COUNTLY_TEST_APP_KEY, "http://127.0.0.1", server.port(), false);
     countly->addEvent(cly::Event("click", 1));
-    countly->updateSession();
+    countly->flushEvents();
 
     std::vector<std::string> request_lines;
+    std::vector<std::string> request_bodies;
     const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     while (std::chrono::steady_clock::now() < deadline) {
       countly->processRQDebug();
       request_lines = server.requestLines();
+      request_bodies = server.requestBodies();
       if (request_lines.size() >= 5 && countly->checkRQSize() == 0) {
         break;
       }
@@ -610,21 +650,22 @@ TEST_CASE("Built-in HTTP client") {
     remove(database_path.c_str());
 
     std::multiset<std::string> kinds;
-    for (const std::string &request_line : request_lines) {
-      // These requests are short enough to be sent as GET, so the parameters are in the request line: "GET /o/sdk?method=sc&app_key=... HTTP/1.1"
-      REQUIRE(request_line.rfind("GET /", 0) == 0);
-      const std::string::size_type path_start = 4;
-      const std::string::size_type query_start = request_line.find('?');
-      const std::string::size_type query_end = request_line.rfind(' ');
-      REQUIRE(query_start != std::string::npos);
-      REQUIRE(query_end > query_start);
+    REQUIRE(request_bodies.size() == request_lines.size());
+    for (size_t index = 0; index < request_lines.size(); index++) {
+      // Every request is a POST with its parameters in the body, and only the path in the request line: "POST /o/sdk HTTP/1.1"
+      const std::string &request_line = request_lines[index];
+      REQUIRE(request_line.rfind("POST /", 0) == 0);
+      const std::string::size_type path_start = 5;
+      const std::string::size_type path_end = request_line.rfind(' ');
+      REQUIRE(path_end > path_start);
+      CHECK(request_line.find('?') == std::string::npos);
 
-      test_utils::HTTPCall call{false, request_line.substr(path_start, query_start - path_start), parseRequest(request_line.substr(query_start + 1, query_end - query_start - 1))};
+      test_utils::HTTPCall call{true, request_line.substr(path_start, path_end - path_start), parseRequest(request_bodies[index])};
       kinds.insert(requestKind(call));
       CHECK(call.data["sdk_name"] == EXPECTED_SDK_NAME);
       CHECK(call.data["sdk_version"] == COUNTLY_SDK_VERSION);
     }
-    CHECK(kinds == std::multiset<std::string>{"sc", "fetch_remote_config", "begin_session", "events", "hc"});
+    CHECK(kinds == std::multiset<std::string>{"sc", "rc", "begin_session", "events", "hc"});
   }
 
   SUBCASE("a request to a server that never answers is given up after the request timeout") {

@@ -527,7 +527,6 @@ private:
     QTextEdit *sbsJsonEdit = nullptr;
     QCheckBox *manualSessionCheck = nullptr;
     QCheckBox *disableSBSCheck = nullptr;
-    QCheckBox *alwaysPostCheck = nullptr;
     QCheckBox *enableRemoteConfigCheck = nullptr;
     QCheckBox *disableAutoEventsOnUPCheck = nullptr;
     QLineEdit *saltEdit = nullptr;
@@ -757,9 +756,6 @@ private:
 
         disableSBSCheck = new QCheckBox("Disable SBS Updates");
         optLayout->addWidget(disableSBSCheck);
-
-        alwaysPostCheck = new QCheckBox("Always Use POST");
-        optLayout->addWidget(alwaysPostCheck);
 
         enableRemoteConfigCheck = new QCheckBox("Enable Remote Config");
         optLayout->addWidget(enableRemoteConfigCheck);
@@ -1478,7 +1474,6 @@ private:
         sbsJsonEdit->setText(QString::fromStdString(dc.sbsJson));
         manualSessionCheck->setChecked(dc.manualSession);
         disableSBSCheck->setChecked(dc.disableSBSUpdates);
-        alwaysPostCheck->setChecked(dc.alwaysPost);
         enableRemoteConfigCheck->setChecked(dc.enableRemoteConfig);
         disableAutoEventsOnUPCheck->setChecked(dc.disableAutoEventsOnUP);
         logMsg("[App] Dev config loaded.");
@@ -1497,7 +1492,6 @@ private:
         std::string sbsJson = sbsJsonEdit->toPlainText().trimmed().toStdString();
         bool manualSession = manualSessionCheck->isChecked();
         bool disableSBS = disableSBSCheck->isChecked();
-        bool usePost = alwaysPostCheck->isChecked();
 
         if (serverUrl.empty() || appKey.empty()) {
             logMsg("[App] Server URL and App Key are required.");
@@ -1548,11 +1542,6 @@ private:
             if (!sbsJson.empty()) {
                 countly.setSDKBehaviorSettings(sbsJson);
                 logMsg("[App]   SBS JSON provided: " + sbsJson);
-            }
-
-            if (usePost) {
-                countly.alwaysUsePost(true);
-                logMsg("[App]   Always POST: enabled");
             }
 
             if (enableRemoteConfigCheck->isChecked()) {

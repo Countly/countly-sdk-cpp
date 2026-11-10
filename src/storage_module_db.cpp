@@ -19,6 +19,10 @@ const char REQUESTS_TABLE_REQUEST_DATA[] = "RequestData";
 #define HEALTH_CHECK_KEY_COLUMN_NAME "Key"
 #define HEALTH_CHECK_DATA_COLUMN_NAME "StateData"
 #define HEALTH_CHECK_KEY_VALUE 1
+#define DEVICE_ID_TABLE_NAME "DeviceID"
+#define DEVICE_ID_KEY_COLUMN_NAME "Key"
+#define DEVICE_ID_DATA_COLUMN_NAME "StateData"
+#define DEVICE_ID_KEY_VALUE 1
 
 namespace cly {
 StorageModuleDB::StorageModuleDB(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger) : StorageModuleBase(config, logger) {}
@@ -37,9 +41,9 @@ void StorageModuleDB::init() {
     }
 #endif
 
-    // Create schema for the requests table, the SDK behavior settings table and the health check table
+    // Create schema for the requests table, the SDK behavior settings table, the health check table and the device ID table
     _is_initialized = createSchema(REQUESTS_TABLE_NAME, REQUESTS_TABLE_REQUEST_ID, REQUESTS_TABLE_REQUEST_DATA) && createSchema(SDK_BEHAVIOR_SETTINGS_TABLE_NAME, SDK_BEHAVIOR_SETTINGS_KEY_COLUMN_NAME, SDK_BEHAVIOR_SETTINGS_DATA_COLUMN_NAME) &&
-                      createSchema(HEALTH_CHECK_TABLE_NAME, HEALTH_CHECK_KEY_COLUMN_NAME, HEALTH_CHECK_DATA_COLUMN_NAME);
+                      createSchema(HEALTH_CHECK_TABLE_NAME, HEALTH_CHECK_KEY_COLUMN_NAME, HEALTH_CHECK_DATA_COLUMN_NAME) && createSchema(DEVICE_ID_TABLE_NAME, DEVICE_ID_KEY_COLUMN_NAME, DEVICE_ID_DATA_COLUMN_NAME);
 
     if (_is_initialized) {
       vacuumDatabase();
@@ -653,6 +657,95 @@ std::string StorageModuleDB::getHealthCheckState() {
 #endif
   } catch (const std::exception &e) {
     _logger->log(LogLevel::ERROR, std::string("[Countly] [StorageModuleDB] getHealthCheckState, exception: [") + e.what() + "]");
+    return "";
+  }
+}
+
+void StorageModuleDB::storeDeviceIdState(const std::string &state) {
+  try {
+    if (!_is_initialized) {
+      _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] storeDeviceIdState, Module is not initialized");
+      return;
+    }
+
+#ifdef COUNTLY_USE_SQLITE
+    sqlite3 *db = nullptr;
+    sqlite3_stmt *stmt = nullptr;
+
+    if (cly::utils::openDatabase(_configuration->databasePath, &db) != SQLITE_OK) {
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] storeDeviceIdState, Failed to open database");
+      _logger->recordLogCode("e501");
+      sqlite3_close(db);
+      return;
+    }
+
+    const char *sql = "INSERT OR REPLACE INTO " DEVICE_ID_TABLE_NAME " (" DEVICE_ID_KEY_COLUMN_NAME ", " DEVICE_ID_DATA_COLUMN_NAME ") VALUES (?, ?);";
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] storeDeviceIdState, Failed to prepare statement");
+      _logger->recordLogCode("e501");
+      sqlite3_close(db);
+      return;
+    }
+
+    sqlite3_bind_int(stmt, 1, DEVICE_ID_KEY_VALUE);
+    sqlite3_bind_text(stmt, 2, state.c_str(), -1, SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+      _logger->log(LogLevel::ERROR, std::string("[Countly] [StorageModuleDB] storeDeviceIdState, failed: [") + sqlite3_errmsg(db) + "]");
+      _logger->recordLogCode("e501");
+    }
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+#else
+    (void)state;
+#endif
+  } catch (const std::exception &e) {
+    _logger->log(LogLevel::ERROR, std::string("[Countly] [StorageModuleDB] storeDeviceIdState, exception: [") + e.what() + "]");
+    _logger->recordLogCode("e501");
+  }
+}
+
+std::string StorageModuleDB::getDeviceIdState() {
+  try {
+    if (!_is_initialized) {
+      _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] getDeviceIdState, Module is not initialized");
+      return "";
+    }
+
+#ifdef COUNTLY_USE_SQLITE
+    sqlite3 *db = nullptr;
+    sqlite3_stmt *stmt = nullptr;
+    std::string result;
+
+    if (cly::utils::openDatabase(_configuration->databasePath, &db) != SQLITE_OK) {
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] getDeviceIdState, Failed to open database");
+      sqlite3_close(db);
+      return "";
+    }
+
+    const char *sql = "SELECT " DEVICE_ID_DATA_COLUMN_NAME " FROM " DEVICE_ID_TABLE_NAME " WHERE " DEVICE_ID_KEY_COLUMN_NAME " = ?;";
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+      sqlite3_bind_int(stmt, 1, DEVICE_ID_KEY_VALUE);
+      if (sqlite3_step(stmt) == SQLITE_ROW) {
+        const unsigned char *text = sqlite3_column_text(stmt, 0);
+        if (text) {
+          result = reinterpret_cast<const char *>(text);
+        }
+      }
+    } else {
+      _logger->log(LogLevel::ERROR, "[Countly] [StorageModuleDB] getDeviceIdState, Failed to prepare statement");
+    }
+
+    if (stmt) {
+      sqlite3_finalize(stmt);
+    }
+    sqlite3_close(db);
+    return result;
+#else
+    return "";
+#endif
+  } catch (const std::exception &e) {
+    _logger->log(LogLevel::ERROR, std::string("[Countly] [StorageModuleDB] getDeviceIdState, exception: [") + e.what() + "]");
     return "";
   }
 }

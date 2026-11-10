@@ -49,7 +49,7 @@ TEST_CASE("recording views") {
   Countly &ct = Countly::getInstance();
   ct.SetPath(TEST_DATABASE_NAME);
   ct.setDeviceID("test-device-id");
-  ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, false);
+  ct.start(COUNTLY_TEST_APP_KEY, "https://try.count.ly", 443, false);
 
   /*
    * It validates the views recorded without segmentation.
@@ -228,7 +228,7 @@ TEST_CASE("views opened and closed from several threads at once") {
   ct.setHTTPClient(test_utils::fakeSendHTTP);
   ct.SetPath(TEST_DATABASE_NAME);
   ct.setDeviceID("test-device-id");
-  ct.start("YOUR_APP_KEY", "https://try.count.ly", 443, false);
+  ct.start(COUNTLY_TEST_APP_KEY, "https://try.count.ly", 443, false);
   // Keep every view event in the event queue so all of them can be counted.
   ct.setEventsToRQThreshold(10000);
   REQUIRE(ct.debugReturnStateOfEQ().size() == 0);
