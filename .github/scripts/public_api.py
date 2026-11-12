@@ -1,14 +1,4 @@
-"""
-Prints the public C++ API of the SDK as sorted lines, so two versions can be compared.
-
-Reads clang's JSON AST of include/countly.hpp from stdin, as written by
-`clang++ -fsyntax-only -Xclang -ast-dump=json -Xclang -ast-dump-filter=cly ...`. That output is a series
-of JSON documents, one per declaration whose name contains "cly", so a declaration can arrive more than once.
-Every public or protected declaration in namespace cly becomes one
-"<qualified name> <kind> <type> <access>" line.
-
-Usage: clang++ ... | python3 public_api.py > api.txt
-"""
+"""Prints the SDK's public C++ API as sorted "<qualified name> <kind> <type> <access>" lines, from clang's AST."""
 import json
 import sys
 
@@ -28,7 +18,7 @@ MEMBERS = {
 
 
 def documents(text):
-    """Yields each JSON document in text, which holds several documents one after another."""
+    """Yields each JSON document in text: clang's -ast-dump-filter writes one per matching declaration."""
     decoder = json.JSONDecoder()
     position = 0
     while True:
@@ -88,7 +78,8 @@ def walk(node, scope, access, lines):
 
 
 def main():
-    """Reads clang's JSON AST from stdin and prints the sorted public API lines."""
+    """Reads the JSON AST of include/countly.hpp, filtered to "cly", from stdin and prints the public API lines."""
+    # A set, because a declaration can arrive in more than one document.
     lines = set()
     for document in documents(sys.stdin.read()):
         if document.get("kind") == "NamespaceDecl" and document.get("name") == "cly":
