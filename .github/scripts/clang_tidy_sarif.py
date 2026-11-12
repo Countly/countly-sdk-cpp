@@ -1,23 +1,17 @@
-"""
-Converts clang-tidy output to a SARIF 2.1.0 file.
-
-Usage: python3 clang_tidy_sarif.py <clang-tidy output> <output.sarif>
-
-Reads the "<file>:<line>:<column>: <level>: <message> [<check>]" diagnostics and keeps one copy of each, because a
-header's findings repeat for every source file that includes it. Notes are left out: they explain the finding above.
-Paths inside the working directory are written relative to it.
-"""
+"""Converts clang-tidy output to a SARIF 2.1.0 file with one result per distinct diagnostic."""
 import json
 import pathlib
 import re
 import sys
 
+USAGE = "Usage: python3 clang_tidy_sarif.py <clang-tidy output> <output.sarif>"
+# Notes are left out: they explain the warning or error above them.
 DIAGNOSTIC = re.compile(
     r"^(?P<file>.+?):(?P<line>\d+):(?P<column>\d+): (?P<level>warning|error): (?P<message>.*) \[(?P<check>[^\]]+)\]$")
 
 
 def diagnostics(output):
-    """Yields each distinct diagnostic in the clang-tidy output as a dictionary."""
+    """Yields each distinct diagnostic once: a header's findings repeat for every source file that includes it."""
     seen = set()
     for line in output.splitlines():
         match = DIAGNOSTIC.match(line.rstrip())
@@ -72,7 +66,7 @@ def to_sarif(found):
 def main():
     """Converts the clang-tidy output file named on the command line."""
     if len(sys.argv) != 3:
-        sys.exit(__doc__)
+        sys.exit(USAGE)
     found = list(diagnostics(pathlib.Path(sys.argv[1]).read_text(errors="replace")))
     pathlib.Path(sys.argv[2]).write_text(json.dumps(to_sarif(found), indent=1))
 
