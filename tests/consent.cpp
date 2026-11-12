@@ -191,12 +191,13 @@ std::vector<json> eventsIn(const std::vector<HTTPCall> &requests) {
 }
 
 /**
- * The keys of the events waiting in the event queue, in order.
+ * The keys of the recorded events, in order: the waiting events are moved into a request and every request is sent.
  */
-std::vector<std::string> queuedEventKeys(Countly &countly) {
+std::vector<std::string> recordedEventKeys(Countly &countly) {
+  countly.flushEvents();
   std::vector<std::string> keys;
-  for (const std::string &event : countly.debugReturnStateOfEQ()) {
-    keys.push_back(json::parse(event)["key"].get<std::string>());
+  for (const json &event : eventsIn(takeRequests(countly))) {
+    keys.push_back(event["key"].get<std::string>());
   }
   return keys;
 }
@@ -866,7 +867,7 @@ TEST_CASE("consent: internal events need the consent of their own feature") {
     for (const std::string &key : keys) {
       countly.RecordEvent(key, 1);
     }
-    CHECK(queuedEventKeys(countly) == testCase.recorded);
+    CHECK(recordedEventKeys(countly) == testCase.recorded);
     clearSDK();
   }
 }

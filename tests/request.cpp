@@ -760,4 +760,79 @@ TEST_CASE("Changing the server URL with the built-in HTTP client") {
     CHECK((request_body.find("method=sc") != std::string::npos || request_body.find("hc=") != std::string::npos));
   }
 }
+/**
+ * Sends the queue until the server received a request with the text, for at most 10 seconds.
+ */
+static void sendUntilReceived(cly::Countly &countly, const LocalHTTPServer &server, const std::string &text) {
+  const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+  while (std::chrono::steady_clock::now() < deadline && !receivedRequestWith(server, text)) {
+    countly.processRQDebug();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+}
+
+TEST_CASE("Built-in HTTP client with a port or a path in the server URL") {
+  const std::string database_path = "test-countly-http.db";
+  remove(database_path.c_str());
+
+  SUBCASE("the port in the URL is used") {
+    LocalHTTPServer server(true);
+    std::shared_ptr<cly::Countly> countly = std::make_shared<cly::Countly>();
+    countly->setDeviceID(COUNTLY_TEST_DEVICE_ID);
+    countly->SetPath(database_path);
+    countly->enableImmediateRequestOnStop();
+    countly->setUpdateInterval(60000);
+    countly->start(COUNTLY_TEST_APP_KEY, "http://127.0.0.1:" + std::to_string(server.port()), 0, false);
+    sendUntilReceived(*countly, server, "begin_session=1");
+
+    countly.reset();
+    server.stop();
+    remove(database_path.c_str());
+    CHECK(receivedRequestWith(server, "begin_session=1"));
+  }
+
+  SUBCASE("a path in the URL goes in front of every endpoint") {
+    LocalHTTPServer server(true);
+    std::shared_ptr<cly::Countly> countly = std::make_shared<cly::Countly>();
+    countly->setDeviceID(COUNTLY_TEST_DEVICE_ID);
+    countly->SetPath(database_path);
+    countly->enableImmediateRequestOnStop();
+    countly->setUpdateInterval(60000);
+    countly->start(COUNTLY_TEST_APP_KEY, "http://127.0.0.1:" + std::to_string(server.port()) + "/countly/", 0, false);
+    sendUntilReceived(*countly, server, "begin_session=1");
+    sendUntilReceived(*countly, server, "method=sc");
+
+    countly.reset();
+    server.stop();
+    remove(database_path.c_str());
+    CHECK(receivedRequestWith(server, "begin_session=1"));
+    CHECK(receivedRequestWith(server, "method=sc"));
+    for (const std::string &request_line : server.requestLines()) {
+      CHECK((request_line.rfind("POST /countly/i ", 0) == 0 || request_line.rfind("POST /countly/o/sdk ", 0) == 0));
+    }
+  }
+
+  SUBCASE("changeServerUrl takes the port and the path from the URL") {
+    LocalHTTPServer first_server(true);
+    LocalHTTPServer second_server(true);
+    std::shared_ptr<cly::Countly> countly = std::make_shared<cly::Countly>();
+    countly->setDeviceID(COUNTLY_TEST_DEVICE_ID);
+    countly->SetPath(database_path);
+    countly->enableImmediateRequestOnStop();
+    countly->setUpdateInterval(60000);
+    countly->start(COUNTLY_TEST_APP_KEY, "http://127.0.0.1", first_server.port(), false);
+    countly->changeServerUrl("http://127.0.0.1:" + std::to_string(second_server.port()) + "/analytics", 0);
+    sendUntilReceived(*countly, second_server, "begin_session=1");
+
+    countly.reset();
+    first_server.stop();
+    second_server.stop();
+    remove(database_path.c_str());
+    CHECK(receivedRequestWith(second_server, "begin_session=1"));
+    for (const std::string &request_line : second_server.requestLines()) {
+      CHECK((request_line.rfind("POST /analytics/i ", 0) == 0 || request_line.rfind("POST /analytics/o/sdk ", 0) == 0));
+    }
+  }
+}
+
 #endif

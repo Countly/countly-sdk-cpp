@@ -50,6 +50,12 @@ public:
    */
   int getConsentRequired() const;
 
+  /**
+   * The server's "Automatic session tracking" setting ("ast"): -1 while the settings don't contain it, 0 when it is
+   * off, 1 when it is on.
+   */
+  int getAutomaticSessionTracking() const;
+
   unsigned int getRequestQueueSizeLimit() const override;
   unsigned int getRequestDropAgeHours() const override;
   bool isBackoffEnabled() const override;

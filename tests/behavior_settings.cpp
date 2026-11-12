@@ -224,3 +224,103 @@ TEST_CASE("Server settings with an invalid value are ignored with a warning") {
   CHECK(settingsLogCode(countly, "w121") == 5);
   CHECK(recorded(countly, "still_tracked"));
 }
+
+namespace {
+/**
+ * Prepares the default instance like prepareSettings(), with automatic sessions unless 'manual' is set.
+ */
+Countly &prepareSessionSettings(const std::string &provided, bool manual) {
+  clearSDK();
+  Countly &countly = Countly::getInstance();
+  countly.setHTTPClient(settingsClient);
+  countly.disableHealthCheck();
+  if (manual) {
+    countly.enableManualSessionControl();
+  }
+  countly.enableImmediateRequestOnStop();
+  countly.setUpdateInterval(600000);
+  countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+  countly.SetPath(TEST_DATABASE_NAME);
+  if (!provided.empty()) {
+    countly.setSDKBehaviorSettings(provided);
+  }
+  return countly;
+}
+
+/**
+ * The session requests the fake server received, in order: "begin", "update" or "end".
+ */
+std::vector<std::string> sessionRequests() {
+  std::vector<std::string> kinds;
+  for (size_t index = 0; index < http_call_queue.size(); index++) {
+    HTTPCall call = http_call_queue.at(index);
+    if (call.data.count("begin_session")) {
+      kinds.push_back("begin");
+    } else if (call.data.count("end_session")) {
+      kinds.push_back("end");
+    } else if (call.data.count("session_duration")) {
+      kinds.push_back("update");
+    }
+  }
+  return kinds;
+}
+
+/**
+ * A behavior settings answer of the server with the given settings.
+ */
+json settingsAnswer(const json &settings) { return json({{"v", 2}, {"t", 1}, {"c", settings}}); }
+} // namespace
+
+TEST_CASE("The server's automatic session tracking setting") {
+  SUBCASE("ast false: no session begins by itself, and the app's session calls work") {
+    settings_answers.reset({});
+    Countly &countly = prepareSessionSettings("{\"ast\":false}", false);
+    startSettings(countly);
+    countly.processRQDebug();
+    CHECK(sessionRequests().empty());
+
+    CHECK(countly.beginSession());
+    countly.processRQDebug();
+    CHECK(sessionRequests() == std::vector<std::string>{"begin"});
+  }
+
+  SUBCASE("ast true: the SDK tracks sessions also when the app chose manual session control") {
+    settings_answers.reset({});
+    Countly &countly = prepareSessionSettings("{\"ast\":true}", true);
+    startSettings(countly);
+
+    CHECK_FALSE(countly.beginSession());
+    countly.processRQDebug();
+    CHECK(sessionRequests() == std::vector<std::string>{"begin"});
+    CHECK(settingsLogCode(countly, "w740") == 1);
+  }
+
+  SUBCASE("ast false from the server ends the session the SDK runs") {
+    settings_answers.reset({settingsAnswer(json::object()), settingsAnswer({{"ast", false}})});
+    Countly &countly = prepareSessionSettings("", false);
+    startSettings(countly);
+    REQUIRE(waitFor([] { return settings_answers.fetches() == 1; }));
+    countly.changeServerUrl(COUNTLY_TEST_HOST, COUNTLY_TEST_PORT);
+
+    CHECK(waitFor([&countly] {
+      countly.processRQDebug();
+      return sessionRequests() == std::vector<std::string>{"begin", "end"};
+    }));
+    CHECK(countly.beginSession());
+  }
+
+  SUBCASE("ast true from the server begins a session for an app with manual session control") {
+    settings_answers.reset({settingsAnswer(json::object()), settingsAnswer({{"ast", true}})});
+    Countly &countly = prepareSessionSettings("", true);
+    startSettings(countly);
+    REQUIRE(waitFor([] { return settings_answers.fetches() == 1; }));
+    countly.processRQDebug();
+    REQUIRE(sessionRequests().empty());
+    countly.changeServerUrl(COUNTLY_TEST_HOST, COUNTLY_TEST_PORT);
+
+    CHECK(waitFor([&countly] {
+      countly.processRQDebug();
+      return sessionRequests() == std::vector<std::string>{"begin"};
+    }));
+  }
+}

@@ -34,8 +34,11 @@ public:
   /**
    * SDK central execution call for processing requests in the request queue.
    * Only one sender is active at a time. Requests are processed in order.
+   *
+   * @param closing: true for the last send of stop(), which closes by sending: it doesn't wait for a backoff pause and
+   *                 starts none, so that the waiting requests go out before the SDK stops
    */
-  void processQueue(std::shared_ptr<std::mutex> mutex);
+  void processQueue(std::shared_ptr<std::mutex> mutex, bool closing = false);
 
   void addRequestToQueue(const std::map<std::string, std::string> &data);
 
@@ -46,10 +49,11 @@ public:
   void clearRequestQueue();
 
   /**
-   * Replaces the server URL and the port that the following requests go to, the way start() sets them: a URL without
-   * a scheme gets "http://" in front, trailing slashes are removed, and a port of 0 becomes the scheme's default port.
+   * Replaces the server URL, the port and the URL path that the following requests go to, the way start() sets them:
+   * a URL without a scheme gets "http://" in front, trailing slashes are removed, and a port of 0 becomes the scheme's
+   * default port. The built-in HTTP client puts the path, such as "/countly", in front of every endpoint.
    */
-  void setServerUrl(const std::string &url, unsigned int port);
+  void setServerUrl(const std::string &url, unsigned int port, const std::string &path = std::string());
 
   /**
    * Gives every queued request the app key. The caller holds the mutex it passes to processQueue().
