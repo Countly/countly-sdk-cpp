@@ -16,6 +16,9 @@ env:
   # Cap apt timeouts so an unreachable Azure mirror costs seconds, not 20 minutes.
   APT_OPTS: -o Acquire::Retries=2 -o Acquire::http::Timeout=10
 
+permissions:
+  contents: read
+
 jobs:
   # ──────────────────────────────────────────────
   # Core matrix: OS/arch × SQLite. Builds the library,
