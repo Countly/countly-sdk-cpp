@@ -328,10 +328,11 @@ jobs:
           sudo apt-get $APT_OPTS update
           sudo apt-get $APT_OPTS install -y --no-install-recommends libcurl4-openssl-dev libssl-dev gcovr
 
+      # Atomic counters: the SDK's request thread runs beside the tests, and racing plain counters yield negative branch counts that gcovr rejects.
       - name: Build the tests with coverage
         run: |
           cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=ON -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_FLAGS=--coverage -DCMAKE_CXX_FLAGS=--coverage \
+            -DCMAKE_C_FLAGS="--coverage -fprofile-update=atomic" -DCMAKE_CXX_FLAGS="--coverage -fprofile-update=atomic" \
             -DCMAKE_EXE_LINKER_FLAGS=--coverage -DCMAKE_SHARED_LINKER_FLAGS=--coverage -B build .
           cmake --build build -j 4
 
