@@ -1,0 +1,43 @@
+name: Static analysis
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - staging
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  clang-tidy:
+    name: clang-tidy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y --no-install-recommends clang-18 clang-tidy-18 libcurl4-openssl-dev libssl-dev
+
+      # Report-only: the findings go to the job summary and never fail the job, only a clang-tidy failure does.
+      - name: Analyze the SDK
+        run: |
+          cmake -DCOUNTLY_USE_SQLITE=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 -B build .
+          if ! run-clang-tidy-18 -clang-tidy-binary clang-tidy-18 -p build -quiet -header-filter="^$PWD/(include|src)/" \
+            -checks='-*,bugprone-*,clang-analyzer-*,concurrency-*,performance-*,portability-*,-bugprone-easily-swappable-parameters' \
+            "^$PWD/src/" > "$RUNNER_TEMP/clang-tidy.log" 2>&1; then
+            tail -n 50 "$RUNNER_TEMP/clang-tidy.log"
+            exit 1
+          fi
+          python3 .github/scripts/clang_tidy_sarif.py "$RUNNER_TEMP/clang-tidy.log" "$RUNNER_TEMP/clang-tidy.sarif"
+
+      - name: Summarize the findings
+        run: python3 .github/scripts/sarif_summary.py clang-tidy "$RUNNER_TEMP/clang-tidy.sarif" >> "$GITHUB_STEP_SUMMARY"
