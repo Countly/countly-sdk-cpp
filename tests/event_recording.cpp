@@ -268,3 +268,26 @@ TEST_CASE("Events are not recorded while the server turns tracking off") {
   CHECK(countly.checkEQSize() == 0);
   CHECK(eventLogCode(countly, "w505") == 1);
 }
+
+TEST_CASE("Feedback answers and push actions are moved into a request right away") {
+  const std::vector<std::string> keys = {"[CLY]_nps", "[CLY]_survey", "[CLY]_star_rating", "[CLY]_push_action"};
+  for (const std::string &key : keys) {
+    CAPTURE(key);
+    Countly &countly = prepareEvents();
+    startEvents(countly);
+    countly.RecordEvent(key, {{"widget_id", "5f1a2b3c4d5e6f7a8b9c0d1e"}}, 1);
+
+    CHECK(countly.checkEQSize() == 0);
+    countly.processRQDebug();
+    CHECK(httpQueueContainsEvent(key));
+  }
+}
+
+TEST_CASE("Other events wait in the event queue for the update timer") {
+  Countly &countly = prepareEvents();
+  startEvents(countly);
+  countly.RecordEvent("[CLY]_orientation", {{"mode", "landscape"}}, 1);
+  countly.RecordEvent("purchase", 1);
+
+  CHECK(countly.checkEQSize() == 2);
+}

@@ -53,13 +53,13 @@ public:
   std::shared_ptr<StorageModuleBase> _storageModule;
   RequestModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestBuilder> requestBuilder, std::shared_ptr<StorageModuleBase> storageModule)
       : _configuration(config), _logger(logger), _requestBuilder(requestBuilder), _storageModule(storageModule) {
-    setServerUrl(_configuration->serverUrl, _configuration->port);
+    setServerUrl(_configuration->serverUrl, _configuration->port, _configuration->serverPath);
   }
 
   /**
    * Normalizes and stores the server URL and the port, see RequestModule::setServerUrl().
    */
-  void setServerUrl(std::string url, unsigned int port) {
+  void setServerUrl(std::string url, unsigned int port, std::string path) {
     const bool use_https = url.find("https://") == 0;
     if (!use_https && url.find("http://") != 0) {
       url.insert(0, "http://");
@@ -77,6 +77,7 @@ public:
     std::lock_guard<std::mutex> lk(server_mutex);
     _configuration->serverUrl = url;
     _configuration->port = port;
+    _configuration->serverPath = path;
   }
 
   ~RequestModuleImpl() { _logger.reset(); }
@@ -299,7 +300,7 @@ void RequestModule::clearRequestQueue() {
   impl->sending_removed = true;
 }
 
-void RequestModule::setServerUrl(const std::string &url, unsigned int port) { impl->setServerUrl(url, port); }
+void RequestModule::setServerUrl(const std::string &url, unsigned int port, const std::string &path) { impl->setServerUrl(url, port, path); }
 
 void RequestModule::replaceAppKeysInQueue(const std::string &appKey) {
   const std::string encodedKey = RequestBuilder::encodeURL(appKey);
@@ -331,7 +332,7 @@ long long RequestModule::removeOtherAppKeysFromQueue(const std::string &appKey) 
   return removed;
 }
 
-void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
+void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex, bool closing) {
   std::shared_ptr<ConfigurationProvider> config;
   {
     // lock_guard so the mutex is released on every exit path of this block,
@@ -358,7 +359,7 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
       impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] processQueue: Waiting for the cool-down after a failed request.");
       return;
     }
-    if (now < impl->backoff_ends) {
+    if (!closing && now < impl->backoff_ends) {
       impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] processQueue: Waiting for the backoff to end.");
       return;
     }
@@ -430,7 +431,7 @@ void RequestModule::processQueue(std::shared_ptr<std::mutex> mutex) {
         processedRequestsCounter++;
         mergeDelivered = data->getData().find("old_device_id=") != std::string::npos;
 
-        if (config->isBackoffEnabled()) {
+        if (!closing && config->isBackoffEnabled()) {
           const long long timestamp = requestTimestamp(data->getData());
           const bool slow = responseTime >= std::chrono::seconds(config->getBackoffAcceptedTimeout());
           const bool queueNotFull = impl->_storageModule->RQCount() <= config->getBackoffRequestQueuePercentage() * config->getRequestQueueSizeLimit();
@@ -501,12 +502,15 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
   }
 
   std::string server_url;
+  std::string server_path;
   unsigned int port;
   {
     std::lock_guard<std::mutex> lk(impl->server_mutex);
     server_url = impl->_configuration->serverUrl;
+    server_path = impl->_configuration->serverPath;
     port = impl->_configuration->port;
   }
+  const std::string request_path = server_path + path;
 #ifdef _WIN32
   const bool use_https = server_url.find("https://") == 0;
   HINTERNET hSession = nullptr;
@@ -533,9 +537,9 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
   }
 
   if (hConnect) {
-    size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, path.c_str(), -1, nullptr, 0);
+    size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, request_path.c_str(), -1, nullptr, 0);
     wchar_t *wide_path = new wchar_t[buffer_size];
-    MultiByteToWideChar(CP_ACP, 0, path.c_str(), -1, wide_path, static_cast<int>(buffer_size));
+    MultiByteToWideChar(CP_ACP, 0, request_path.c_str(), -1, wide_path, static_cast<int>(buffer_size));
 
     hRequest = WinHttpOpenRequest(hConnect, L"POST", wide_path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, use_https ? WINHTTP_FLAG_SECURE : 0);
     delete[] wide_path;
@@ -610,7 +614,7 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
   curl = curl_easy_init();
   if (curl) {
     std::ostringstream full_url_stream;
-    full_url_stream << server_url << ':' << std::dec << port << path;
+    full_url_stream << server_url << ':' << std::dec << port << request_path;
 
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.c_str());
 

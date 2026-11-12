@@ -552,3 +552,46 @@ TEST_CASE("A slow answer pauses sending for the backoff duration") {
     CHECK(countly.debugHealthCheck()->snapshot()["bom"] == 0);
   }
 }
+
+TEST_CASE("stop() sends the waiting requests also while a backoff pause runs") {
+  clearSDK();
+  server.reset();
+  Countly &countly = Countly::getInstance();
+  countly.setHTTPClient(scriptedClient);
+  countly.setSha256(fakeSha);
+  countly.disableHealthCheck();
+  countly.disableSDKBehaviorSettingsUpdates();
+  countly.enableManualSessionControl();
+  countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
+  countly.SetPath(TEST_DATABASE_NAME);
+  // Without enableImmediateRequestOnStop, stop() closes by sending: the update loop sends the queue once more
+  countly.setUpdateInterval(100);
+  countly.setSDKBehaviorSettings("{\"bom_at\":1,\"bom_d\":60}");
+  start(countly);
+
+  server.setAnswer([](const ReceivedRequest &) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    return HTTPResponse{true, json({{"result", "Success"}}), 200};
+  });
+  countly.setUserDetails({{"name", "answered slowly"}});
+  REQUIRE(eventually([&countly] { return logCode(countly, "w320") == 1; }, std::chrono::milliseconds(5000)));
+
+  server.reset();
+  const auto eventSent = [] {
+    for (const ReceivedRequest &request : server.queued()) {
+      if (request.params.count("events") && request.params.at("events").find("recorded_during_the_pause") != std::string::npos) {
+        return true;
+      }
+    }
+    return false;
+  };
+  countly.RecordEvent("recorded_during_the_pause", 1);
+  // A call that asks to send the stored requests waits for the pause to end
+  countly.attemptToSendStoredRequests();
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+  REQUIRE_FALSE(eventSent());
+
+  countly.stop();
+  CHECK(eventSent());
+  CHECK(countly.checkRQSize() == 0);
+}

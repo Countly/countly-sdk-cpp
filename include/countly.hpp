@@ -76,8 +76,9 @@ public:
   static bool hasInstance(const std::string &name);
 
   /**
-   * Destroys the instance registered under 'name'. Joins its threads, ends its
-   * session and frees its database path claim. A no-op if the name is not
+   * Destroys the instance registered under 'name'. Joins its threads and frees
+   * its database path claim. It neither ends the session nor moves the waiting
+   * events into a request: call stop() first for that. A no-op if the name is not
    * registered. Any reference or pointer to that instance dangles afterwards.
    */
   static void destroyInstance(const std::string &name);
@@ -152,6 +153,11 @@ public:
 
   void setSha256(cly::SHA256Function fun);
 
+  /**
+   * Makes the app begin, update and end sessions with beginSession(), updateSession() and endSession() instead of the
+   * SDK. While the server's SDK behavior settings contain "Automatic session tracking", that setting decides instead,
+   * also while the SDK runs. Call it before start().
+   */
   void enableManualSessionControl();
 
   void disableAutoEventsOnUserProperties();
@@ -212,11 +218,18 @@ public:
    * Before start(): the device ID to use when no device ID is stored from an earlier start (SQLite builds keep the
    * device ID in use between starts). A stored device ID wins, and a different ID given here is ignored with a
    * warning, unless enableClearStoredDeviceID() is called too. Without a device ID, start() generates one.
-   * After start(): changes the device ID. With same_user the server merges the old user's data into the new device
-   * ID; without it the new device ID is a new user: the waiting events, and with automatic sessions the session, end
-   * under the old device ID first.
+   * After start(): changes the device ID and chooses by where the device ID in use came from: a device ID the SDK
+   * generated is merged into the new one on the server, as for a user who logs in; a device ID the app gave is changed
+   * without merge, see setDeviceID(value, same_user).
    */
-  void setDeviceID(const std::string &value, bool same_user = false);
+  void setDeviceID(const std::string &value);
+
+  /**
+   * Like setDeviceID(value), but after start() 'same_user' decides: true merges the old user's data into the new device
+   * ID on the server; false makes the new device ID a new user: the waiting events, and with automatic sessions the
+   * session, end under the old device ID first.
+   */
+  void setDeviceID(const std::string &value, bool same_user);
 
   /**
    * Makes start() forget the device ID stored by an earlier start. The events that user left in the database are
@@ -264,8 +277,9 @@ public:
    * at stop().
    *
    * @param app_key: the app key of your Countly app
-   * @param host: the server URL, an absolute http or https URL such as "https://your.server.ly"
-   * @param port: the server port, 0 for the scheme's default
+   * @param host: the server URL, an absolute http or https URL such as "https://your.server.ly". It may contain a port
+   *              and a path, such as "https://your.server.ly:8443/countly"
+   * @param port: the server port, 0 for the port in the URL or the scheme's default. A port in the URL wins
    * @param start_thread: has no effect, the SDK always starts its update thread
    */
   void start(const std::string &app_key, const std::string &host, int port = 0, bool start_thread = false);
@@ -322,6 +336,12 @@ public:
    * and erases the location on the server.
    */
   void LocationSettingChanged() override;
+
+  /**
+   * Applies a change of the server's "Automatic session tracking" setting: turning it off ends the session the SDK
+   * runs, and the app's session calls work from then on; turning it on begins a session.
+   */
+  void AutomaticSessionTrackingChanged() override;
 
   /*
    * Checks and returns the size of the event queue in memory or persistent storage.
@@ -913,6 +933,18 @@ private:
    * location from the IP address.
    */
   bool isLocationOn();
+
+  /**
+   * Whether the SDK tracks sessions by itself: the server's "Automatic session tracking" setting while the settings
+   * contain it, otherwise the app's choice with enableManualSessionControl().
+   */
+  bool isAutomaticSessionTracking();
+
+  /**
+   * The port requests go to: the port written in the server URL when it has one, otherwise the port argument. A port
+   * argument that differs from the port in the URL is ignored with a warning, counted as log code w121.
+   */
+  unsigned int serverPort(unsigned int url_port, int port, const char *caller);
 
   /**
    * The shared part of the public calls that give or remove consent: checks the call, expands groups, records w402

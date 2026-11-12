@@ -238,6 +238,12 @@ public:
    * Called by the SDK behavior settings when the server's "cr" setting changes whether consent is required.
    */
   virtual void ConsentRequirementChanged() {}
+
+  /**
+   * Called by the SDK behavior settings when the server's "ast" setting changes whether the SDK tracks sessions by
+   * itself.
+   */
+  virtual void AutomaticSessionTrackingChanged() {}
 };
 
 } // namespace cly

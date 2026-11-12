@@ -43,6 +43,12 @@ struct CountlyConfiguration {
   std::string serverUrl;
 
   /**
+   * The path of the server URL, such as "/countly" for "https://example.com/countly", which the built-in HTTP client
+   * puts in front of every endpoint. Empty when the URL has none.
+   */
+  std::string serverPath;
+
+  /**
    * App key for the application being tracked.
    * Mandatory field.
    */

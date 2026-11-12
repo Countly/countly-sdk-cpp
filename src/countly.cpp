@@ -35,15 +35,18 @@ const char *const HEALTH_CHECK_AREA_SESSIONS = "sessions";
 const char *const HEALTH_CHECK_AREA_EVENTS = "events";
 
 /**
- * Checks that the server URL is an absolute http or https URL with a host, and gives it back with a lower case scheme
- * and without trailing '/' characters.
+ * Splits an absolute http or https server URL into its origin, the lower case scheme with the host, the port written in
+ * it and its path, without trailing '/' characters.
  *
  * @param url: the URL the app gave
- * @param normalized: receives the URL to use
+ * @param origin: receives the scheme and the host, for example "https://example.com"
+ * @param port: receives the port written in the URL, 0 when it has none
+ * @param path: receives the path, for example "/countly", empty when the URL has none
  * @param trimmed: set to true when trailing '/' characters were removed
- * @return false when the URL can't be used
+ * @return false when the URL can't be used: another scheme, no host, a port that is not a number from 1 to 65535, a
+ *         query, a fragment or white space
  */
-bool normalizeServerUrl(const std::string &url, std::string &normalized, bool &trimmed) {
+bool parseServerUrl(const std::string &url, std::string &origin, unsigned int &port, std::string &path, bool &trimmed) {
   const size_t separator = url.find("://");
   if (separator == std::string::npos) {
     return false;
@@ -59,10 +62,31 @@ bool normalizeServerUrl(const std::string &url, std::string &normalized, bool &t
     rest.pop_back();
   }
   trimmed = rest.size() != length;
-  if (rest.empty() || rest.front() == '/' || rest.find_first_of(" \t\r\n") != std::string::npos) {
+  if (rest.empty() || rest.find_first_of(" \t\r\n?#") != std::string::npos) {
     return false;
   }
-  normalized = scheme + "://" + rest;
+  const size_t path_start = rest.find('/');
+  std::string authority = rest.substr(0, path_start);
+  // the colons of an IPv6 address are inside its brackets, so only a colon after them starts the port
+  const size_t port_separator = authority.find(':', authority.empty() || authority[0] != '[' ? 0 : authority.find(']'));
+  unsigned int url_port = 0;
+  if (port_separator != std::string::npos) {
+    const std::string digits = authority.substr(port_separator + 1);
+    if (digits.empty() || digits.size() > 5 || digits.find_first_not_of("0123456789") != std::string::npos) {
+      return false;
+    }
+    url_port = static_cast<unsigned int>(std::stoul(digits));
+    if (url_port < 1 || url_port > 65535) {
+      return false;
+    }
+    authority.erase(port_separator);
+  }
+  if (authority.empty() || (authority[0] == '[' && authority.back() != ']')) {
+    return false;
+  }
+  origin = scheme + "://" + authority;
+  port = url_port;
+  path = path_start == std::string::npos ? std::string() : rest.substr(path_start);
   return true;
 }
 
@@ -131,6 +155,11 @@ bool isInternalEventKey(const std::string &key) {
 }
 
 /**
+ * Whether the key is one of the internal events that go to the server right away: feedback answers and push actions.
+ */
+bool isImmediateFlushEventKey(const std::string &key) { return key == "[CLY]_nps" || key == "[CLY]_survey" || key == "[CLY]_star_rating" || key == "[CLY]_push_action"; }
+
+/**
  * Replaces a count that is not a whole number from 1 to INT_MAX with 1 and removes a negative duration, logging
  * each as a warning counted as log code w750.
  */
@@ -176,20 +205,6 @@ void appendStoredEvents(const std::deque<std::string> &queue, nlohmann::json &ev
  */
 bool containsFeature(const std::vector<std::string> &features, const char *feature) { return std::find(features.begin(), features.end(), feature) != features.end(); }
 
-/**
- * Whether the URL is absolute, with the http or https scheme and a host.
- */
-bool isValidServerUrl(const std::string &url) {
-  std::string::size_type hostStart;
-  if (url.compare(0, 7, "http://") == 0) {
-    hostStart = 7;
-  } else if (url.compare(0, 8, "https://") == 0) {
-    hostStart = 8;
-  } else {
-    return false;
-  }
-  return hostStart < url.size() && std::string(":/?#").find(url[hostStart]) == std::string::npos;
-}
 } // namespace
 
 
@@ -906,7 +921,13 @@ void Countly::setUserDetails(const std::map<std::string, std::string> &value) {
     unsigned int cap = (kv.first == "picture") ? COUNTLY_MAX_VALUE_SIZE_PICTURE : lim.maxValueSize;
     limitedDetails[kv.first] = cly::limits::limitValue(kv.second, cap, logger.get(), "setUserDetails", kv.first);
   }
-  session_params["user_details"] = limitedDetails;
+  nlohmann::json &details = session_params["user_details"];
+  if (!details.is_object()) {
+    details = nlohmann::json::object();
+  }
+  for (const auto &kv : limitedDetails) {
+    details[kv.first] = kv.second;
+  }
 
   if (!is_sdk_initialized) {
     log(LogLevel::INFO, "[Countly] setUserDetails, The SDK is not started yet, the details are sent with the first session.");
@@ -956,7 +977,17 @@ void Countly::setCustomUserDetails(const std::map<std::string, std::string> &val
   for (const auto &kv : customValue) {
     limitedCustom[cly::limits::limitKey(kv.first, lim.maxKeyLength, logger.get(), "setCustomUserDetails")] = cly::limits::limitValue(kv.second, lim.maxValueSize, logger.get(), "setCustomUserDetails", kv.first);
   }
-  session_params["user_details"]["custom"] = limitedCustom;
+  nlohmann::json &details = session_params["user_details"];
+  if (!details.is_object()) {
+    details = nlohmann::json::object();
+  }
+  nlohmann::json &custom = details["custom"];
+  if (!custom.is_object()) {
+    custom = nlohmann::json::object();
+  }
+  for (const auto &kv : limitedCustom) {
+    custom[kv.first] = kv.second;
+  }
 
   if (!is_sdk_initialized) {
     log(LogLevel::INFO, "[Countly] setCustomUserDetails, The SDK is not started yet, the properties are sent with the first session.");
@@ -1143,6 +1174,15 @@ void Countly::sendLocationErase() {
 #pragma endregion User location
 
 #pragma region Device Id
+void Countly::setDeviceID(const std::string &value) {
+  bool generated = false;
+  {
+    std::lock_guard<std::mutex> lk(*mutex);
+    generated = is_sdk_initialized && configuration->deviceIdType == DeviceIdType::SDK_GENERATED;
+  }
+  setDeviceID(value, generated);
+}
+
 void Countly::setDeviceID(const std::string &value, bool same_user) {
   if (value.empty()) {
     log(LogLevel::WARNING, "[Countly] setDeviceID, The device ID can't be empty, the call is ignored.");
@@ -1291,6 +1331,36 @@ void Countly::LocationSettingChanged() {
   }
 }
 
+void Countly::AutomaticSessionTrackingChanged() {
+  std::lock_guard<std::mutex> change(consent_change_mutex);
+  if (!start_finished || is_being_disposed || stopping) {
+    return;
+  }
+  if (isAutomaticSessionTracking()) {
+    log(LogLevel::INFO, "[Countly] AutomaticSessionTrackingChanged, the server turned automatic session tracking on.");
+    beginSessionInternal(true);
+  } else {
+    log(LogLevel::INFO, "[Countly] AutomaticSessionTrackingChanged, the server turned automatic session tracking off, the session the SDK runs ends.");
+    endSessionInternal(true);
+  }
+}
+
+bool Countly::isAutomaticSessionTracking() {
+  const int server = configurationModule ? configurationModule->getAutomaticSessionTracking() : -1;
+  return server >= 0 ? server == 1 : !configuration->manualSessionControl;
+}
+
+unsigned int Countly::serverPort(unsigned int url_port, int port, const char *caller) {
+  if (url_port == 0) {
+    return static_cast<unsigned int>(port);
+  }
+  if (port != 0 && static_cast<unsigned int>(port) != url_port) {
+    log(LogLevel::WARNING, std::string("[Countly] ") + caller + ", The port [" + std::to_string(port) + "] differs from the port in the server URL [" + std::to_string(url_port) + "], so the port in the URL is used.");
+    logger->recordLogCode("w121");
+  }
+  return url_port;
+}
+
 std::string Countly::getDeviceID() {
   if (!is_sdk_initialized) {
     log(LogLevel::WARNING, "[Countly] getDeviceID, SDK is not initialized.");
@@ -1344,7 +1414,7 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
   views_module->stopRunningViews();
   // send all event to server and end current session of old user
   flushEvents();
-  if (configuration->manualSessionControl == false) {
+  if (isAutomaticSessionTracking()) {
     endSessionInternal(true);
   }
 
@@ -1374,7 +1444,7 @@ void Countly::_changeDeviceIdWithoutMerge(const std::string &value) {
   clearRemoteConfigForNewUser();
 
   // start a new session for new user
-  if (configuration->manualSessionControl == false) {
+  if (isAutomaticSessionTracking()) {
     beginSessionInternal(true);
   }
 
@@ -1407,7 +1477,11 @@ void Countly::changeServerUrl(const std::string &host, int port) {
   if (!isCallAllowed("changeServerUrl")) {
     return;
   }
-  if (!isValidServerUrl(host)) {
+  std::string server_url;
+  std::string server_path;
+  unsigned int url_port = 0;
+  bool trimmed_server_url = false;
+  if (!parseServerUrl(host, server_url, url_port, server_path, trimmed_server_url)) {
     log(LogLevel::ERROR, "[Countly] changeServerUrl, The server URL [" + host + "] is not an absolute http:// or https:// URL, the current server URL stays.");
     logger->recordLogCode("e102");
     return;
@@ -1417,13 +1491,14 @@ void Countly::changeServerUrl(const std::string &host, int port) {
     logger->recordLogCode("w121");
     port = 0;
   }
+  const unsigned int server_port = serverPort(url_port, port, "changeServerUrl");
 
   std::lock_guard<std::mutex> change(consent_change_mutex);
   if (is_being_disposed) {
     return;
   }
-  log(LogLevel::INFO, "[Countly] changeServerUrl, Changing the server URL to [" + host + "], port = [" + std::to_string(port) + "]");
-  requestModule->setServerUrl(host, static_cast<unsigned int>(port));
+  log(LogLevel::INFO, "[Countly] changeServerUrl, Changing the server URL to [" + host + "], port = [" + std::to_string(server_port) + "]");
+  requestModule->setServerUrl(server_url, server_port, server_path);
   if (consent_module->isRequired()) {
     queueConsentState();
   }
@@ -1558,13 +1633,15 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   }
 
   std::string server_url;
+  std::string server_path;
+  unsigned int url_port = 0;
   bool trimmed_server_url = false;
-  if (!normalizeServerUrl(host, server_url, trimmed_server_url)) {
+  if (!parseServerUrl(host, server_url, url_port, server_path, trimmed_server_url)) {
     log(LogLevel::ERROR, "[Countly] start, The server URL [" + host + "] is not an absolute http or https URL, for example 'https://your.server.ly'. SDK will not be initialized.");
     return;
   }
   if (trimmed_server_url) {
-    log(LogLevel::WARNING, "[Countly] start, The trailing '/' characters of the server URL are removed: [" + server_url + "]");
+    log(LogLevel::WARNING, "[Countly] start, The trailing '/' characters of the server URL are removed: [" + server_url + server_path + "]");
   }
 
 #ifdef COUNTLY_USE_SQLITE
@@ -1620,9 +1697,10 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
     port = 0;
   }
 
-  configuration->port = port;
+  configuration->port = serverPort(url_port, port, "start");
   configuration->appKey = app_key;
   configuration->serverUrl = server_url;
+  configuration->serverPath = server_path;
 
   session_params["app_key"] = app_key;
   {
@@ -1670,9 +1748,10 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
   activateConsent();
   lk.lock();
 
+  const bool automatic_sessions = isAutomaticSessionTracking();
   if (!running) {
 
-    if (configuration->manualSessionControl == false) {
+    if (automatic_sessions) {
       lk.unlock();
       beginSessionInternal(true);
       lk.lock();
@@ -1695,6 +1774,10 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
     sendLocationErase();
   }
   start_finished = true;
+  if (isAutomaticSessionTracking() != automatic_sessions) {
+    // the server's automatic session tracking setting arrived while start() ran
+    AutomaticSessionTrackingChanged();
+  }
   downloadRemoteConfigAutomatically();
 }
 
@@ -1799,7 +1882,7 @@ void Countly::stop() {
   if (is_sdk_initialized && !is_being_disposed) {
     // queued while the update loop still runs, so that its last pass can send them
     packEvents();
-    if (configuration->manualSessionControl == false) {
+    if (isAutomaticSessionTracking()) {
       endSessionInternal(true);
     }
   }
@@ -1961,7 +2044,11 @@ void Countly::addEvent(const cly::Event &event) {
     event_queue.push_back(filteredEvent.serialize());
   }
   lk.unlock();
-  checkAndSendEventToRQ();
+  if (isImmediateFlushEventKey(eventKey)) {
+    packEvents();
+  } else {
+    checkAndSendEventToRQ();
+  }
 }
 
 bool Countly::IsSessionRunning() {
@@ -2072,7 +2159,7 @@ bool Countly::attemptSessionUpdateEQ() {
       return false;
     }
   }
-  if (configuration->manualSessionControl == false) {
+  if (isAutomaticSessionTracking()) {
     return !updateSessionInternal(true);
   } else {
     packEvents();
@@ -2158,7 +2245,7 @@ bool Countly::beginSession() {
 }
 
 bool Countly::rejectSessionCallInAutomaticMode(const char *caller, const char *usage) {
-  if (!is_sdk_initialized || configuration->manualSessionControl) {
+  if (!is_sdk_initialized || !isAutomaticSessionTracking()) {
     return false;
   }
   if (hasConsent(consent::SESSIONS)) {
@@ -2944,14 +3031,15 @@ void Countly::updateTick(std::chrono::steady_clock::time_point &last_update) {
     const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
     if (now - last_update >= std::chrono::seconds(configurationModule->getSessionUpdateInterval())) {
       last_update = now;
-      if (configuration->manualSessionControl == false) {
+      if (isAutomaticSessionTracking()) {
         updateSessionInternal(true);
       } else {
         packEvents();
       }
     }
   }
-  requestModule->processQueue(mutex);
+  // after stop() this is the last pass, which closes by sending
+  requestModule->processQueue(mutex, stopping);
   saveHealthCheckOnTimer();
 }
 
@@ -3369,7 +3457,7 @@ void Countly::consentChanged(const std::vector<std::string> &features, bool give
   }
 
   bool sessionBegan = false;
-  if (containsFeature(features, consent::SESSIONS) && configuration->manualSessionControl == false) {
+  if (containsFeature(features, consent::SESSIONS) && isAutomaticSessionTracking()) {
     bool sessionRunning = false;
     {
       std::lock_guard<std::mutex> lk(*mutex);

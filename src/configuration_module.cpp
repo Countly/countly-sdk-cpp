@@ -23,6 +23,7 @@ static constexpr const char *KEY_LOCATION_TRACKING = "lt";
 static constexpr const char *KEY_CUSTOM_EVENT_TRACKING = "cet";
 static constexpr const char *KEY_CRASH_REPORTING = "crt";
 static constexpr const char *KEY_CONSENT_REQUIRED = "cr";
+static constexpr const char *KEY_AUTOMATIC_SESSION_TRACKING = "ast";
 static constexpr const char *KEY_SERVER_CONFIG_UPDATE_INTERVAL = "scui";
 static constexpr const char *KEY_LOGGING = "log"; // not used and implemented yet
 
@@ -84,6 +85,8 @@ public:
   std::atomic<bool> crashReportingEnabled{true};
   // -1 while the settings don't contain "cr", otherwise 0 or 1
   std::atomic<int> consentRequired{-1};
+  // -1 while the settings don't contain "ast", otherwise 0 or 1
+  std::atomic<int> automaticSessionTracking{-1};
   std::atomic<unsigned int> eventQueueThreshold{0};
   std::atomic<unsigned int> requestQueueSizeLimit{0};
   std::atomic<unsigned int> sessionUpdateInterval{0};
@@ -274,6 +277,10 @@ public:
       // safe because _onSBSChanged is called outside of _mutex
       _cly->LocationSettingChanged();
     }
+
+    if (changedSettings.contains(KEY_AUTOMATIC_SESSION_TRACKING)) {
+      _cly->AutomaticSessionTrackingChanged();
+    }
   }
 
   nlohmann::json _populateConfigValues() {
@@ -299,6 +306,15 @@ public:
       }
     }
     consentRequired.store(consentRequiredCurrent, std::memory_order_release);
+    const int automaticSessionTrackingVal = automaticSessionTracking.load(std::memory_order_acquire);
+    int automaticSessionTrackingCurrent = -1;
+    if (sdk_behavior_settings.is_object()) {
+      nlohmann::json::const_iterator automaticSessionSetting = sdk_behavior_settings.find(KEY_AUTOMATIC_SESSION_TRACKING);
+      if (automaticSessionSetting != sdk_behavior_settings.end() && automaticSessionSetting->is_boolean()) {
+        automaticSessionTrackingCurrent = automaticSessionSetting->get<bool>() ? 1 : 0;
+      }
+    }
+    automaticSessionTracking.store(automaticSessionTrackingCurrent, std::memory_order_release);
 
     trackingEnabled.store(getBool(KEY_TRACKING, true), std::memory_order_release);
     networkingEnabled.store(getBool(KEY_NETWORKING, true), std::memory_order_release);
@@ -373,6 +389,9 @@ public:
     if (consentRequiredCurrent != consentRequiredVal) {
       changedSettings[KEY_CONSENT_REQUIRED] = consentRequiredCurrent;
     }
+    if (automaticSessionTrackingCurrent != automaticSessionTrackingVal) {
+      changedSettings[KEY_AUTOMATIC_SESSION_TRACKING] = automaticSessionTrackingCurrent;
+    }
     return changedSettings;
   }
 
@@ -394,7 +413,7 @@ public:
         valid = value.is_number_unsigned() && value.get<unsigned long long>() <= UINT_MAX;
       } else if (key == KEY_BOM_RQ_PERCENTAGE) {
         valid = value.is_number() && value.get<double>() > 0 && value.get<double>() <= 1;
-      } else if (key == KEY_TRACKING || key == KEY_NETWORKING || key == KEY_LOGGING || key == KEY_SESSION_TRACKING || key == KEY_VIEW_TRACKING || key == KEY_LOCATION_TRACKING || key == KEY_CUSTOM_EVENT_TRACKING || key == KEY_CONSENT_REQUIRED || key == KEY_CRASH_REPORTING || key == KEY_BACKOFF_MECHANISM) {
+      } else if (key == KEY_TRACKING || key == KEY_NETWORKING || key == KEY_LOGGING || key == KEY_SESSION_TRACKING || key == KEY_VIEW_TRACKING || key == KEY_LOCATION_TRACKING || key == KEY_CUSTOM_EVENT_TRACKING || key == KEY_CONSENT_REQUIRED || key == KEY_CRASH_REPORTING || key == KEY_BACKOFF_MECHANISM || key == KEY_AUTOMATIC_SESSION_TRACKING) {
         valid = value.is_boolean();
       } else if (key == KEY_EVENT_BLACKLIST || key == KEY_USER_PROPERTY_BLACKLIST || key == KEY_SEGMENTATION_BLACKLIST || key == KEY_EVENT_WHITELIST || key == KEY_USER_PROPERTY_WHITELIST || key == KEY_SEGMENTATION_WHITELIST) {
         valid = value.is_array();
@@ -586,6 +605,8 @@ bool ConfigurationModule::isCustomEventTrackingEnabled() { return impl->customEv
 bool ConfigurationModule::isCrashReportingEnabled() const { return impl->crashReportingEnabled.load(std::memory_order_acquire); }
 
 int ConfigurationModule::getConsentRequired() const { return impl->consentRequired.load(std::memory_order_acquire); }
+
+int ConfigurationModule::getAutomaticSessionTracking() const { return impl->automaticSessionTracking.load(std::memory_order_acquire); }
 
 unsigned int ConfigurationModule::getRequestQueueSizeLimit() const { return impl->requestQueueSizeLimit.load(std::memory_order_acquire); }
 

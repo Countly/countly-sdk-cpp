@@ -485,3 +485,123 @@ TEST_CASE("Cut user detail values are logged as warnings") {
   CHECK(logCodeCount(countly, "w202") == 2);
   CHECK(logCodeCount(countly, "w201") == 1);
 }
+
+TEST_CASE("A port or a path in the server URL is used") {
+  SUBCASE("start() takes the port and the path from the URL") {
+    clearSDK();
+    Countly &countly = prepareInstance();
+    countly.setDeviceID("developer-id");
+    countly.start(COUNTLY_TEST_APP_KEY, "https://analytics.example.com:8443/countly/", 0, false);
+
+    CHECK(countly.checkEQSize() == 0);
+    CHECK(countly.getConfiguration().serverUrl == "https://analytics.example.com");
+    CHECK(countly.getConfiguration().port == 8443);
+    CHECK(countly.getConfiguration().serverPath == "/countly");
+  }
+
+  SUBCASE("a port argument that differs from the port in the URL is ignored with a warning") {
+    clearSDK();
+    Countly &countly = prepareInstance();
+    countly.setDeviceID("developer-id");
+    countly.start(COUNTLY_TEST_APP_KEY, "https://analytics.example.com:8443", 443, false);
+
+    CHECK(countly.getConfiguration().port == 8443);
+    CHECK(logCodeCount(countly, "w121") == 1);
+  }
+
+  SUBCASE("changeServerUrl takes the port and the path from the URL") {
+    clearSDK();
+    Countly &countly = prepareInstance();
+    countly.setDeviceID("developer-id");
+    countly.start(COUNTLY_TEST_APP_KEY, "https://first.example.com", 0, false);
+    countly.changeServerUrl("https://second.example.com:9443/analytics", 0);
+
+    CHECK(countly.getConfiguration().serverUrl == "https://second.example.com");
+    CHECK(countly.getConfiguration().port == 9443);
+    CHECK(countly.getConfiguration().serverPath == "/analytics");
+  }
+}
+
+TEST_CASE("start() refuses a server URL with an invalid port, a query or a fragment") {
+  const std::vector<std::string> urls = {"https://example.com:0", "https://example.com:70000", "https://example.com:http", "https://example.com:", "https://example.com/?app=1", "https://example.com/#top"};
+  for (const std::string &url : urls) {
+    CAPTURE(url);
+    clearSDK();
+    Countly &countly = prepareInstance();
+    countly.setDeviceID("developer-id");
+
+    CHECK_NOTHROW(countly.start(COUNTLY_TEST_APP_KEY, url, 0, false));
+    CHECK(countly.checkEQSize() == -1);
+  }
+}
+
+TEST_CASE("setDeviceID with one argument merges only a device ID the SDK generated") {
+  SUBCASE("a generated device ID is merged into the new one") {
+    clearSDK();
+    Countly &countly = prepareInstance();
+    countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+    const std::string generated = countly.getDeviceID();
+    countly.processRQDebug();
+    http_call_queue.clear();
+
+    countly.setDeviceID("user-42");
+    countly.processRQDebug();
+
+    CHECK(httpQueueContains("old_device_id", generated));
+    CHECK_FALSE(httpQueueContains("end_session", "1"));
+    CHECK(countly.getDeviceID() == "user-42");
+    CHECK(countly.getDeviceIDType() == DeviceIdType::DEVELOPER_SUPPLIED);
+  }
+
+  SUBCASE("a device ID the app gave is changed without merge") {
+    clearSDK();
+    Countly &countly = prepareInstance();
+    countly.setDeviceID("developer-id");
+    countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+    countly.processRQDebug();
+    http_call_queue.clear();
+
+    countly.setDeviceID("user-42");
+    countly.processRQDebug();
+
+    CHECK_FALSE(httpQueueContains("old_device_id", "developer-id"));
+    CHECK(httpQueueContains("end_session", "1"));
+  }
+
+  SUBCASE("same_user false changes a generated device ID without merge") {
+    clearSDK();
+    Countly &countly = prepareInstance();
+    countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+    const std::string generated = countly.getDeviceID();
+    countly.processRQDebug();
+    http_call_queue.clear();
+
+    countly.setDeviceID("user-42", false);
+    countly.processRQDebug();
+
+    CHECK_FALSE(httpQueueContains("old_device_id", generated));
+    CHECK(httpQueueContains("end_session", "1"));
+  }
+}
+
+TEST_CASE("User details given before start() in several calls are all sent with the first session") {
+  clearSDK();
+  Countly &countly = prepareInstance();
+  countly.setCustomUserDetails({{"plan", "gold"}});
+  countly.setUserDetails({{"name", "Alice"}});
+  countly.setUserDetails({{"email", "alice@example.com"}});
+  countly.setCustomUserDetails({{"team", "blue"}});
+
+  countly.setDeviceID("developer-id");
+  countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+  countly.processRQDebug();
+  bool sent = false;
+  for (size_t index = 0; index < http_call_queue.size(); index++) {
+    HTTPCall call = http_call_queue.at(index);
+    if (call.data.count("begin_session")) {
+      CHECK(json::parse(call.data["user_details"]) == json({{"name", "Alice"}, {"email", "alice@example.com"}, {"custom", {{"plan", "gold"}, {"team", "blue"}}}}));
+      sent = true;
+    }
+  }
+  CHECK(sent);
+}
