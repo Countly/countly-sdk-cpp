@@ -19,6 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          fetch-depth: 2
           submodules: recursive
           persist-credentials: false
 
@@ -27,17 +28,40 @@ jobs:
           sudo apt-get -qq update
           sudo apt-get -qq install -y --no-install-recommends clang-18 clang-tidy-18 libcurl4-openssl-dev libssl-dev
 
-      # Report-only: the findings go to the job summary and never fail the job, only a clang-tidy failure does.
+      # On pull requests the base branch is analyzed too, so that only findings it lacks can fail the job.
       - name: Analyze the SDK
         run: |
-          cmake -DCOUNTLY_USE_SQLITE=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 -B build .
-          if ! run-clang-tidy-18 -clang-tidy-binary clang-tidy-18 -p build -quiet -header-filter="^$PWD/(include|src)/" \
-            -checks='-*,bugprone-*,clang-analyzer-*,concurrency-*,performance-*,portability-*,-bugprone-easily-swappable-parameters' \
-            "^$PWD/src/" > "$RUNNER_TEMP/clang-tidy.log" 2>&1; then
-            tail -n 50 "$RUNNER_TEMP/clang-tidy.log"
-            exit 1
+          # Runs clang-tidy over the sources of the checkout in $1 and writes the findings as SARIF to $2.sarif.
+          analyze() {
+            cd "$1"
+            cmake -DCOUNTLY_USE_SQLITE=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 -B build .
+            # run-clang-tidy analyzes nothing, and reports nothing, when its file pattern matches no source.
+            if ! grep -qF "\"file\": \"$PWD/src/" build/compile_commands.json; then
+              echo "::error title=clang-tidy::The compilation database has no source under $PWD/src"
+              exit 1
+            fi
+            if ! run-clang-tidy-18 -clang-tidy-binary clang-tidy-18 -p build -quiet -header-filter="^$PWD/(include|src)/" \
+              -checks='-*,bugprone-*,clang-analyzer-*,concurrency-*,performance-*,portability-*,-bugprone-easily-swappable-parameters' \
+              "^$PWD/src/" > "$2.log" 2>&1; then
+              tail -n 50 "$2.log"
+              exit 1
+            fi
+            python3 "$GITHUB_WORKSPACE/.github/scripts/clang_tidy_sarif.py" "$2.log" "$2.sarif"
+            cd "$GITHUB_WORKSPACE"
+          }
+          analyze "$GITHUB_WORKSPACE" "$RUNNER_TEMP/clang-tidy"
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            # The first parent of the pull request's merge commit is the base branch it merges into.
+            git worktree add "$RUNNER_TEMP/base" HEAD^1
+            git -C "$RUNNER_TEMP/base" submodule update --init --recursive
+            analyze "$RUNNER_TEMP/base" "$RUNNER_TEMP/clang-tidy-base"
           fi
-          python3 .github/scripts/clang_tidy_sarif.py "$RUNNER_TEMP/clang-tidy.log" "$RUNNER_TEMP/clang-tidy.sarif"
 
+      # Every finding goes to the job summary; a new one at warning or error level fails the job.
       - name: Summarize the findings
-        run: python3 .github/scripts/sarif_summary.py clang-tidy "$RUNNER_TEMP/clang-tidy.sarif" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          base=()
+          if [ -f "$RUNNER_TEMP/clang-tidy-base.sarif" ]; then
+            base=(--base "$RUNNER_TEMP/clang-tidy-base.sarif" --base-root "$RUNNER_TEMP/base")
+          fi
+          python3 .github/scripts/sarif_summary.py clang-tidy "$RUNNER_TEMP/clang-tidy.sarif" "${base[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
