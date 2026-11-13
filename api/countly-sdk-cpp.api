@@ -1,0 +1,408 @@
+cly::ConfigurationModule class public
+cly::ConfigurationModule::ConfigurationModule constructor void (cly::CountlyDelegates *, std::shared_ptr<CountlyConfiguration>, std::shared_ptr<LoggerModule>, std::shared_ptr<RequestBuilder>, std::shared_ptr<StorageModuleBase>, std::shared_ptr<RequestModule>, std::shared_ptr<std::mutex>) public
+cly::ConfigurationModule::fetchConfigFromServer method void (nlohmann::json) public
+cly::ConfigurationModule::fetchConfigFromStorage method void () public
+cly::ConfigurationModule::getAutomaticSessionTracking method int () const public
+cly::ConfigurationModule::getBackoffAcceptedTimeout method unsigned int () const public
+cly::ConfigurationModule::getBackoffDuration method unsigned int () const public
+cly::ConfigurationModule::getBackoffRequestAge method unsigned int () const public
+cly::ConfigurationModule::getBackoffRequestQueuePercentage method double () const public
+cly::ConfigurationModule::getConsentRequired method int () const public
+cly::ConfigurationModule::getEventFilterList method FilterList<std::set<std::string>> () const public
+cly::ConfigurationModule::getEventQueueSizeLimit method unsigned int () public
+cly::ConfigurationModule::getEventSegmentationFilterList method FilterList<std::map<std::string, std::set<std::string>>> () const public
+cly::ConfigurationModule::getLimits method SDKLimits () const public
+cly::ConfigurationModule::getRequestDropAgeHours method unsigned int () const public
+cly::ConfigurationModule::getRequestQueueSizeLimit method unsigned int () const public
+cly::ConfigurationModule::getSegmentationFilterList method FilterList<std::set<std::string>> () const public
+cly::ConfigurationModule::getServerLocationTracking method int () const public
+cly::ConfigurationModule::getSessionUpdateInterval method unsigned int () public
+cly::ConfigurationModule::getUserPropertyFilterList method FilterList<std::set<std::string>> () const public
+cly::ConfigurationModule::isBackoffEnabled method bool () const public
+cly::ConfigurationModule::isCrashReportingEnabled method bool () const public
+cly::ConfigurationModule::isCustomEventTrackingEnabled method bool () public
+cly::ConfigurationModule::isLocationTrackingEnabled method bool () public
+cly::ConfigurationModule::isNetworkingEnabled method bool () const public
+cly::ConfigurationModule::isSessionTrackingEnabled method bool () public
+cly::ConfigurationModule::isTrackingEnabled method bool () const public
+cly::ConfigurationModule::isViewTrackingEnabled method bool () const public
+cly::ConfigurationModule::startServerConfigUpdateTimer method void (nlohmann::json) public
+cly::ConfigurationModule::stopTimer method void () public
+cly::ConfigurationModule::~ConfigurationModule destructor void () noexcept public
+cly::ConfigurationProvider class public
+cly::ConfigurationProvider::getBackoffAcceptedTimeout method unsigned int () const virtual public
+cly::ConfigurationProvider::getBackoffDuration method unsigned int () const virtual public
+cly::ConfigurationProvider::getBackoffRequestAge method unsigned int () const virtual public
+cly::ConfigurationProvider::getBackoffRequestQueuePercentage method double () const virtual public
+cly::ConfigurationProvider::getLimits method SDKLimits () const virtual pure public
+cly::ConfigurationProvider::getRequestDropAgeHours method unsigned int () const virtual public
+cly::ConfigurationProvider::getRequestQueueSizeLimit method unsigned int () const virtual pure public
+cly::ConfigurationProvider::isBackoffEnabled method bool () const virtual public
+cly::ConfigurationProvider::isCrashReportingEnabled method bool () const virtual pure public
+cly::ConfigurationProvider::isNetworkingEnabled method bool () const virtual pure public
+cly::ConfigurationProvider::isTrackingEnabled method bool () const virtual pure public
+cly::ConfigurationProvider::isViewTrackingEnabled method bool () const virtual pure public
+cly::ConfigurationProvider::~ConfigurationProvider destructor void () noexcept virtual public
+cly::ConsentModule class public
+cly::ConsentModule::createGroup method void (const std::string &, const std::vector<std::string> &) public
+cly::ConsentModule::expand method std::vector<std::string> (const std::vector<std::string> &, std::vector<std::string> &) const public
+cly::ConsentModule::featuresToChange method std::vector<std::string> (const std::vector<std::string> &, bool) const public
+cly::ConsentModule::featuresWithFlag method std::vector<std::string> (bool) const public
+cly::ConsentModule::getConsent method bool (const std::string &) const public
+cly::ConsentModule::isFeature method bool (const std::string &) static public
+cly::ConsentModule::isGroup method bool (const std::string &) const public
+cly::ConsentModule::isKnownName method bool (const std::string &) const public
+cly::ConsentModule::isRequired method bool () const public
+cly::ConsentModule::requirementChangesWith method bool (int) const public
+cly::ConsentModule::setGiven method void (const std::vector<std::string> &, bool) public
+cly::ConsentModule::setOnlyGiven method void (const std::vector<std::string> &) public
+cly::ConsentModule::setRequiredByApp method void (bool) public
+cly::ConsentModule::setRequiredByServer method void (int) public
+cly::ConsentModule::state method nlohmann::json () const public
+cly::Countly class public
+cly::Countly::AutomaticSessionTrackingChanged method void () public
+cly::Countly::ConsentRequirementChanged method void () public
+cly::Countly::Countly constructor void () public
+cly::Countly::Countly constructor void (Countly &&) public
+cly::Countly::Countly constructor void (const Countly &) public
+cly::Countly::CurrentViewId method std::string () public
+cly::Countly::DeviceMetrics method nlohmann::json () public
+cly::Countly::IsSessionRunning method bool () public
+cly::Countly::LocationSettingChanged method void () public
+cly::Countly::PlatformName method std::string () public
+cly::Countly::RecordEvent method void (const std::string &, const std::map<std::string, std::string> &, int) public
+cly::Countly::RecordEvent method void (const std::string &, const std::map<std::string, std::string> &, int, double) public
+cly::Countly::RecordEvent method void (const std::string &, const std::map<std::string, std::string> &, int, double, double) public
+cly::Countly::RecordEvent method void (const std::string &, int) public
+cly::Countly::RecordEvent method void (const std::string &, int, double) public
+cly::Countly::RecordLocation method void (const std::string &, const std::string &, const std::string &, const std::string &) public
+cly::Countly::SetMaxEventsPerMessage method void (int) public
+cly::Countly::SetMetrics method void (const std::string &, const std::string &, const std::string &, const std::string &, const std::string &, const std::string &) public
+cly::Countly::SetMinUpdatePeriod method void (int) public
+cly::Countly::SetPath method void (const std::string &) public
+cly::Countly::Start method void (const std::string &, const std::string &, int) public
+cly::Countly::StartOnCloud method void (const std::string &) public
+cly::Countly::Stop method void () public
+cly::Countly::addEvent method void (const cly::Event &) public
+cly::Countly::addEventToSqlite method void (const cly::Event &) public
+cly::Countly::alwaysUsePost method void (bool) public
+cly::Countly::attemptSessionUpdateEQ method bool () public
+cly::Countly::attemptToSendStoredRequests method void () public
+cly::Countly::beginSession method bool () public
+cly::Countly::calculateChecksum method std::string (const std::string &, const std::string &) public
+cly::Countly::changeAppKey method void (const std::string &) public
+cly::Countly::changeServerUrl method void (const std::string &, int) public
+cly::Countly::checkAllConsent method void () public
+cly::Countly::checkAndSendEventToRQ method void () public
+cly::Countly::checkEQSize method int () public
+cly::Countly::checkMemoryEQSize method int () public
+cly::Countly::checkPersistentEQSize method int () public
+cly::Countly::checkRQSize method int () public
+cly::Countly::clearEQInternal method void () public
+cly::Countly::clearPersistentEQ method void () public
+cly::Countly::crash method cly::CrashModule &() const public
+cly::Countly::createFeatureGroup method void (const std::string &, const std::vector<std::string> &) public
+cly::Countly::createInstance method Countly &(const std::string &) static public
+cly::Countly::destroyAllInstances method void () static public
+cly::Countly::destroyInstance method void (const std::string &) static public
+cly::Countly::disableAutoEventsOnUserProperties method void () public
+cly::Countly::disableBackoffMechanism method void () public
+cly::Countly::disableGradualRequestCleaner method void () public
+cly::Countly::disableHealthCheck method void () public
+cly::Countly::disableLocation method void () public
+cly::Countly::disableSDKBehaviorSettingsUpdates method void () public
+cly::Countly::enableImmediateRequestOnStop method void () public
+cly::Countly::enableManualSessionControl method void () public
+cly::Countly::enableRemoteConfig method void () public
+cly::Countly::endSession method bool () public
+cly::Countly::enrollABOnRCDownload method void () public
+cly::Countly::fillEventsIntoJson method void (nlohmann::json &, std::string &) public
+cly::Countly::findInstance method Countly *(const std::string &) static public
+cly::Countly::flushEvents method void (std::chrono::seconds) public
+cly::Countly::flushQueues method void () public
+cly::Countly::getConsent method bool (const std::string &) public
+cly::Countly::getDeviceID method std::string () public
+cly::Countly::getDeviceIDType method DeviceIdType () public
+cly::Countly::getInstance method Countly &() static public
+cly::Countly::getInstance method Countly &(const std::string &) static public
+cly::Countly::getRemoteConfigValue method nlohmann::json (const std::string &) public
+cly::Countly::getTimestamp method std::chrono::system_clock::time_point () static public
+cly::Countly::giveConsent method void (const std::vector<std::string> &) public
+cly::Countly::giveConsentAll method void () public
+cly::Countly::hasInstance method bool (const std::string &) static public
+cly::Countly::multiplyCustomUserDetail method void (const std::string &, double) public
+cly::Countly::operator= method Countly &(Countly &&) public
+cly::Countly::operator= method void (const Countly &) public
+cly::Countly::removeConsent method void (const std::vector<std::string> &) public
+cly::Countly::removeConsentAll method void () public
+cly::Countly::removeDifferentAppKeysFromQueue method void () public
+cly::Countly::removeEventWithId method void (const std::string &) public
+cly::Countly::replaceAllAppKeysInQueueWithCurrentAppKey method void () public
+cly::Countly::sendEventsToRQ method void (const nlohmann::json &) public
+cly::Countly::setAutomaticSessionUpdateInterval method void (unsigned short) public
+cly::Countly::setCity method void (const std::string &) public
+cly::Countly::setClearStoredDeviceID method void (bool) public
+cly::Countly::setConsent method void (const std::vector<std::string> &, bool) public
+cly::Countly::setConsentEnabled method void (const std::vector<std::string> &) public
+cly::Countly::setConsentFeatureGroup method void (const std::string &, bool) public
+cly::Countly::setCountry method void (const std::string &) public
+cly::Countly::setCrashFilterCallback method void (CrashFilterCallback) public
+cly::Countly::setCustomCrashSegmentation method void (const std::map<std::string, std::string> &) public
+cly::Countly::setCustomUserDetails method void (const std::map<std::string, std::string> &) public
+cly::Countly::setDatabasePath method void (const std::string &) public
+cly::Countly::setDeviceID method void (const std::string &) public
+cly::Countly::setDeviceID method void (const std::string &, bool) public
+cly::Countly::setEventsToRQThreshold method void (int) public
+cly::Countly::setFailedRequestCooldown method void (int) public
+cly::Countly::setHTTPClient method void (HTTPClientFunction) public
+cly::Countly::setLocation method void (const std::string &, const std::string &, const std::string &, const std::string &) public
+cly::Countly::setLocation method void (double, double) public
+cly::Countly::setLogger method void (void (*)(LogLevel, const std::string &)) public
+cly::Countly::setMaxBreadcrumbCount method void (unsigned int) public
+cly::Countly::setMaxEvents method void (size_t) public
+cly::Countly::setMaxKeyLength method void (unsigned int) public
+cly::Countly::setMaxRQProcessingBatchSize method void (unsigned int) public
+cly::Countly::setMaxRequestQueueSize method void (unsigned int) public
+cly::Countly::setMaxSegmentationValues method void (unsigned int) public
+cly::Countly::setMaxStackTraceLineLength method void (unsigned int) public
+cly::Countly::setMaxStackTraceLinesPerThread method void (unsigned int) public
+cly::Countly::setMaxValueSize method void (unsigned int) public
+cly::Countly::setMetrics method void (const std::string &, const std::string &, const std::string &, const std::string &, const std::string &, const std::string &) public
+cly::Countly::setRequestDropAgeHours method void (int) public
+cly::Countly::setRequiresConsent method void (bool) public
+cly::Countly::setSDKBehaviorSettings method void (const std::string &) public
+cly::Countly::setSalt method void (const std::string &) public
+cly::Countly::setSha256 method void (cly::SHA256Function) public
+cly::Countly::setUpdateInterval method void (size_t) public
+cly::Countly::setUserDetails method void (const std::map<std::string, std::string> &) public
+cly::Countly::shutdownNetworking method void () static public
+cly::Countly::start method void (const std::string &, const std::string &, int, bool) public
+cly::Countly::startOnCloud method void (const std::string &) public
+cly::Countly::stop method void () public
+cly::Countly::updateRemoteConfig method void () public
+cly::Countly::updateRemoteConfigExcept method void (std::string *, size_t) public
+cly::Countly::updateRemoteConfigFor method void (std::string *, size_t) public
+cly::Countly::updateSession method bool () public
+cly::Countly::views method cly::ViewsModule &() const public
+cly::Countly::~Countly destructor void () virtual public
+cly::CountlyConfiguration struct public
+cly::CountlyConfiguration::CountlyConfiguration constructor void (const std::string, std::string) public
+cly::CountlyConfiguration::appKey field std::string public
+cly::CountlyConfiguration::autoEventsOnUserProperties field bool public
+cly::CountlyConfiguration::backoffMechanismEnabled field bool public
+cly::CountlyConfiguration::breadcrumbsThreshold field unsigned int public
+cly::CountlyConfiguration::clearStoredDeviceID field bool public
+cly::CountlyConfiguration::crashFilter field CrashFilterCallback public
+cly::CountlyConfiguration::crashSegmentation field std::map<std::string, std::string> public
+cly::CountlyConfiguration::databasePath field std::string public
+cly::CountlyConfiguration::deviceId field std::string public
+cly::CountlyConfiguration::deviceIdType field DeviceIdType public
+cly::CountlyConfiguration::enrollABOnRCDownload field bool public
+cly::CountlyConfiguration::eventQueueThreshold field int public
+cly::CountlyConfiguration::failedRequestCooldownSeconds field unsigned int public
+cly::CountlyConfiguration::forcePost field bool public
+cly::CountlyConfiguration::gradualRequestCleanerEnabled field bool public
+cly::CountlyConfiguration::healthCheckEnabled field bool public
+cly::CountlyConfiguration::http_client_function field HTTPClientFunction public
+cly::CountlyConfiguration::immediateRequestOnStop field bool public
+cly::CountlyConfiguration::manualSessionControl field bool public
+cly::CountlyConfiguration::maxKeyLength field unsigned int public
+cly::CountlyConfiguration::maxProcessingBatchSize field unsigned int public
+cly::CountlyConfiguration::maxSegmentationValues field unsigned int public
+cly::CountlyConfiguration::maxStackTraceLineLength field unsigned int public
+cly::CountlyConfiguration::maxStackTraceLinesPerThread field unsigned int public
+cly::CountlyConfiguration::maxValueSize field unsigned int public
+cly::CountlyConfiguration::metrics field nlohmann::json public
+cly::CountlyConfiguration::port field unsigned int public
+cly::CountlyConfiguration::requestDropAgeHours field unsigned int public
+cly::CountlyConfiguration::requestQueueThreshold field unsigned int public
+cly::CountlyConfiguration::salt field std::string public
+cly::CountlyConfiguration::sdkBehaviorSettings field std::string public
+cly::CountlyConfiguration::sdkBehaviorSettingsUpdatesDisabled field bool public
+cly::CountlyConfiguration::serverPath field std::string public
+cly::CountlyConfiguration::serverUrl field std::string public
+cly::CountlyConfiguration::sessionDuration field unsigned int public
+cly::CountlyConfiguration::sha256_function field SHA256Function public
+cly::CountlyDelegates class public
+cly::CountlyDelegates::AutomaticSessionTrackingChanged method void () virtual public
+cly::CountlyDelegates::ConsentRequirementChanged method void () virtual public
+cly::CountlyDelegates::CurrentViewId method std::string () virtual public
+cly::CountlyDelegates::DeviceMetrics method nlohmann::json () virtual public
+cly::CountlyDelegates::IsSessionRunning method bool () virtual public
+cly::CountlyDelegates::LocationSettingChanged method void () virtual public
+cly::CountlyDelegates::PlatformName method std::string () virtual public
+cly::CountlyDelegates::RecordEvent method void (const std::string &, const std::map<std::string, std::string> &, int) virtual pure public
+cly::CountlyDelegates::RecordEvent method void (const std::string &, const std::map<std::string, std::string> &, int, double) virtual pure public
+cly::CountlyDelegates::RecordEvent method void (const std::string &, const std::map<std::string, std::string> &, int, double, double) virtual pure public
+cly::CountlyDelegates::RecordEvent method void (const std::string &, int) virtual pure public
+cly::CountlyDelegates::RecordEvent method void (const std::string &, int, double) virtual pure public
+cly::CountlyDelegates::RecordLocation method void (const std::string &, const std::string &, const std::string &, const std::string &) virtual pure public
+cly::CountlyDelegates::addEvent method void (const cly::Event &) virtual pure public
+cly::CrashData struct public
+cly::CrashData::breadcrumbs field std::vector<std::string> public
+cly::CrashData::crashMetrics field std::map<std::string, std::string> public
+cly::CrashData::crashSegmentation field std::map<std::string, std::string> public
+cly::CrashData::description field std::string public
+cly::CrashData::fatal field bool public
+cly::CrashData::stackTrace field std::string public
+cly::CrashFilterCallback alias std::function<bool (CrashData &)> public
+cly::CrashModule class public
+cly::CrashModule::CrashModule constructor void (std::shared_ptr<CountlyConfiguration>, std::shared_ptr<LoggerModule>, std::shared_ptr<RequestModule>, std::shared_ptr<std::mutex>) public
+cly::CrashModule::addBreadcrumb method void (const std::string &) public
+cly::CrashModule::clearBreadcrumbs method void () public
+cly::CrashModule::recordException method void (const std::string &, const std::string &, const bool, const std::map<std::string, std::string> &, const std::map<std::string, std::string> &) public
+cly::CrashModule::~CrashModule destructor void () public
+cly::DataEntry class public
+cly::DataEntry::DataEntry constructor void (const long long, const std::string &) public
+cly::DataEntry::getData method const std::string &() const public
+cly::DataEntry::getId method long long () const public
+cly::DataEntry::~DataEntry destructor void () noexcept public
+cly::DeviceIdType enum public
+cly::DeviceIdType::DEVELOPER_SUPPLIED enumerator public
+cly::DeviceIdType::SDK_GENERATED enumerator public
+cly::Event class public
+cly::Event::Event constructor void (const std::string &, size_t) public
+cly::Event::Event constructor void (const std::string &, size_t, double) public
+cly::Event::Event constructor void (const std::string &, size_t, double, double) public
+cly::Event::addSegmentation function template void (const std::string &, T) public
+cly::Event::applyLimits method void (unsigned int, unsigned int, unsigned int) public
+cly::Event::clearSegmentation method void () public
+cly::Event::getKey method std::string () const public
+cly::Event::hasSegmentation method bool () const public
+cly::Event::removeSegmentation method void (const std::string &) public
+cly::Event::serialize method std::string () const public
+cly::Event::setTimestamp method void () public
+cly::Event::startTimer method void () public
+cly::Event::stopTimer method void () public
+cly::FilterList struct public
+cly::FilterList::filterList field T public
+cly::FilterList::isWhitelist field bool public
+cly::HTTPClientFunction alias std::function<HTTPResponse (bool, const std::string &, const std::string &)> public
+cly::HTTPResponse struct public
+cly::HTTPResponse::body field std::string public
+cly::HTTPResponse::data field nlohmann::json public
+cly::HTTPResponse::status_code field long public
+cly::HTTPResponse::success field bool public
+cly::HealthCheckModule class public
+cly::HealthCheckModule::COUNT_CAP variable const int static public
+cly::HealthCheckModule::HealthCheckModule constructor void () public
+cly::HealthCheckModule::MAX_ERROR_MESSAGE_LENGTH variable const size_t static public
+cly::HealthCheckModule::clearAndSave method void () public
+cly::HealthCheckModule::clearSentValues method void (const nlohmann::json &) public
+cly::HealthCheckModule::logBackoffRequest method void () public
+cly::HealthCheckModule::logConsecutiveBackoffRequest method void () public
+cly::HealthCheckModule::logError method void () public
+cly::HealthCheckModule::logFailedNetworkRequest method void (long, const std::string &) public
+cly::HealthCheckModule::logWarning method void () public
+cly::HealthCheckModule::recordLogCode method void (const std::string &, int) public
+cly::HealthCheckModule::recordUsage method void (const std::string &, const std::string &) public
+cly::HealthCheckModule::saveState method void () public
+cly::HealthCheckModule::setLogger method void (std::weak_ptr<LoggerModule>) public
+cly::HealthCheckModule::setStorage method void (std::shared_ptr<StorageModuleBase>) public
+cly::HealthCheckModule::snapshot method nlohmann::json () public
+cly::HealthCheckModule::~HealthCheckModule destructor void () public
+cly::LogLevel enum public
+cly::LogLevel::DEBUG enumerator public
+cly::LogLevel::ERROR enumerator public
+cly::LogLevel::FATAL enumerator public
+cly::LogLevel::INFO enumerator public
+cly::LogLevel::WARNING enumerator public
+cly::LoggerFunction alias std::function<void (LogLevel, const std::string &)> public
+cly::LoggerModule class public
+cly::LoggerModule::LoggerModule constructor void () public
+cly::LoggerModule::getLogger method const LoggerFunction () public
+cly::LoggerModule::healthCheck method std::shared_ptr<HealthCheckModule> () const public
+cly::LoggerModule::isInsideCallback method bool () static public
+cly::LoggerModule::log method void (LogLevel, const std::string &) public
+cly::LoggerModule::recordLogCode method void (const std::string &, int) public
+cly::LoggerModule::recordUsage method void (const std::string &, const std::string &) public
+cly::LoggerModule::setHealthCheck method void (std::shared_ptr<HealthCheckModule>) public
+cly::LoggerModule::setLogger method void (LoggerFunction) public
+cly::LoggerModule::~LoggerModule destructor void () public
+cly::RemoteConfigStore struct public
+cly::RemoteConfigStore::app_key field std::string public
+cly::RemoteConfigStore::fetch_running field std::atomic<bool> public
+cly::RemoteConfigStore::has_pending field bool public
+cly::RemoteConfigStore::mutex field std::mutex public
+cly::RemoteConfigStore::pending_data field std::map<std::string, std::string> public
+cly::RemoteConfigStore::pending_merge field bool public
+cly::RemoteConfigStore::user_generation field unsigned long long public
+cly::RemoteConfigStore::values field nlohmann::json public
+cly::RequestBuilder class public
+cly::RequestBuilder::RequestBuilder constructor void (std::shared_ptr<CountlyConfiguration>, std::shared_ptr<LoggerModule>) public
+cly::RequestBuilder::buildFetchRequest method std::string (const std::map<std::string, std::string> &) public
+cly::RequestBuilder::buildRequest method std::string (const std::map<std::string, std::string> &) public
+cly::RequestBuilder::encodeURL method std::string (const std::string &) static public
+cly::RequestBuilder::serializeData method std::string (const std::map<std::string, std::string> &) static public
+cly::RequestBuilder::~RequestBuilder destructor void () public
+cly::RequestModule class public
+cly::RequestModule::RQSize method long long () public
+cly::RequestModule::RequestModule constructor void (std::shared_ptr<CountlyConfiguration>, std::shared_ptr<LoggerModule>, std::shared_ptr<RequestBuilder>, std::shared_ptr<StorageModuleBase>) public
+cly::RequestModule::addRequestToQueue method void (const std::map<std::string, std::string> &) public
+cly::RequestModule::clearRequestQueue method void () public
+cly::RequestModule::initGlobalNetworking method void () static public
+cly::RequestModule::processQueue method void (std::shared_ptr<std::mutex>, bool) public
+cly::RequestModule::removeOtherAppKeysFromQueue method long long (const std::string &) public
+cly::RequestModule::replaceAppKeysInQueue method void (const std::string &) public
+cly::RequestModule::sendHTTP method HTTPResponse (std::string, std::string) public
+cly::RequestModule::sendImmediate method HTTPResponse (const std::string &, const std::string &) public
+cly::RequestModule::setConfigurationProvider method void (std::weak_ptr<ConfigurationProvider>) public
+cly::RequestModule::setOnMergeDelivered method void (std::function<void ()>) public
+cly::RequestModule::setServerUrl method void (const std::string &, unsigned int, const std::string &) public
+cly::RequestModule::~RequestModule destructor void () public
+cly::SDKLimits struct public
+cly::SDKLimits::maxBreadcrumbCount field unsigned int public
+cly::SDKLimits::maxKeyLength field unsigned int public
+cly::SDKLimits::maxSegmentationValues field unsigned int public
+cly::SDKLimits::maxStackTraceLineLength field unsigned int public
+cly::SDKLimits::maxStackTraceLinesPerThread field unsigned int public
+cly::SDKLimits::maxValueSize field unsigned int public
+cly::SHA256Function alias std::function<std::string (const std::string &)> public
+cly::StorageModuleBase class public
+cly::StorageModuleBase::RQClearAll method void () virtual pure public
+cly::StorageModuleBase::RQCount method long long () virtual pure public
+cly::StorageModuleBase::RQInsertAtEnd method void (const std::string &) virtual pure public
+cly::StorageModuleBase::RQPeekAll method std::vector<std::shared_ptr<DataEntry>> () virtual pure public
+cly::StorageModuleBase::RQPeekFront method const std::shared_ptr<DataEntry> () virtual pure public
+cly::StorageModuleBase::RQRemove method void (long long) virtual public
+cly::StorageModuleBase::RQRemoveFront method void () virtual pure public
+cly::StorageModuleBase::RQRemoveFront method void (std::shared_ptr<DataEntry>) virtual pure public
+cly::StorageModuleBase::RQUpdate method void (long long, const std::string &) virtual public
+cly::StorageModuleBase::StorageModuleBase constructor void (std::shared_ptr<CountlyConfiguration>, std::shared_ptr<LoggerModule>) public
+cly::StorageModuleBase::_configuration field std::shared_ptr<CountlyConfiguration> protected
+cly::StorageModuleBase::_is_initialized field bool protected
+cly::StorageModuleBase::_logger field std::shared_ptr<LoggerModule> protected
+cly::StorageModuleBase::getDeviceIdState method std::string () virtual public
+cly::StorageModuleBase::getHealthCheckState method std::string () virtual public
+cly::StorageModuleBase::getSDKBehaviorSettings method std::string () virtual pure public
+cly::StorageModuleBase::init method void () virtual pure public
+cly::StorageModuleBase::isInitialized method bool () public
+cly::StorageModuleBase::storeDeviceIdState method void (const std::string &) virtual public
+cly::StorageModuleBase::storeHealthCheckState method void (const std::string &) virtual public
+cly::StorageModuleBase::storeSDKBehaviorSettings method void (const std::string &) virtual pure public
+cly::StorageModuleBase::~StorageModuleBase destructor void () noexcept virtual public
+cly::ViewsModule class public
+cly::ViewsModule::ViewsModule constructor void (cly::CountlyDelegates *, std::shared_ptr<cly::LoggerModule>) public
+cly::ViewsModule::closeViewWithID method void (const std::string &, const std::map<std::string, std::string> &) public
+cly::ViewsModule::closeViewWithName method void (const std::string &, const std::map<std::string, std::string> &) public
+cly::ViewsModule::openView method std::string (const std::string &, const std::map<std::string, std::string> &) public
+cly::ViewsModule::stopAllViews method void (const std::map<std::string, std::string> &) public
+cly::ViewsModule::~ViewsModule destructor void () public
+cly::consent::CRASHES variable const char *const constexpr public
+cly::consent::EVENTS variable const char *const constexpr public
+cly::consent::FEEDBACK variable const char *const constexpr public
+cly::consent::LOCATION variable const char *const constexpr public
+cly::consent::METRICS variable const char *const constexpr public
+cly::consent::REMOTE_CONFIG variable const char *const constexpr public
+cly::consent::SESSIONS variable const char *const constexpr public
+cly::consent::STAR_RATING variable const char *const constexpr public
+cly::consent::USERS variable const char *const constexpr public
+cly::consent::VIEWS variable const char *const constexpr public
+cly::consent::allFeatures function std::vector<std::string> () public
+cly::utils::format_string function std::string (const std::string &) static public
+cly::utils::format_string function template std::string (const std::string &, Args...) static public
+cly::utils::generateEventID function std::string () public
+cly::utils::generateUUID function std::string () public
+cly::utils::gmTime function std::tm (std::time_t) public
+cly::utils::localTime function std::tm (std::time_t) public
+cly::utils::mapToString function std::string (const std::map<std::string, std::string> &) static public
