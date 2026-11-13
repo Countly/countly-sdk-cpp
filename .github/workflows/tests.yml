@@ -314,3 +314,41 @@ jobs:
               assert not missing, f"dangling bom-refs: {missing}"
           print(f"ok: {path} with {len(doc['components'])} components")
           EOF
+
+  # Line, function and branch coverage of the test suite, written to the job summary.
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: "recursive"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends libcurl4-openssl-dev libssl-dev gcovr
+
+      # Atomic counters: the SDK's request thread runs beside the tests, and racing plain counters yield negative branch counts that gcovr rejects.
+      - name: Build the tests with coverage
+        run: |
+          cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=ON -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS="--coverage -fprofile-update=atomic" -DCMAKE_CXX_FLAGS="--coverage -fprofile-update=atomic" \
+            -DCMAKE_EXE_LINKER_FLAGS=--coverage -DCMAKE_SHARED_LINKER_FLAGS=--coverage -B build .
+          cmake --build build -j 4
+
+      - name: Run the tests
+        run: ./build/countly-tests
+
+      - name: Write the coverage summary
+        run: |
+          gcovr --root . --filter 'src/' --filter 'include/' --print-summary > "$RUNNER_TEMP/coverage.txt"
+          {
+            echo "### Unit test coverage"
+            echo
+            echo "| Metric | Covered | Count |"
+            echo "|---|---|---|"
+            awk '/^(lines|functions|branches):/ { gsub(/[():]/, ""); printf "| %s | %s | %s/%s |\n", $1, $2, $3, $6 }' "$RUNNER_TEMP/coverage.txt"
+          } >> "$GITHUB_STEP_SUMMARY"
