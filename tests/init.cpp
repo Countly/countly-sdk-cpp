@@ -119,83 +119,27 @@ TEST_CASE("Device ID when the app gives none") {
   }
 
 #ifdef COUNTLY_USE_SQLITE
-  SUBCASE("a generated ID is kept for the next starts, also when an ID is given later") {
+  SUBCASE("by default every start uses the device ID given before it") {
     clearSDK();
     Countly *countly = &prepareInstance();
+    countly->setDeviceID("first-user");
     countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-    const std::string generated = countly->getDeviceID();
-    REQUIRE(isUuidV4(generated));
 
     Countly::halt();
+    clearCapturedLogs();
     http_call_queue.clear();
     countly = &prepareInstance();
-    countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-    CHECK(countly->getDeviceID() == generated);
-    CHECK(countly->getDeviceIDType() == DeviceIdType::SDK_GENERATED);
-
-    Countly::halt();
-    clearCapturedLogs();
-    countly = &prepareInstance();
     countly->setLogger(captureLog);
-    countly->setDeviceID("developer-id");
+    countly->setDeviceID("second-user");
     countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
     countly->processRQDebug();
-    CHECK(countly->getDeviceID() == generated);
-    CHECK(countly->getDeviceIDType() == DeviceIdType::SDK_GENERATED);
-    CHECK_FALSE(anyRequestFor("developer-id"));
-    CHECK(capturedLogContains(GIVEN_ID_IGNORED));
-  }
-
-  SUBCASE("an ID given at the first start is kept: given again it is used quietly, a different one is ignored") {
-    clearSDK();
-    Countly *countly = &prepareInstance();
-    countly->setDeviceID("first-user");
-    countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-
-    Countly::halt();
-    clearCapturedLogs();
-    countly = &prepareInstance();
-    countly->setLogger(captureLog);
-    countly->setDeviceID("first-user");
-    countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-    CHECK(countly->getDeviceID() == "first-user");
+    CHECK(countly->getDeviceID() == "second-user");
+    CHECK(countly->getDeviceIDType() == DeviceIdType::DEVELOPER_SUPPLIED);
+    CHECK(anyRequestFor("second-user"));
     CHECK_FALSE(capturedLogContains(GIVEN_ID_IGNORED));
-
-    Countly::halt();
-    clearCapturedLogs();
-    http_call_queue.clear();
-    countly = &prepareInstance();
-    countly->setLogger(captureLog);
-    countly->setDeviceID("second-user");
-    countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-    countly->processRQDebug();
-    CHECK(countly->getDeviceID() == "first-user");
-    CHECK(countly->getDeviceIDType() == DeviceIdType::DEVELOPER_SUPPLIED);
-    CHECK_FALSE(anyRequestFor("second-user"));
-    CHECK(capturedLogContains(GIVEN_ID_IGNORED));
   }
 
-  SUBCASE("enableClearStoredDeviceID makes start() use the given ID, which the next start keeps") {
-    clearSDK();
-    Countly *countly = &prepareInstance();
-    countly->setDeviceID("first-user");
-    countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-
-    Countly::halt();
-    countly = &prepareInstance();
-    countly->enableClearStoredDeviceID();
-    countly->setDeviceID("second-user");
-    countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-    CHECK(countly->getDeviceID() == "second-user");
-    CHECK(countly->getDeviceIDType() == DeviceIdType::DEVELOPER_SUPPLIED);
-
-    Countly::halt();
-    countly = &prepareInstance();
-    countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-    CHECK(countly->getDeviceID() == "second-user");
-  }
-
-  SUBCASE("enableClearStoredDeviceID without a given ID generates a new ID") {
+  SUBCASE("by default a start without a given device ID generates a new one") {
     clearSDK();
     Countly *countly = &prepareInstance();
     countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
@@ -204,14 +148,13 @@ TEST_CASE("Device ID when the app gives none") {
 
     Countly::halt();
     countly = &prepareInstance();
-    countly->enableClearStoredDeviceID();
     countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
     CHECK(isUuidV4(countly->getDeviceID()));
     CHECK(countly->getDeviceID() != first);
     CHECK(countly->getDeviceIDType() == DeviceIdType::SDK_GENERATED);
   }
 
-  SUBCASE("enableClearStoredDeviceID first sends the events the stored user left behind under the stored ID") {
+  SUBCASE("by default the events the previous start left behind are sent under its device ID first") {
     clearSDK();
     Countly *countly = &prepareInstance();
     countly->setDeviceID("first-user");
@@ -221,7 +164,6 @@ TEST_CASE("Device ID when the app gives none") {
     http_call_queue.clear();
 
     countly = &prepareInstance();
-    countly->enableClearStoredDeviceID();
     countly->setDeviceID("second-user");
     countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
     CHECK(countly->checkEQSize() == 0);
@@ -240,7 +182,69 @@ TEST_CASE("Device ID when the app gives none") {
     CHECK(countly->getDeviceID() == "second-user");
   }
 
-  SUBCASE("an ID changed after start is kept for the next start") {
+  SUBCASE("setClearStoredDeviceID(false) keeps a generated ID for the next starts, also when an ID is given later") {
+    clearSDK();
+    Countly *countly = &prepareInstance();
+    countly->setClearStoredDeviceID(false);
+    countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+    const std::string generated = countly->getDeviceID();
+    REQUIRE(isUuidV4(generated));
+
+    Countly::halt();
+    http_call_queue.clear();
+    countly = &prepareInstance();
+    countly->setClearStoredDeviceID(false);
+    countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+    CHECK(countly->getDeviceID() == generated);
+    CHECK(countly->getDeviceIDType() == DeviceIdType::SDK_GENERATED);
+
+    Countly::halt();
+    clearCapturedLogs();
+    countly = &prepareInstance();
+    countly->setLogger(captureLog);
+    countly->setClearStoredDeviceID(false);
+    countly->setDeviceID("developer-id");
+    countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+    countly->processRQDebug();
+    CHECK(countly->getDeviceID() == generated);
+    CHECK(countly->getDeviceIDType() == DeviceIdType::SDK_GENERATED);
+    CHECK_FALSE(anyRequestFor("developer-id"));
+    CHECK(capturedLogContains(GIVEN_ID_IGNORED));
+  }
+
+  SUBCASE("setClearStoredDeviceID(false) keeps an ID given at the first start: given again it is used quietly, a different one is ignored") {
+    clearSDK();
+    Countly *countly = &prepareInstance();
+    countly->setClearStoredDeviceID(false);
+    countly->setDeviceID("first-user");
+    countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+
+    Countly::halt();
+    clearCapturedLogs();
+    countly = &prepareInstance();
+    countly->setLogger(captureLog);
+    countly->setClearStoredDeviceID(false);
+    countly->setDeviceID("first-user");
+    countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+    CHECK(countly->getDeviceID() == "first-user");
+    CHECK_FALSE(capturedLogContains(GIVEN_ID_IGNORED));
+
+    Countly::halt();
+    clearCapturedLogs();
+    http_call_queue.clear();
+    countly = &prepareInstance();
+    countly->setLogger(captureLog);
+    countly->setClearStoredDeviceID(false);
+    countly->setDeviceID("second-user");
+    countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
+    countly->processRQDebug();
+    CHECK(countly->getDeviceID() == "first-user");
+    CHECK(countly->getDeviceIDType() == DeviceIdType::DEVELOPER_SUPPLIED);
+    CHECK_FALSE(anyRequestFor("second-user"));
+    CHECK(capturedLogContains(GIVEN_ID_IGNORED));
+  }
+
+  SUBCASE("setClearStoredDeviceID(false) keeps an ID changed after start for the next start") {
     clearSDK();
     Countly *countly = &prepareInstance();
     countly->setDeviceID("first-user");
@@ -249,6 +253,7 @@ TEST_CASE("Device ID when the app gives none") {
 
     Countly::halt();
     countly = &prepareInstance();
+    countly->setClearStoredDeviceID(false);
     countly->start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
     CHECK(countly->getDeviceID() == "second-user");
   }
@@ -267,15 +272,15 @@ TEST_CASE("Device ID when the app gives none") {
   }
 #endif
 
-  SUBCASE("enableClearStoredDeviceID after start() is ignored with a warning") {
+  SUBCASE("setClearStoredDeviceID after start() is ignored with a warning") {
     clearSDK();
     clearCapturedLogs();
     Countly &countly = prepareInstance();
     countly.setLogger(captureLog);
     countly.setDeviceID("first-user");
     countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
-    countly.enableClearStoredDeviceID();
-    CHECK(capturedLogContains("enableClearStoredDeviceID, This method can't be called after SDK initialization"));
+    countly.setClearStoredDeviceID(false);
+    CHECK(capturedLogContains("setClearStoredDeviceID, This method can't be called after SDK initialization"));
     CHECK(countly.getDeviceID() == "first-user");
   }
 }

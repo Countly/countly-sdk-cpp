@@ -120,9 +120,10 @@ struct CountlyConfiguration {
   bool enrollABOnRCDownload = false;
 
   /**
-   * Whether start() replaces a device ID stored by an earlier start with the given or a newly generated one.
+   * Whether start() replaces a device ID stored by an earlier start with the given or a newly generated one. On by
+   * default; setClearStoredDeviceID(false) keeps the stored device ID between starts.
    */
-  bool clearStoredDeviceID = false;
+  bool clearStoredDeviceID = true;
 
   /**
    * Segmentation added to every crash report.

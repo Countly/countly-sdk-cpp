@@ -49,6 +49,9 @@ TEST_CASE("recording views") {
   Countly &ct = Countly::getInstance();
   ct.SetPath(TEST_DATABASE_NAME);
   ct.setDeviceID("test-device-id");
+  // Every pass of the update loop moves the events into a request, so the loop sleeps through the test
+  ct.enableImmediateRequestOnStop();
+  ct.setUpdateInterval(600000);
   ct.start(COUNTLY_TEST_APP_KEY, "https://try.count.ly", 443, false);
 
   /*

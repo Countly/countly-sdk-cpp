@@ -359,6 +359,9 @@ TEST_CASE("concurrent recording does not lose queue writes") {
   });
   countly.setDeviceID(COUNTLY_TEST_DEVICE_ID);
   countly.SetPath(TEST_DATABASE_NAME);
+  // Every pass of the update loop moves the events into a request, so the loop sleeps through the test
+  countly.enableImmediateRequestOnStop();
+  countly.setUpdateInterval(600000);
   countly.start(COUNTLY_TEST_APP_KEY, COUNTLY_TEST_HOST, COUNTLY_TEST_PORT, false);
   // Keep every event in the event queue so it can all be counted.
   countly.setEventsToRQThreshold(10000);

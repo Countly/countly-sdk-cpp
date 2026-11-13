@@ -215,9 +215,9 @@ public:
   void setLocation(const std::string &countryCode, const std::string &city, const std::string &gpsCoordinates, const std::string &ipAddress);
 
   /**
-   * Before start(): the device ID to use when no device ID is stored from an earlier start (SQLite builds keep the
-   * device ID in use between starts). A stored device ID wins, and a different ID given here is ignored with a
-   * warning, unless enableClearStoredDeviceID() is called too. Without a device ID, start() generates one.
+   * Before start(): the device ID start() uses. Without a device ID, start() generates one. SQLite builds that call
+   * setClearStoredDeviceID(false) keep the device ID in use between starts, and a stored device ID then wins: a
+   * different ID given here is ignored with a warning.
    * After start(): changes the device ID and chooses by where the device ID in use came from: a device ID the SDK
    * generated is merged into the new one on the server, as for a user who logs in; a device ID the app gave is changed
    * without merge, see setDeviceID(value, same_user).
@@ -232,12 +232,13 @@ public:
   void setDeviceID(const std::string &value, bool same_user);
 
   /**
-   * Makes start() forget the device ID stored by an earlier start. The events that user left in the database are
-   * first sent under the stored device ID; then start() uses the device ID given with setDeviceID, or generates a new
-   * one. Meant for testing and for forced user resets: left on in a released app, every start creates a new user.
-   * Call it before start(); after start() it is ignored with a warning.
+   * Whether start() replaces the device ID that SQLite builds stored at an earlier start. On by default: start() first
+   * sends the events that the earlier start left in the database under its device ID, then uses the device ID given
+   * with setDeviceID, or generates a new one. With false, the stored device ID is kept between starts and wins over a
+   * device ID given with setDeviceID, which is ignored with a warning. Call it before start(); after start() it is
+   * ignored with a warning.
    */
-  void enableClearStoredDeviceID();
+  void setClearStoredDeviceID(bool clear);
 
   /**
    * Sets segmentation that every crash report gets under "_custom". The segmentation a recordException call gives
@@ -306,6 +307,10 @@ public:
    */
   void changeAppKey(const std::string &appKey);
 
+  /**
+   * Sets how often the SDK's update loop runs, in milliseconds, 3000 by default. Each pass moves the recorded events
+   * into a request and sends the request queue; session updates follow the session update interval instead.
+   */
   void setUpdateInterval(size_t milliseconds);
 
   void addEvent(const cly::Event &event) override;
@@ -792,10 +797,10 @@ private:
   void onMergeDelivered();
 
   /**
-   * Decides the device ID at start(): the one stored by an earlier start, otherwise the given one, otherwise a newly
-   * generated UUID. Returns true when enableClearStoredDeviceID asks to replace a stored device ID: the stored one
-   * stays in use until replaceStoredDeviceId() has queued its user's events. The caller must hold the instance mutex
-   * and the storage must be initialized.
+   * Decides the device ID at start(): the one stored by an earlier start when setClearStoredDeviceID(false) keeps it,
+   * otherwise the given one, otherwise a newly generated UUID. Returns true when a stored device ID is replaced: the
+   * stored one stays in use until replaceStoredDeviceId() has queued its user's events. The caller must hold the
+   * instance mutex and the storage must be initialized.
    */
   bool resolveDeviceId(const std::string &given_device_id);
 
@@ -842,8 +847,8 @@ private:
   void updateLoop();
 
   /**
-   * One pass of the update loop: once an update interval passed, updates the automatic session and moves the waiting
-   * events into a request; then sends the request queue and stores the health check counters when due.
+   * One pass of the update loop: moves the waiting events into a request, updates the automatic session once an update
+   * interval passed, then sends the request queue and stores the health check counters when due.
    *
    * @param last_update: when the session was last updated by the timer, moved forward when it is updated now
    */

@@ -109,7 +109,7 @@ HTTPResponse delayedSessionTrackingOff(bool use_post, const std::string &url, co
 }
 } // namespace
 
-TEST_CASE("Automatic sessions are updated and events are sent on the update timer") {
+TEST_CASE("Sessions are updated on the update timer and events are sent on every pass of the update loop") {
   SUBCASE("also when start() is called without its last parameter") {
     Countly &countly = prepareSessions();
     countly.setAutomaticSessionUpdateInterval(1);
@@ -121,17 +121,16 @@ TEST_CASE("Automatic sessions are updated and events are sent on the update time
     CHECK(countly.checkEQSize() == 0);
   }
 
-  SUBCASE("events wait for the update timer instead of going out on every tick") {
+  SUBCASE("events go out on the next pass of the update loop, before the session update is due") {
     Countly &countly = prepareSessions();
-    countly.setAutomaticSessionUpdateInterval(2);
+    countly.setAutomaticSessionUpdateInterval(60);
     countly.setUpdateInterval(100);
     startSessions(countly);
     countly.RecordEvent("tap", 1);
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(800));
-    CHECK_FALSE(received("events"));
-    CHECK(countly.checkEQSize() == 1);
-    CHECK(eventually([] { return received("events"); }, std::chrono::seconds(4)));
+    CHECK(eventually([] { return received("events"); }, std::chrono::milliseconds(1500)));
+    CHECK(countly.checkEQSize() == 0);
+    CHECK_FALSE(received("update"));
   }
 
   SUBCASE("with manual sessions the update timer still sends the events") {

@@ -112,8 +112,8 @@ bool recorded(Countly &countly, const std::string &key) {
 } // namespace
 
 TEST_CASE("A setting missing from a new answer goes back to its default") {
-  settings_answers.reset({json({{"v", 2}, {"t", 1}, {"c", {{"tracking", false}}}}), json({{"v", 2}, {"t", 2}, {"c", json::object()}})});
   Countly &countly = prepareSettings();
+  settings_answers.reset({json({{"v", 2}, {"t", 1}, {"c", {{"tracking", false}}}}), json({{"v", 2}, {"t", 2}, {"c", json::object()}})});
   startSettings(countly);
   REQUIRE(waitFor([&countly] {
     countly.RecordEvent("probe", 1);
@@ -128,8 +128,8 @@ TEST_CASE("A setting missing from a new answer goes back to its default") {
 }
 
 TEST_CASE("After a device ID change with merge the settings are fetched once the merge request was sent") {
-  settings_answers.reset({});
   Countly &countly = prepareSettings();
+  settings_answers.reset({});
   startSettings(countly);
   REQUIRE(waitFor([] { return settings_answers.fetches() == 1; }));
 
@@ -210,8 +210,8 @@ TEST_CASE("Provided settings") {
 }
 
 TEST_CASE("disableSDKBehaviorSettingsUpdates sends no settings fetch at all") {
-  settings_answers.reset({});
   Countly &countly = prepareSettings("", false);
+  settings_answers.reset({});
   startSettings(countly);
   countly.setDeviceID("second-user", false);
   std::this_thread::sleep_for(std::chrono::milliseconds(300));
@@ -273,8 +273,8 @@ json settingsAnswer(const json &settings) { return json({{"v", 2}, {"t", 1}, {"c
 
 TEST_CASE("The server's automatic session tracking setting") {
   SUBCASE("ast false: no session begins by itself, and the app's session calls work") {
-    settings_answers.reset({});
     Countly &countly = prepareSessionSettings("{\"ast\":false}", false);
+    settings_answers.reset({});
     startSettings(countly);
     countly.processRQDebug();
     CHECK(sessionRequests().empty());
@@ -285,8 +285,8 @@ TEST_CASE("The server's automatic session tracking setting") {
   }
 
   SUBCASE("ast true: the SDK tracks sessions also when the app chose manual session control") {
-    settings_answers.reset({});
     Countly &countly = prepareSessionSettings("{\"ast\":true}", true);
+    settings_answers.reset({});
     startSettings(countly);
 
     CHECK_FALSE(countly.beginSession());
@@ -296,8 +296,8 @@ TEST_CASE("The server's automatic session tracking setting") {
   }
 
   SUBCASE("ast false from the server ends the session the SDK runs") {
-    settings_answers.reset({settingsAnswer(json::object()), settingsAnswer({{"ast", false}})});
     Countly &countly = prepareSessionSettings("", false);
+    settings_answers.reset({settingsAnswer(json::object()), settingsAnswer({{"ast", false}})});
     startSettings(countly);
     REQUIRE(waitFor([] { return settings_answers.fetches() == 1; }));
     countly.changeServerUrl(COUNTLY_TEST_HOST, COUNTLY_TEST_PORT);
@@ -310,8 +310,8 @@ TEST_CASE("The server's automatic session tracking setting") {
   }
 
   SUBCASE("ast true from the server begins a session for an app with manual session control") {
-    settings_answers.reset({settingsAnswer(json::object()), settingsAnswer({{"ast", true}})});
     Countly &countly = prepareSessionSettings("", true);
+    settings_answers.reset({settingsAnswer(json::object()), settingsAnswer({{"ast", true}})});
     startSettings(countly);
     REQUIRE(waitFor([] { return settings_answers.fetches() == 1; }));
     countly.processRQDebug();

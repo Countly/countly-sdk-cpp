@@ -1225,12 +1225,12 @@ bool Countly::resolveDeviceId(const std::string &given_device_id) {
   configuration->deviceIdType = stored["type"].get<int>() == static_cast<int>(DeviceIdType::SDK_GENERATED) ? DeviceIdType::SDK_GENERATED : DeviceIdType::DEVELOPER_SUPPLIED;
   session_params["device_id"] = configuration->deviceId;
   if (configuration->clearStoredDeviceID) {
-    log(LogLevel::INFO, "[Countly] start, The device ID stored by an earlier start is replaced, as asked with enableClearStoredDeviceID: [" + configuration->deviceId + "]");
+    log(LogLevel::DEBUG, "[Countly] start, The device ID stored by an earlier start is replaced: [" + configuration->deviceId + "]");
     return true;
   }
   if (!given_device_id.empty() && given_device_id != configuration->deviceId) {
     log(LogLevel::WARNING, "[Countly] start, The device ID stored by an earlier start is used: [" + configuration->deviceId + "], and the device ID given with setDeviceID is ignored: [" + given_device_id +
-                               "]. To use it, call enableClearStoredDeviceID() before start(), or change the device ID with setDeviceID after start().");
+                               "] because setClearStoredDeviceID(false) keeps the stored one. To use it, leave the stored device ID cleared, or change the device ID with setDeviceID after start().");
   } else {
     log(LogLevel::DEBUG, "[Countly] start, Using the device ID stored by an earlier start: [" + configuration->deviceId + "]");
   }
@@ -1263,13 +1263,13 @@ void Countly::useNewDeviceId(const std::string &given_device_id) {
   storeDeviceId();
 }
 
-void Countly::enableClearStoredDeviceID() {
+void Countly::setClearStoredDeviceID(bool clear) {
   if (is_sdk_initialized) {
-    log(LogLevel::WARNING, "[Countly] enableClearStoredDeviceID, This method can't be called after SDK initialization. Returning.");
+    log(LogLevel::WARNING, "[Countly] setClearStoredDeviceID, This method can't be called after SDK initialization. Returning.");
     return;
   }
   std::lock_guard<std::mutex> lk(*mutex);
-  configuration->clearStoredDeviceID = true;
+  configuration->clearStoredDeviceID = clear;
 }
 
 void Countly::storeDeviceId() {
@@ -3028,13 +3028,12 @@ void Countly::updateLoop() {
 
 void Countly::updateTick(std::chrono::steady_clock::time_point &last_update) {
   if (!stopping) {
+    packEvents();
     const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
     if (now - last_update >= std::chrono::seconds(configurationModule->getSessionUpdateInterval())) {
       last_update = now;
       if (isAutomaticSessionTracking()) {
         updateSessionInternal(true);
-      } else {
-        packEvents();
       }
     }
   }
