@@ -174,10 +174,12 @@ if(COUNTLY_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/remote_config.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/crash_reporting.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/location.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/server_url_app_key.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/server_url_app_key.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/request_scenarios.cpp)
     
     target_compile_options(countly-tests PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-g>)
-    target_compile_definitions(countly-tests PRIVATE COUNTLY_BUILD_TESTS)
+    # the request scenarios read and write their records under api/requests/
+    target_compile_definitions(countly-tests PRIVATE COUNTLY_BUILD_TESTS COUNTLY_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   if(COUNTLY_USE_SQLITE)
     if(COUNTLY_USE_SYSTEM_SQLITE)
       target_link_libraries(countly-tests SQLite::SQLite3)
