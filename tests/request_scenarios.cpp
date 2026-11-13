@@ -235,7 +235,8 @@ void checkRequests(const std::string &name, bool requiresConsent, const std::fun
   test_utils::clearSDK();
 
   const std::string file = RECORDS + name + ".json";
-  if (std::getenv("COUNTLY_UPDATE_REQUESTS") != nullptr) {
+  // only whether the variable is set is read, never its value
+  if (std::getenv("COUNTLY_UPDATE_REQUESTS") != nullptr) { // Flawfinder: ignore
     std::ofstream out(file, std::ios::binary);
     out << current;
     REQUIRE(out.good());
