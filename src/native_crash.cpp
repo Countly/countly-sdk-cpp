@@ -95,19 +95,6 @@ std::string narrow(const std::wstring &text) {
 }
 
 FILE *openFile(const std::string &path, const wchar_t *mode) { return _wfopen(widen(path).c_str(), mode); }
-#else
-/**
- * Whether a directory entry can be a regular file. Links are left out, and an entry whose type the file system does
- * not report counts as a file.
- */
-bool mayBeRegularFile(const struct dirent *entry) {
-#if defined(_DIRENT_HAVE_D_TYPE) || defined(__APPLE__)
-  return entry->d_type == DT_REG || entry->d_type == DT_UNKNOWN;
-#else
-  (void)entry;
-  return true;
-#endif
-}
 #endif
 
 std::string joinPath(const std::string &directory, const std::string &name) {
@@ -169,8 +156,14 @@ std::vector<std::string> listDumpFiles(const std::string &directory) {
   }
   // NOLINTNEXTLINE(concurrency-mt-unsafe): the directory stream belongs to this call alone
   for (struct dirent *entry = readdir(opened); entry != nullptr; entry = readdir(opened)) {
+#if defined(_DIRENT_HAVE_D_TYPE) || defined(__APPLE__)
+    // links and special files are never read as dumps; an entry whose type the file system does not report counts
+    if (entry->d_type != DT_REG && entry->d_type != DT_UNKNOWN) {
+      continue;
+    }
+#endif
     const std::string name = entry->d_name;
-    if (hasDumpExtension(name) && mayBeRegularFile(entry)) {
+    if (hasDumpExtension(name)) {
       names.push_back(name);
     }
   }
