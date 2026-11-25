@@ -1,4 +1,5 @@
 #include "native_crash_breakpad.hpp"
+#include "native_crash.hpp"
 
 #include <atomic>
 #include <csignal>
@@ -29,16 +30,6 @@ std::atomic<bool> dump_written(false);
 #ifdef _WIN32
 typedef void (*SignalHandler)(int);
 SignalHandler previous_abort_handler = SIG_DFL;
-
-std::wstring widen(const std::string &text) {
-  if (text.empty()) {
-    return std::wstring();
-  }
-  const int length = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), nullptr, 0);
-  std::wstring wide(static_cast<size_t>(length), L'\0');
-  MultiByteToWideChar(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), &wide[0], length);
-  return wide;
-}
 
 /**
  * Called by Breakpad after it wrote a dump. Returns false, so that Breakpad hands the crash to the handler that was

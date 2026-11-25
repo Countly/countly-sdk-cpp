@@ -14,6 +14,13 @@ namespace native_crash {
  */
 constexpr unsigned long long MAX_DUMP_BYTES = 10ULL * 1024 * 1024;
 
+#ifdef _WIN32
+/**
+ * Converts UTF-8 text to UTF-16, for the wide Windows file APIs.
+ */
+std::wstring widen(const std::string &text);
+#endif
+
 /**
  * The paths of the files in the directory whose name ends with ".dmp" in any case, sorted by name. Empty when the
  * directory can't be read.

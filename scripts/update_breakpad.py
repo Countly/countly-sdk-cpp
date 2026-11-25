@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
-"""Update the vendored Breakpad crash handler client in vendor/breakpad/.
+"""Update the vendored Breakpad crash handler client in vendor/breakpad/."""
 
-Usage: python3 scripts/update_breakpad.py <breakpad-commit> <lss-commit>
-       python3 scripts/update_breakpad.py --breakpad-dir <checkout> --lss-dir <checkout>
-
-Fetches Breakpad (https://chromium.googlesource.com/breakpad/breakpad) and
-linux-syscall-support (https://chromium.googlesource.com/linux-syscall-support)
-at the given commits, or reads local checkouts, and replaces vendor/breakpad/
-with the client sources for Linux and Windows, every header they include, and
-the licenses. It also writes vendor/breakpad/sources.cmake, the source lists
-that CMakeLists.txt compiles when COUNTLY_USE_BREAKPAD is ON, and
-vendor/breakpad/README.md with the commits.
-
-Requires git (when commits are given) and the Python standard library.
-"""
+# Usage: python3 scripts/update_breakpad.py <breakpad-commit> <lss-commit>
+#        python3 scripts/update_breakpad.py --breakpad-dir <checkout> --lss-dir <checkout>
+#
+# Fetches Breakpad (https://chromium.googlesource.com/breakpad/breakpad) and
+# linux-syscall-support (https://chromium.googlesource.com/linux-syscall-support)
+# at the given commits, or reads local checkouts, and replaces vendor/breakpad/
+# with the client sources for Linux and Windows, every header they include, and
+# the licenses. It also writes vendor/breakpad/sources.cmake, the source lists
+# that CMakeLists.txt compiles when COUNTLY_USE_BREAKPAD is ON, and
+# vendor/breakpad/README.md with the commits.
+#
+# Requires git (when commits are given) and the Python standard library.
 
 import argparse
 import re
 import shutil
-import subprocess
+import subprocess  # nosec B404 - the script runs git to fetch the pinned commits
 import sys
 import tempfile
 from pathlib import Path
@@ -76,7 +75,7 @@ def write_text(path, text):
 
 def run(arguments, cwd=None):
     """Runs a command and stops the script when it fails."""
-    result = subprocess.run(arguments, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    result = subprocess.run(arguments, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)  # nosec B603 - fixed git commands, no shell
     if result.returncode != 0:
         sys.exit(f"error: {' '.join(arguments)} failed:\n{result.stdout}")
     return result.stdout.strip()

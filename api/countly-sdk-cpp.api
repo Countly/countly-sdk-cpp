@@ -2,6 +2,7 @@ cly::ConfigurationModule class public
 cly::ConfigurationModule::ConfigurationModule constructor void (cly::CountlyDelegates *, std::shared_ptr<CountlyConfiguration>, std::shared_ptr<LoggerModule>, std::shared_ptr<RequestBuilder>, std::shared_ptr<StorageModuleBase>, std::shared_ptr<RequestModule>, std::shared_ptr<std::mutex>) public
 cly::ConfigurationModule::fetchConfigFromServer method void (nlohmann::json) public
 cly::ConfigurationModule::fetchConfigFromStorage method void () public
+cly::ConfigurationModule::getAutomaticCrashReporting method int () const public
 cly::ConfigurationModule::getAutomaticSessionTracking method int () const public
 cly::ConfigurationModule::getBackoffAcceptedTimeout method unsigned int () const public
 cly::ConfigurationModule::getBackoffDuration method unsigned int () const public
@@ -65,6 +66,7 @@ cly::Countly::ConsentRequirementChanged method void () public
 cly::Countly::Countly constructor void () public
 cly::Countly::Countly constructor void (Countly &&) public
 cly::Countly::Countly constructor void (const Countly &) public
+cly::Countly::CrashReportingSettingsChanged method void () public
 cly::Countly::CurrentViewId method std::string () public
 cly::Countly::DeviceMetrics method nlohmann::json () public
 cly::Countly::IsSessionRunning method bool () public
@@ -111,6 +113,7 @@ cly::Countly::disableGradualRequestCleaner method void () public
 cly::Countly::disableHealthCheck method void () public
 cly::Countly::disableLocation method void () public
 cly::Countly::disableSDKBehaviorSettingsUpdates method void () public
+cly::Countly::enableCrashReporting method void () public
 cly::Countly::enableImmediateRequestOnStop method void () public
 cly::Countly::enableManualSessionControl method void () public
 cly::Countly::enableRemoteConfig method void () public
@@ -146,6 +149,7 @@ cly::Countly::setConsent method void (const std::vector<std::string> &, bool) pu
 cly::Countly::setConsentEnabled method void (const std::vector<std::string> &) public
 cly::Countly::setConsentFeatureGroup method void (const std::string &, bool) public
 cly::Countly::setCountry method void (const std::string &) public
+cly::Countly::setCrashDumpDirectory method void (const std::string &) public
 cly::Countly::setCrashFilterCallback method void (CrashFilterCallback) public
 cly::Countly::setCustomCrashSegmentation method void (const std::map<std::string, std::string> &) public
 cly::Countly::setCustomUserDetails method void (const std::map<std::string, std::string> &) public
@@ -189,9 +193,11 @@ cly::CountlyConfiguration struct public
 cly::CountlyConfiguration::CountlyConfiguration constructor void (const std::string, std::string) public
 cly::CountlyConfiguration::appKey field std::string public
 cly::CountlyConfiguration::autoEventsOnUserProperties field bool public
+cly::CountlyConfiguration::automaticCrashReporting field bool public
 cly::CountlyConfiguration::backoffMechanismEnabled field bool public
 cly::CountlyConfiguration::breadcrumbsThreshold field unsigned int public
 cly::CountlyConfiguration::clearStoredDeviceID field bool public
+cly::CountlyConfiguration::crashDumpDirectory field std::string public
 cly::CountlyConfiguration::crashFilter field CrashFilterCallback public
 cly::CountlyConfiguration::crashSegmentation field std::map<std::string, std::string> public
 cly::CountlyConfiguration::databasePath field std::string public
@@ -226,6 +232,7 @@ cly::CountlyConfiguration::sha256_function field SHA256Function public
 cly::CountlyDelegates class public
 cly::CountlyDelegates::AutomaticSessionTrackingChanged method void () virtual public
 cly::CountlyDelegates::ConsentRequirementChanged method void () virtual public
+cly::CountlyDelegates::CrashReportingSettingsChanged method void () virtual public
 cly::CountlyDelegates::CurrentViewId method std::string () virtual public
 cly::CountlyDelegates::DeviceMetrics method nlohmann::json () virtual public
 cly::CountlyDelegates::IsSessionRunning method bool () virtual public

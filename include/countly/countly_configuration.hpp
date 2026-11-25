@@ -138,6 +138,7 @@ struct CountlyConfiguration {
   /**
    * The directory of native crash dumps ("*.dmp"), empty when the app set none.
    */
+  // cppcheck-suppress unusedStructMember ; read and written by Countly in countly.cpp
   std::string crashDumpDirectory;
 
   /**

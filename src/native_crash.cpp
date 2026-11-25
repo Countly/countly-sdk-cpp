@@ -7,14 +7,14 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iterator>
 #include <mutex>
 
 #ifdef _WIN32
 #include <windows.h>
 #else
-#include <climits>
 #include <dirent.h>
-#include <sys/stat.h>
+#include <fstream>
 #endif
 
 #ifdef COUNTLY_USE_BREAKPAD
@@ -23,11 +23,25 @@
 
 namespace cly {
 namespace native_crash {
+
+#ifdef _WIN32
+std::wstring widen(const std::string &text) {
+  if (text.empty()) {
+    return std::wstring();
+  }
+  // the lengths are the byte count of the UTF-8 text and the character count of the wide buffer, as the API expects
+  const int length = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), nullptr, 0); // Flawfinder: ignore
+  std::wstring wide(static_cast<size_t>(length), L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), &wide[0], length); // Flawfinder: ignore
+  return wide;
+}
+#endif
+
 namespace {
 
-constexpr size_t CONTEXT_BLOCK_SIZE = 64 * 1024;
+constexpr size_t CONTEXT_BLOCK_SIZE = size_t{64} * 1024;
 constexpr size_t CONTEXT_HEADER_SIZE = 24;
-constexpr char CONTEXT_MAGIC[16] = {'C', 'L', 'Y', '_', 'N', 'A', 'T', 'I', 'V', 'E', '_', 'C', 'T', 'X', '_', '1'};
+constexpr unsigned char CONTEXT_MAGIC[16] = {'C', 'L', 'Y', '_', 'N', 'A', 'T', 'I', 'V', 'E', '_', 'C', 'T', 'X', '_', '1'};
 
 // Registered with the crash handler, so every dump it writes contains these bytes: the magic, the payload length and
 // checksum as little-endian 32-bit numbers, then the payload.
@@ -70,16 +84,6 @@ bool hasDumpExtension(const std::string &name) {
 }
 
 #ifdef _WIN32
-std::wstring widen(const std::string &text) {
-  if (text.empty()) {
-    return std::wstring();
-  }
-  const int length = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), nullptr, 0);
-  std::wstring wide(static_cast<size_t>(length), L'\0');
-  MultiByteToWideChar(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), &wide[0], length);
-  return wide;
-}
-
 std::string narrow(const std::wstring &text) {
   if (text.empty()) {
     return std::string();
@@ -92,7 +96,18 @@ std::string narrow(const std::wstring &text) {
 
 FILE *openFile(const std::string &path, const wchar_t *mode) { return _wfopen(widen(path).c_str(), mode); }
 #else
-FILE *openFile(const std::string &path, const char *mode) { return std::fopen(path.c_str(), mode); }
+/**
+ * Whether a directory entry can be a regular file. Links are left out, and an entry whose type the file system does
+ * not report counts as a file.
+ */
+bool mayBeRegularFile(const struct dirent *entry) {
+#if defined(_DIRENT_HAVE_D_TYPE) || defined(__APPLE__)
+  return entry->d_type == DT_REG || entry->d_type == DT_UNKNOWN;
+#else
+  (void)entry;
+  return true;
+#endif
+}
 #endif
 
 std::string joinPath(const std::string &directory, const std::string &name) {
@@ -118,8 +133,14 @@ std::string absoluteDirectory(const std::string &directory) {
   full.resize(written);
   return narrow(full);
 #else
-  char resolved[PATH_MAX];
-  return realpath(directory.c_str(), resolved) != nullptr ? std::string(resolved) : directory;
+  // realpath allocates the result itself when it gets no buffer, so no fixed-size buffer can overflow
+  char *resolved = realpath(directory.c_str(), nullptr); // Flawfinder: ignore
+  if (resolved == nullptr) {
+    return directory;
+  }
+  const std::string absolute(resolved);
+  std::free(resolved);
+  return absolute;
 #endif
 }
 #endif
@@ -146,10 +167,10 @@ std::vector<std::string> listDumpFiles(const std::string &directory) {
   if (opened == nullptr) {
     return names;
   }
+  // NOLINTNEXTLINE(concurrency-mt-unsafe): the directory stream belongs to this call alone
   for (struct dirent *entry = readdir(opened); entry != nullptr; entry = readdir(opened)) {
     const std::string name = entry->d_name;
-    struct stat status;
-    if (hasDumpExtension(name) && stat(joinPath(directory, name).c_str(), &status) == 0 && S_ISREG(status.st_mode)) {
+    if (hasDumpExtension(name) && mayBeRegularFile(entry)) {
       names.push_back(name);
     }
   }
@@ -157,6 +178,7 @@ std::vector<std::string> listDumpFiles(const std::string &directory) {
 #endif
   std::sort(names.begin(), names.end());
   std::vector<std::string> paths;
+  paths.reserve(names.size());
   for (const std::string &name : names) {
     paths.push_back(joinPath(directory, name));
   }
@@ -168,49 +190,57 @@ bool isDirectory(const std::string &path) {
   const DWORD attributes = GetFileAttributesW(widen(path).c_str());
   return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 #else
-  struct stat status;
-  return stat(path.c_str(), &status) == 0 && S_ISDIR(status.st_mode);
+  DIR *opened = opendir(path.c_str());
+  if (opened == nullptr) {
+    return false;
+  }
+  closedir(opened);
+  return true;
 #endif
 }
 
 long long fileSize(const std::string &path) {
 #ifdef _WIN32
   FILE *file = openFile(path, L"rb");
-#else
-  FILE *file = openFile(path, "rb");
-#endif
   if (file == nullptr) {
     return -1;
   }
-#ifdef _WIN32
   const bool seeked = _fseeki64(file, 0, SEEK_END) == 0;
   const long long size = seeked ? _ftelli64(file) : -1;
-#else
-  const bool seeked = fseeko(file, 0, SEEK_END) == 0;
-  const long long size = seeked ? static_cast<long long>(ftello(file)) : -1;
-#endif
   std::fclose(file);
   return size;
+#else
+  std::ifstream file(path, std::ios::binary | std::ios::ate);
+  if (!file) {
+    return -1;
+  }
+  return static_cast<long long>(file.tellg());
+#endif
 }
 
 bool readFile(const std::string &path, std::string &content) {
 #ifdef _WIN32
   FILE *file = openFile(path, L"rb");
-#else
-  FILE *file = openFile(path, "rb");
-#endif
   if (file == nullptr) {
     return false;
   }
   content.clear();
-  char buffer[65536];
+  std::vector<char> buffer(65536);
   size_t read = 0;
-  while ((read = std::fread(buffer, 1, sizeof(buffer), file)) > 0) {
-    content.append(buffer, read);
+  while ((read = std::fread(buffer.data(), 1, buffer.size(), file)) > 0) {
+    content.append(buffer.data(), read);
   }
   const bool failed = std::ferror(file) != 0;
   std::fclose(file);
   return !failed;
+#else
+  std::ifstream file(path, std::ios::binary);
+  if (!file) {
+    return false;
+  }
+  content.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+  return !file.bad();
+#endif
 }
 
 bool removeFile(const std::string &path) {
@@ -255,15 +285,15 @@ std::string encodeContextBlock(const std::string &payload) {
   }
   std::string block(CONTEXT_HEADER_SIZE + payload.size(), '\0');
   unsigned char *bytes = reinterpret_cast<unsigned char *>(&block[0]);
-  std::memcpy(bytes, CONTEXT_MAGIC, sizeof(CONTEXT_MAGIC));
+  std::copy(std::begin(CONTEXT_MAGIC), std::end(CONTEXT_MAGIC), bytes);
   writeUint32(bytes + 16, static_cast<uint32_t>(payload.size()));
   writeUint32(bytes + 20, fnv1a(reinterpret_cast<const unsigned char *>(payload.data()), payload.size()));
-  std::memcpy(bytes + CONTEXT_HEADER_SIZE, payload.data(), payload.size());
+  std::copy(payload.begin(), payload.end(), bytes + CONTEXT_HEADER_SIZE);
   return block;
 }
 
 bool findContextPayload(const std::string &dump, std::string &payload) {
-  const std::string magic(CONTEXT_MAGIC, sizeof(CONTEXT_MAGIC));
+  const std::string magic(reinterpret_cast<const char *>(CONTEXT_MAGIC), sizeof(CONTEXT_MAGIC));
   for (std::string::size_type at = dump.find(magic); at != std::string::npos; at = dump.find(magic, at + 1)) {
     if (dump.size() - at < CONTEXT_HEADER_SIZE) {
       break;
@@ -291,8 +321,8 @@ bool setContextPayload(const std::string &payload) {
   if (payload.size() > maxContextPayload()) {
     return false;
   }
-  std::memcpy(context_block, CONTEXT_MAGIC, sizeof(CONTEXT_MAGIC));
-  std::memcpy(context_block + CONTEXT_HEADER_SIZE, payload.data(), payload.size());
+  std::copy(std::begin(CONTEXT_MAGIC), std::end(CONTEXT_MAGIC), context_block);
+  std::copy(payload.begin(), payload.end(), context_block + CONTEXT_HEADER_SIZE);
   writeUint32(context_block + 20, fnv1a(reinterpret_cast<const unsigned char *>(payload.data()), payload.size()));
   std::atomic_signal_fence(std::memory_order_seq_cst);
   writeUint32(context_block + 16, static_cast<uint32_t>(payload.size()));

@@ -2,7 +2,8 @@
  * Crash helper for tests/native_crash.cpp. It installs a crash handler of its own first, as another crash tool would,
  * then starts the SDK with native crash capture, adds two breadcrumbs and crashes.
  *
- * Usage: countly-native-crash-helper <dump directory> <segv|abort|throw|purecall|invalid-parameter> <marker file>
+ * Usage: countly-native-crash-helper <dump directory> <segv|abort|throw|purecall|invalid-parameter|tolerated-parameter>
+ *        <marker file>
  * The helper's own handler writes the marker file, which proves that it still runs after the SDK's handler.
  */
 #include <csignal>
@@ -13,10 +14,19 @@
 
 #ifdef _WIN32
 #include <crtdbg.h>
+#include <fstream>
+#include <io.h>
 #include <windows.h>
 #else
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
+#endif
+
+#ifdef _MSC_VER
+extern "C" int __cdecl _purecall(void);
+#else
+#include <cxxabi.h>
 #endif
 
 #include "countly.hpp"
@@ -28,11 +38,8 @@ const char *marker_path = nullptr;
 LPTOP_LEVEL_EXCEPTION_FILTER previous_filter = nullptr;
 
 void writeMarker() {
-  FILE *marker = std::fopen(marker_path, "wb");
-  if (marker != nullptr) {
-    std::fputs("previous handler ran", marker);
-    std::fclose(marker);
-  }
+  std::ofstream marker(marker_path, std::ios::binary | std::ios::trunc);
+  marker << "previous handler ran";
 }
 
 LONG WINAPI markerFilter(EXCEPTION_POINTERS *info) {
@@ -41,6 +48,10 @@ LONG WINAPI markerFilter(EXCEPTION_POINTERS *info) {
 }
 
 void markerAbortHandler(int) { writeMarker(); }
+
+#ifdef _MSC_VER
+void tolerantParameterHandler(const wchar_t *, const wchar_t *, const wchar_t *, unsigned int, uintptr_t) {}
+#endif
 
 void installOwnHandlers() {
   SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
@@ -56,7 +67,8 @@ void installOwnHandlers() {
 }
 #else
 void markerSignalHandler(int sig) {
-  const int marker = open(marker_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  // a signal handler may only call async-signal-safe functions, so the marker is written with open and write
+  const int marker = open(marker_path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR); // Flawfinder: ignore
   if (marker >= 0) {
     const char text[] = "previous handler ran";
     (void)!write(marker, text, sizeof(text) - 1);
@@ -72,35 +84,25 @@ void installOwnHandlers() {
 }
 #endif
 
+/**
+ * Runs the C++ runtime's handler for a call of a pure virtual function, the code such a call ends in.
+ */
+void callPureVirtualHandler() {
+#ifdef _MSC_VER
+  _purecall();
+#else
+  __cxxabiv1::__cxa_pure_virtual();
+#endif
+}
+
 cly::HTTPResponse refuseEverything(bool, const std::string &, const std::string &) { return cly::HTTPResponse{false, nlohmann::json::object()}; }
 
 volatile int *null_pointer = nullptr;
-
-/**
- * Calls its pure virtual method while it is being constructed, which ends in the C++ runtime's pure virtual call
- * handler.
- */
-struct PureBase {
-  PureBase() { callPure(); }
-  virtual ~PureBase() = default;
-  void callPure() { pure(); }
-  virtual void pure() = 0;
-};
-
-struct PureDerived : PureBase {
-  void pure() override {}
-};
-
-#ifdef _MSC_VER
-const char *volatile null_format = nullptr;
-
-void tolerantParameterHandler(const wchar_t *, const wchar_t *, const wchar_t *, unsigned int, uintptr_t) {}
-#endif
 } // namespace
 
 int main(int argc, char **argv) {
   if (argc != 4) {
-    std::fprintf(stderr, "usage: %s <dump directory> <segv|abort|throw> <marker file>\n", argv[0]);
+    std::fprintf(stderr, "usage: %s <dump directory> <crash mode> <marker file>\n", argv[0]);
     return 2;
   }
   const std::string mode = argv[2];
@@ -131,13 +133,12 @@ int main(int argc, char **argv) {
   } else if (mode == "throw") {
     throw std::runtime_error("uncaught in the crash helper");
   } else if (mode == "purecall") {
-    PureDerived derived;
-    (void)derived;
+    callPureVirtualHandler();
 #ifdef _MSC_VER
   } else if (mode == "invalid-parameter") {
-    std::printf(null_format);
+    _close(-1);
   } else if (mode == "tolerated-parameter") {
-    std::printf(null_format);
+    _close(-1);
     countly.stop();
     return 7;
 #endif

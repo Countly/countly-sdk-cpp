@@ -69,18 +69,17 @@ public:
   }
 
   /**
-   * The device metrics a crash report carries: "_os", "_os_version", "_app_version", "_device" and "_resolution".
+   * Adds the device metrics a crash report carries to the report: "_os", "_os_version", "_app_version", "_device" and
+   * "_resolution".
    */
-  std::map<std::string, std::string> crashMetrics() {
-    std::map<std::string, std::string> metrics;
+  void addCrashMetrics(CrashData &crash) {
     const nlohmann::json deviceMetrics = _cly != nullptr ? _cly->DeviceMetrics() : nlohmann::json::object();
     for (const char *key : {"_os", "_os_version", "_app_version", "_device", "_resolution"}) {
       nlohmann::json::const_iterator metric = deviceMetrics.find(key);
       if (metric != deviceMetrics.end() && metric->is_string() && !metric->get<std::string>().empty()) {
-        metrics[key] = metric->get<std::string>();
+        crash.crashMetrics[key] = metric->get<std::string>();
       }
     }
-    return metrics;
   }
 
   /**
@@ -134,8 +133,10 @@ public:
     if (!_nativeContext) {
       return;
     }
+    CrashData metrics;
+    addCrashMetrics(metrics);
     nlohmann::json context;
-    context["m"] = nlohmann::json(crashMetrics());
+    context["m"] = nlohmann::json(metrics.crashMetrics);
     std::deque<std::string> breadcrumbs = _breadCrumbs;
     while (true) {
       context["l"] = nlohmann::json(std::vector<std::string>(breadcrumbs.begin(), breadcrumbs.end()));
@@ -228,7 +229,7 @@ void CrashModule::recordException(const std::string &title, const std::string &s
   crash.description = title;
   crash.stackTrace = stackTrace;
   crash.fatal = fatal;
-  crash.crashMetrics = impl->crashMetrics();
+  impl->addCrashMetrics(crash);
   for (const auto &metric : crashMetrics) {
     crash.crashMetrics[metric.first] = metric.second;
   }
@@ -319,7 +320,7 @@ void CrashModule::recordNativeCrash(const std::string &dump) {
   CrashData crash;
   crash.stackTrace = native_crash::base64Encode(dump);
   crash.fatal = true;
-  crash.crashMetrics = impl->crashMetrics();
+  impl->addCrashMetrics(crash);
   std::string payload;
   if (native_crash::findContextPayload(dump, payload)) {
     const nlohmann::json context = nlohmann::json::parse(payload, nullptr, false);
@@ -362,8 +363,7 @@ void CrashModule::recordNativeCrash(const std::string &dump) {
   report["_ob"] = changedFields;
 
   std::lock_guard<std::mutex> lk(*impl->_mutex);
-  std::map<std::string, std::string> data = {{"crash", report.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace)}};
-  impl->_requestModule->addRequestToQueue(data);
+  impl->_requestModule->addRequestToQueue({{"crash", report.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace)}});
 }
 
 } // namespace cly

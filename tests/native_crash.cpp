@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -8,9 +9,11 @@
 #include <windows.h>
 #else
 #include <signal.h>
+#include <spawn.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
-#include <unistd.h>
+
+extern char **environ;
 #endif
 
 #include "countly.hpp"
@@ -33,7 +36,7 @@ void resetDumpDirectory() {
 #ifdef _WIN32
   _mkdir(DUMP_DIRECTORY);
 #else
-  mkdir(DUMP_DIRECTORY, 0755);
+  mkdir(DUMP_DIRECTORY, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
 #endif
   for (const std::string &dump : native_crash::listDumpFiles(DUMP_DIRECTORY)) {
     native_crash::removeFile(dump);
@@ -46,10 +49,11 @@ void resetDumpDirectory() {
 std::string pathInDumpDirectory(const std::string &name) { return std::string(DUMP_DIRECTORY) + "/" + name; }
 
 void writeFile(const std::string &path, const std::string &content) {
-  FILE *file = std::fopen(path.c_str(), "wb");
-  REQUIRE(file != nullptr);
-  REQUIRE(std::fwrite(content.data(), 1, content.size(), file) == content.size());
-  std::fclose(file);
+  std::ofstream file(path, std::ios::binary | std::ios::trunc);
+  REQUIRE(file.good());
+  file.write(content.data(), static_cast<std::streamsize>(content.size()));
+  file.close();
+  REQUIRE_FALSE(file.fail());
 }
 
 bool fileExists(const std::string &path) { return native_crash::fileSize(path) >= 0; }
@@ -407,12 +411,14 @@ long long runCrashHelper(const std::string &mode) {
   CloseHandle(process.hThread);
   return static_cast<long long>(code);
 #else
-  const pid_t child = fork();
-  REQUIRE(child >= 0);
-  if (child == 0) {
-    execl(COUNTLY_CRASH_HELPER_PATH, COUNTLY_CRASH_HELPER_PATH, DUMP_DIRECTORY, mode.c_str(), marker.c_str(), static_cast<char *>(nullptr));
-    _exit(127);
+  std::vector<std::string> arguments = {COUNTLY_CRASH_HELPER_PATH, DUMP_DIRECTORY, mode, marker};
+  std::vector<char *> argv;
+  for (std::string &argument : arguments) {
+    argv.push_back(&argument[0]);
   }
+  argv.push_back(nullptr);
+  pid_t child = 0;
+  REQUIRE(posix_spawn(&child, COUNTLY_CRASH_HELPER_PATH, nullptr, nullptr, argv.data(), environ) == 0);
   int status = 0;
   REQUIRE(waitpid(child, &status, 0) == child);
   REQUIRE(WIFSIGNALED(status));
