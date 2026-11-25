@@ -254,6 +254,29 @@ public:
   void setCrashFilterCallback(CrashFilterCallback callback);
 
   /**
+   * Sets the directory of native crash dumps, the minidump files ("*.dmp") that a crash handler writes when the process
+   * crashes. At start() the SDK sends every dump in it as an unhandled crash, Base64-encoded in "_error" with
+   * "_native_cpp", and deletes the file; without the "crashes" consent it deletes the file without sending, and while
+   * the server's "Allow crash tracking" setting is off it leaves the files for a later start. A dump larger than 10 MB is
+   * deleted without being sent, because the server does not accept it. The dumps can come from the SDK's own handler
+   * (enableCrashReporting()) or from another tool, for example the LocalDumps of Windows Error Reporting. Native crashes
+   * belong to the whole process, so only the default instance (getInstance()) handles them. Call it before start().
+   *
+   * @param path: an existing directory that holds only crash dumps, best as an absolute path
+   */
+  void setCrashDumpDirectory(const std::string &path);
+
+  /**
+   * Turns on the automatic capture of native crashes. From start() on, the SDK's crash handler writes a minidump into
+   * the directory of setCrashDumpDirectory() when the process crashes, with the breadcrumbs and the app version of that
+   * moment, and the next start() sends it. Then the handler that was installed before runs, so the process ends the way
+   * it would without the SDK. The handler needs a build with COUNTLY_USE_BREAKPAD (Windows, Linux) and the
+   * "crashes" consent; the server's "Automatic crash reporting" and "Allow crash tracking" settings turn it off and on.
+   * stop() removes it. Only the default instance (getInstance()) can install it. Call it before start().
+   */
+  void enableCrashReporting();
+
+  /**
    * Turns location tracking off until setLocation is called with a value: the stored location values are cleared,
    * an erase request is sent, and every session start carries the empty location, so that the server works out no
    * location from the IP address. Called before start(), the SDK starts with location off. While the server's SDK
@@ -347,6 +370,12 @@ public:
    * runs, and the app's session calls work from then on; turning it on begins a session.
    */
   void AutomaticSessionTrackingChanged() override;
+
+  /**
+   * Applies a change of the server's "Automatic crash reporting" or "Allow crash tracking" setting: the native crash
+   * handler is installed or removed to match.
+   */
+  void CrashReportingSettingsChanged() override;
 
   /*
    * Checks and returns the size of the event queue in memory or persistent storage.
@@ -998,6 +1027,27 @@ private:
    * state and, when location is off and no session start will be sent, a location erase. Called at the end of start().
    */
   void activateConsent();
+
+  /**
+   * Whether this instance is the default instance, the one getInstance() returns.
+   */
+  bool isDefaultInstance();
+
+  /**
+   * Sends every dump of the crash dump directory as a native crash and deletes the files. Called at the end of start().
+   */
+  void sendNativeCrashDumps();
+
+  /**
+   * Installs the native crash handler when the app or the server's "acr" setting turned automatic capture on, the
+   * crash dump directory is set, crash tracking is allowed, the "crashes" consent is given and the SDK runs; otherwise
+   * removes it.
+   */
+  void updateNativeCrashHandler();
+  // Whether this instance installed the process-wide native crash handler. Guarded by native_crash_mutex.
+  bool owns_native_crash_handler = false;
+  // Taken after consent_change_mutex and before the instance mutex
+  std::mutex native_crash_mutex;
   bool began_session = false;
   // Set by disableLocation(), cleared by setLocation() with a value; the server's "lt" setting wins over it
   std::atomic<bool> location_disabled_by_app{false};

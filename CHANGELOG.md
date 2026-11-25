@@ -41,6 +41,12 @@
 - Added `setCrashFilterCallback` for changing or dropping crash reports before they are queued, and `setCustomCrashSegmentation` for segmentation added to every crash report.
 - Added `crash().clearBreadcrumbs()`, `views().stopAllViews()`, and segmentation for `closeViewWithName` and `closeViewWithID`.
 - Added `disableLocation()`. A location given with `setLocation` before `start()` is now used from `start()` on.
+- Added `setCrashDumpDirectory()` for native crashes. At `start()` the SDK sends every minidump (`*.dmp`) in that directory as an unhandled crash with `_native_cpp`, then deletes the file. Only the default instance handles native crashes.
+- A native crash dump is sent Base64-encoded in `_error` and is never cut by the internal limits. Without the "crashes" consent it is deleted unsent; while the server's "Allow crash tracking" is off, it stays for a later start.
+- A native crash dump larger than 10 MB is deleted without being sent and logged as an error, because the server does not accept a request that large.
+- Added `enableCrashReporting()` and the CMake option `COUNTLY_USE_BREAKPAD` (off by default; Windows and Linux). The SDK's Breakpad handler writes a minidump on a crash, then calls the handler that was installed before it.
+- The minidumps of the SDK's crash handler hold the breadcrumbs and the app version of the crash moment. The server's "Automatic crash reporting" setting (`acr`) turns the handler on and off.
+- The vendored Breakpad client (`vendor/breakpad`, updated with `scripts/update_breakpad.py`) needs a C++17 compiler; the SDK itself still builds with C++14.
 
 - Mitigated an issue where reaching the event queue threshold logged a warning that events were dropped, although they were sent.
 - Mitigated an issue where a view that was open during a device ID change without merge was ended under the new device ID.

@@ -136,6 +136,16 @@ struct CountlyConfiguration {
   CrashFilterCallback crashFilter = nullptr;
 
   /**
+   * The directory of native crash dumps ("*.dmp"), empty when the app set none.
+   */
+  std::string crashDumpDirectory;
+
+  /**
+   * Whether the app turned on the automatic capture of native crashes with enableCrashReporting().
+   */
+  bool automaticCrashReporting = false;
+
+  /**
    * Set the maximum amount of breadcrumbs.
    */
   unsigned int breadcrumbsThreshold = 100;

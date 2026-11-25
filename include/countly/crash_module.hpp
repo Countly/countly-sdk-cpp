@@ -66,6 +66,19 @@ private:
    * Forgets every breadcrumb, without counting it as a call of the app.
    */
   void forgetBreadcrumbs();
+
+  /**
+   * Turns on or off the copy of the crash-time metrics and the breadcrumbs into the memory block that the native crash
+   * handler's dumps contain. On while the handler is installed.
+   */
+  void setNativeContextEnabled(bool enabled);
+
+  /**
+   * Queues a native crash dump as an unhandled crash: the dump goes Base64-encoded into "_error" with "_native_cpp",
+   * and is never cut by the internal limits. The metrics and breadcrumbs saved in the dump at crash time win over the
+   * current ones. The crash filter sees the report. The caller checks the "crashes" consent.
+   */
+  void recordNativeCrash(const std::string &dump);
 };
 } // namespace cly
 #endif

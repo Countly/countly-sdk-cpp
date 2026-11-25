@@ -103,6 +103,8 @@ jobs:
           - name: clang
             flags: -DCOUNTLY_USE_SQLITE=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
             apt: clang
+          - name: breakpad
+            flags: -DCOUNTLY_USE_SQLITE=ON -DCOUNTLY_USE_BREAKPAD=ON
 
     env:
       ASAN_OPTIONS: "detect_leaks=1"
@@ -129,6 +131,29 @@ jobs:
 
       - name: Run tests
         run: ./build/countly-tests
+
+  # ──────────────────────────────────────────────
+  # Native crash capture with Breakpad on Windows (MSVC).
+  # The tests crash a helper process and send its dump.
+  # ──────────────────────────────────────────────
+  breakpad-windows:
+    name: breakpad-windows
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: "recursive"
+
+      - name: Configure
+        run: cmake -DCOUNTLY_BUILD_TESTS=1 -DCOUNTLY_USE_SQLITE=ON -DCOUNTLY_USE_BREAKPAD=ON -B build .
+
+      - name: Build
+        run: cmake --build build --config Release -j 4
+
+      - name: Run tests
+        run: ./build/Release/countly-tests.exe
 
   # ──────────────────────────────────────────────
   # Oldest supported CMake (3.13, as documented).

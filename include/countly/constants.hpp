@@ -222,6 +222,12 @@ public:
    */
   virtual void LocationSettingChanged() {}
 
+  /**
+   * Called by the SDK behavior settings when the server's "Automatic crash reporting" or "Allow crash tracking" setting
+   * changes.
+   */
+  virtual void CrashReportingSettingsChanged() {}
+
   virtual void RecordEvent(const std::string &key, int count) = 0;
 
   virtual void RecordEvent(const std::string &key, int count, double sum) = 0;

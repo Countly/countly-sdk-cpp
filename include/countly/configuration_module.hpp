@@ -56,6 +56,12 @@ public:
    */
   int getAutomaticSessionTracking() const;
 
+  /**
+   * The server's "Automatic crash reporting" setting ("acr"): -1 while the settings don't contain it, 0 when it is
+   * off, 1 when it is on.
+   */
+  int getAutomaticCrashReporting() const;
+
   unsigned int getRequestQueueSizeLimit() const override;
   unsigned int getRequestDropAgeHours() const override;
   bool isBackoffEnabled() const override;

@@ -2,6 +2,7 @@
 #include "countly/consent_module.hpp"
 #include "countly/internal_limits.hpp"
 #include "countly/request_module.hpp"
+#include "native_crash.hpp"
 
 #include <algorithm>
 #include <deque>
@@ -21,6 +22,8 @@ public:
   std::weak_ptr<ConfigurationProvider> _configProvider;
   std::shared_ptr<ConsentModule> _consent;
   cly::CountlyDelegates *_cly = nullptr;
+  // Whether the native crash handler is installed, so that every breadcrumb change is copied into its context block
+  bool _nativeContext = false;
   CrashModuleImpl(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger, std::shared_ptr<RequestModule> requestModule, std::shared_ptr<std::mutex> mutex) : _configuration(config), _logger(logger), _requestModule(requestModule), _mutex(mutex) {}
 
   // destructor to reset logger
@@ -52,6 +55,95 @@ public:
     }
     _logger->log(LogLevel::DEBUG, std::string("[Countly] [CrashModule] ") + caller + ", the 'crashes' consent is not given, the call is ignored.");
     return false;
+  }
+
+  /**
+   * The internal limits in use, the defaults while start() has not run.
+   */
+  SDKLimits limits() {
+    SDKLimits lim{COUNTLY_MAX_KEY_LENGTH_DEFAULT, COUNTLY_MAX_VALUE_SIZE_DEFAULT, COUNTLY_MAX_SEGMENTATION_VALUES_DEFAULT, COUNTLY_MAX_BREADCRUMB_COUNT_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINES_PER_THREAD_DEFAULT, COUNTLY_MAX_STACK_TRACE_LINE_LENGTH_DEFAULT};
+    if (std::shared_ptr<ConfigurationProvider> config = _configProvider.lock()) {
+      lim = config->getLimits();
+    }
+    return lim;
+  }
+
+  /**
+   * The device metrics a crash report carries: "_os", "_os_version", "_app_version", "_device" and "_resolution".
+   */
+  std::map<std::string, std::string> crashMetrics() {
+    std::map<std::string, std::string> metrics;
+    const nlohmann::json deviceMetrics = _cly != nullptr ? _cly->DeviceMetrics() : nlohmann::json::object();
+    for (const char *key : {"_os", "_os_version", "_app_version", "_device", "_resolution"}) {
+      nlohmann::json::const_iterator metric = deviceMetrics.find(key);
+      if (metric != deviceMetrics.end() && metric->is_string() && !metric->get<std::string>().empty()) {
+        metrics[key] = metric->get<std::string>();
+      }
+    }
+    return metrics;
+  }
+
+  /**
+   * Runs the crash filter on the report. Returns false when the filter drops the report or throws; 'changedFields'
+   * gets the bits of the fields it changed, sent as "_ob".
+   */
+  bool runFilter(CrashData &crash, int &changedFields, const char *caller) {
+    changedFields = 0;
+    if (!_configuration->crashFilter) {
+      return true;
+    }
+    const CrashData original = crash;
+    bool drop = false;
+    try {
+      drop = _configuration->crashFilter(crash);
+    } catch (...) {
+      _logger->log(LogLevel::ERROR, std::string("[Countly] [CrashModule] ") + caller + ", The crash filter threw an exception, so the crash is dropped.");
+      return false;
+    }
+    if (drop) {
+      _logger->log(LogLevel::DEBUG, std::string("[Countly] [CrashModule] ") + caller + ", The crash filter dropped the crash.");
+      return false;
+    }
+    changedFields |= crash.description != original.description ? 64 : 0;
+    changedFields |= crash.stackTrace != original.stackTrace ? 16 : 0;
+    changedFields |= crash.crashSegmentation != original.crashSegmentation ? 8 : 0;
+    changedFields |= crash.breadcrumbs != original.breadcrumbs ? 4 : 0;
+    changedFields |= crash.crashMetrics != original.crashMetrics ? 2 : 0;
+    changedFields |= crash.fatal != original.fatal ? 1 : 0;
+    return true;
+  }
+
+  /**
+   * Logs a warning for each metric the server needs that the report lacks.
+   */
+  void warnAboutMissingMetrics(const CrashData &crash, const char *caller) {
+    for (const char *required : {"_os", "_app_version"}) {
+      std::map<std::string, std::string>::const_iterator metric = crash.crashMetrics.find(required);
+      if (metric == crash.crashMetrics.end() || metric->second.empty()) {
+        _logger->log(LogLevel::WARNING, std::string("[Countly] [CrashModule] ") + caller + ", The crash metric '" + required + "' is missing, so the server will not accept the crash report. Give the app version with setMetrics().");
+        _logger->recordLogCode("w700");
+      }
+    }
+  }
+
+  /**
+   * Copies the crash-time metrics and the breadcrumbs into the context block that the native crash handler's dumps
+   * contain. The oldest breadcrumbs are left out when the block can't hold them all. The caller holds _mutex.
+   */
+  void publishNativeContext() {
+    if (!_nativeContext) {
+      return;
+    }
+    nlohmann::json context;
+    context["m"] = nlohmann::json(crashMetrics());
+    std::deque<std::string> breadcrumbs = _breadCrumbs;
+    while (true) {
+      context["l"] = nlohmann::json(std::vector<std::string>(breadcrumbs.begin(), breadcrumbs.end()));
+      if (native_crash::setContextPayload(context.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace)) || breadcrumbs.empty()) {
+        return;
+      }
+      breadcrumbs.pop_front();
+    }
   }
 };
 
@@ -85,6 +177,7 @@ void CrashModule::addBreadcrumb(const std::string &value) {
   }
   // add new breadcrumb
   impl->_breadCrumbs.push_back(limited);
+  impl->publishNativeContext();
 }
 
 namespace {
@@ -135,13 +228,7 @@ void CrashModule::recordException(const std::string &title, const std::string &s
   crash.description = title;
   crash.stackTrace = stackTrace;
   crash.fatal = fatal;
-  const nlohmann::json deviceMetrics = impl->_cly != nullptr ? impl->_cly->DeviceMetrics() : nlohmann::json::object();
-  for (const char *key : {"_os", "_os_version", "_app_version", "_device", "_resolution"}) {
-    nlohmann::json::const_iterator metric = deviceMetrics.find(key);
-    if (metric != deviceMetrics.end() && metric->is_string() && !metric->get<std::string>().empty()) {
-      crash.crashMetrics[key] = metric->get<std::string>();
-    }
-  }
+  crash.crashMetrics = impl->crashMetrics();
   for (const auto &metric : crashMetrics) {
     crash.crashMetrics[metric.first] = metric.second;
   }
@@ -154,39 +241,18 @@ void CrashModule::recordException(const std::string &title, const std::string &s
     std::lock_guard<std::mutex> lk(*impl->_mutex);
     crash.breadcrumbs.assign(impl->_breadCrumbs.begin(), impl->_breadCrumbs.end());
     impl->_breadCrumbs.clear();
+    impl->publishNativeContext();
   }
   limitCrash(crash, lim, impl->_logger.get());
 
   int changedFields = 0;
+  if (!impl->runFilter(crash, changedFields, "recordException")) {
+    return;
+  }
   if (impl->_configuration->crashFilter) {
-    const CrashData original = crash;
-    bool drop = false;
-    try {
-      drop = impl->_configuration->crashFilter(crash);
-    } catch (...) {
-      impl->_logger->log(LogLevel::ERROR, "[Countly] [CrashModule] recordException, The crash filter threw an exception, so the crash is dropped.");
-      return;
-    }
-    if (drop) {
-      impl->_logger->log(LogLevel::DEBUG, "[Countly] [CrashModule] recordException, The crash filter dropped the crash.");
-      return;
-    }
-    changedFields |= crash.description != original.description ? 64 : 0;
-    changedFields |= crash.stackTrace != original.stackTrace ? 16 : 0;
-    changedFields |= crash.crashSegmentation != original.crashSegmentation ? 8 : 0;
-    changedFields |= crash.breadcrumbs != original.breadcrumbs ? 4 : 0;
-    changedFields |= crash.crashMetrics != original.crashMetrics ? 2 : 0;
-    changedFields |= crash.fatal != original.fatal ? 1 : 0;
     limitCrash(crash, lim, impl->_logger.get());
   }
-
-  for (const char *required : {"_os", "_app_version"}) {
-    std::map<std::string, std::string>::const_iterator metric = crash.crashMetrics.find(required);
-    if (metric == crash.crashMetrics.end() || metric->second.empty()) {
-      impl->_logger->log(LogLevel::WARNING, std::string("[Countly] [CrashModule] recordException, The crash metric '") + required + "' is missing, so the server will not accept the crash report. Give the app version with setMetrics().");
-      impl->_logger->recordLogCode("w700");
-    }
-  }
+  impl->warnAboutMissingMetrics(crash, "recordException");
 
   std::ostringstream outstream;
   std::copy(crash.breadcrumbs.begin(), crash.breadcrumbs.end(), std::ostream_iterator<std::string>(outstream, "\n"));
@@ -230,6 +296,74 @@ void CrashModule::clearBreadcrumbs() {
 void CrashModule::forgetBreadcrumbs() {
   std::lock_guard<std::mutex> lk(*impl->_mutex);
   impl->_breadCrumbs.clear();
+  impl->publishNativeContext();
+}
+
+void CrashModule::setNativeContextEnabled(bool enabled) {
+  std::lock_guard<std::mutex> lk(*impl->_mutex);
+  impl->_nativeContext = enabled;
+  if (enabled) {
+    impl->publishNativeContext();
+  } else {
+    native_crash::setContextPayload(std::string());
+  }
+}
+
+void CrashModule::recordNativeCrash(const std::string &dump) {
+  impl->_logger->log(LogLevel::INFO, "[Countly] [CrashModule] recordNativeCrash, size = [" + std::to_string(dump.size()) + "] bytes");
+  if (!impl->isInitialized("recordNativeCrash")) {
+    return;
+  }
+  const SDKLimits lim = impl->limits();
+
+  CrashData crash;
+  crash.stackTrace = native_crash::base64Encode(dump);
+  crash.fatal = true;
+  crash.crashMetrics = impl->crashMetrics();
+  std::string payload;
+  if (native_crash::findContextPayload(dump, payload)) {
+    const nlohmann::json context = nlohmann::json::parse(payload, nullptr, false);
+    if (context.is_object() && context.contains("m") && context["m"].is_object()) {
+      for (nlohmann::json::const_iterator metric = context["m"].begin(); metric != context["m"].end(); ++metric) {
+        if (metric->is_string() && !metric->get<std::string>().empty()) {
+          crash.crashMetrics[metric.key()] = metric->get<std::string>();
+        }
+      }
+    }
+    if (context.is_object() && context.contains("l") && context["l"].is_array()) {
+      for (const nlohmann::json &breadcrumb : context["l"]) {
+        if (breadcrumb.is_string()) {
+          crash.breadcrumbs.push_back(breadcrumb.get<std::string>());
+        }
+      }
+    }
+  }
+  crash.crashSegmentation = cly::limits::limitSegmentation(impl->_configuration->crashSegmentation, lim, impl->_logger.get(), "[CrashModule] recordNativeCrash");
+
+  int changedFields = 0;
+  if (!impl->runFilter(crash, changedFields, "recordNativeCrash")) {
+    return;
+  }
+  crash.crashSegmentation = cly::limits::limitSegmentation(crash.crashSegmentation, lim, impl->_logger.get(), "[CrashModule] recordNativeCrash");
+  impl->warnAboutMissingMetrics(crash, "recordNativeCrash");
+
+  std::ostringstream outstream;
+  std::copy(crash.breadcrumbs.begin(), crash.breadcrumbs.end(), std::ostream_iterator<std::string>(outstream, "\n"));
+
+  nlohmann::json report(crash.crashMetrics);
+  if (!crash.description.empty()) {
+    report["_name"] = crash.description;
+  }
+  report["_error"] = crash.stackTrace;
+  report["_logs"] = outstream.str();
+  report["_custom"] = nlohmann::json(crash.crashSegmentation);
+  report["_nonfatal"] = !crash.fatal;
+  report["_native_cpp"] = true;
+  report["_ob"] = changedFields;
+
+  std::lock_guard<std::mutex> lk(*impl->_mutex);
+  std::map<std::string, std::string> data = {{"crash", report.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace)}};
+  impl->_requestModule->addRequestToQueue(data);
 }
 
 } // namespace cly

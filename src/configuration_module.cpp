@@ -24,6 +24,7 @@ static constexpr const char *KEY_CUSTOM_EVENT_TRACKING = "cet";
 static constexpr const char *KEY_CRASH_REPORTING = "crt";
 static constexpr const char *KEY_CONSENT_REQUIRED = "cr";
 static constexpr const char *KEY_AUTOMATIC_SESSION_TRACKING = "ast";
+static constexpr const char *KEY_AUTOMATIC_CRASH_REPORTING = "acr";
 static constexpr const char *KEY_SERVER_CONFIG_UPDATE_INTERVAL = "scui";
 static constexpr const char *KEY_LOGGING = "log"; // not used and implemented yet
 
@@ -87,6 +88,8 @@ public:
   std::atomic<int> consentRequired{-1};
   // -1 while the settings don't contain "ast", otherwise 0 or 1
   std::atomic<int> automaticSessionTracking{-1};
+  // -1 while the settings don't contain "acr", otherwise 0 or 1
+  std::atomic<int> automaticCrashReporting{-1};
   std::atomic<unsigned int> eventQueueThreshold{0};
   std::atomic<unsigned int> requestQueueSizeLimit{0};
   std::atomic<unsigned int> sessionUpdateInterval{0};
@@ -281,6 +284,10 @@ public:
     if (changedSettings.contains(KEY_AUTOMATIC_SESSION_TRACKING)) {
       _cly->AutomaticSessionTrackingChanged();
     }
+
+    if (changedSettings.contains(KEY_AUTOMATIC_CRASH_REPORTING) || changedSettings.contains(KEY_CRASH_REPORTING)) {
+      _cly->CrashReportingSettingsChanged();
+    }
   }
 
   nlohmann::json _populateConfigValues() {
@@ -315,6 +322,16 @@ public:
       }
     }
     automaticSessionTracking.store(automaticSessionTrackingCurrent, std::memory_order_release);
+    const int automaticCrashReportingVal = automaticCrashReporting.load(std::memory_order_acquire);
+    int automaticCrashReportingCurrent = -1;
+    if (sdk_behavior_settings.is_object()) {
+      nlohmann::json::const_iterator automaticCrashSetting = sdk_behavior_settings.find(KEY_AUTOMATIC_CRASH_REPORTING);
+      if (automaticCrashSetting != sdk_behavior_settings.end() && automaticCrashSetting->is_boolean()) {
+        automaticCrashReportingCurrent = automaticCrashSetting->get<bool>() ? 1 : 0;
+      }
+    }
+    automaticCrashReporting.store(automaticCrashReportingCurrent, std::memory_order_release);
+    const bool crashReportingVal = crashReportingEnabled.load(std::memory_order_acquire);
 
     trackingEnabled.store(getBool(KEY_TRACKING, true), std::memory_order_release);
     networkingEnabled.store(getBool(KEY_NETWORKING, true), std::memory_order_release);
@@ -322,7 +339,8 @@ public:
     viewTrackingEnabled.store(getBool(KEY_VIEW_TRACKING, true), std::memory_order_release);
     locationTrackingEnabled.store(locationTrackingCurrent, std::memory_order_release);
     customEventTrackingEnabled.store(getBool(KEY_CUSTOM_EVENT_TRACKING, true), std::memory_order_release);
-    crashReportingEnabled.store(getBool(KEY_CRASH_REPORTING, true), std::memory_order_release);
+    const bool crashReportingCurrent = getBool(KEY_CRASH_REPORTING, true);
+    crashReportingEnabled.store(crashReportingCurrent, std::memory_order_release);
     eventQueueThreshold.store(getUInt(KEY_EVENT_QUEUE_SIZE, 0), std::memory_order_release);
 
     unsigned int rqs = getUInt(KEY_REQ_QUEUE_SIZE, _configuration->requestQueueThreshold);
@@ -392,6 +410,12 @@ public:
     if (automaticSessionTrackingCurrent != automaticSessionTrackingVal) {
       changedSettings[KEY_AUTOMATIC_SESSION_TRACKING] = automaticSessionTrackingCurrent;
     }
+    if (automaticCrashReportingCurrent != automaticCrashReportingVal) {
+      changedSettings[KEY_AUTOMATIC_CRASH_REPORTING] = automaticCrashReportingCurrent;
+    }
+    if (crashReportingCurrent != crashReportingVal) {
+      changedSettings[KEY_CRASH_REPORTING] = crashReportingCurrent;
+    }
     return changedSettings;
   }
 
@@ -413,7 +437,7 @@ public:
         valid = value.is_number_unsigned() && value.get<unsigned long long>() <= UINT_MAX;
       } else if (key == KEY_BOM_RQ_PERCENTAGE) {
         valid = value.is_number() && value.get<double>() > 0 && value.get<double>() <= 1;
-      } else if (key == KEY_TRACKING || key == KEY_NETWORKING || key == KEY_LOGGING || key == KEY_SESSION_TRACKING || key == KEY_VIEW_TRACKING || key == KEY_LOCATION_TRACKING || key == KEY_CUSTOM_EVENT_TRACKING || key == KEY_CONSENT_REQUIRED || key == KEY_CRASH_REPORTING || key == KEY_BACKOFF_MECHANISM || key == KEY_AUTOMATIC_SESSION_TRACKING) {
+      } else if (key == KEY_TRACKING || key == KEY_NETWORKING || key == KEY_LOGGING || key == KEY_SESSION_TRACKING || key == KEY_VIEW_TRACKING || key == KEY_LOCATION_TRACKING || key == KEY_CUSTOM_EVENT_TRACKING || key == KEY_CONSENT_REQUIRED || key == KEY_CRASH_REPORTING || key == KEY_BACKOFF_MECHANISM || key == KEY_AUTOMATIC_SESSION_TRACKING || key == KEY_AUTOMATIC_CRASH_REPORTING) {
         valid = value.is_boolean();
       } else if (key == KEY_EVENT_BLACKLIST || key == KEY_USER_PROPERTY_BLACKLIST || key == KEY_SEGMENTATION_BLACKLIST || key == KEY_EVENT_WHITELIST || key == KEY_USER_PROPERTY_WHITELIST || key == KEY_SEGMENTATION_WHITELIST) {
         valid = value.is_array();
@@ -607,6 +631,8 @@ bool ConfigurationModule::isCrashReportingEnabled() const { return impl->crashRe
 int ConfigurationModule::getConsentRequired() const { return impl->consentRequired.load(std::memory_order_acquire); }
 
 int ConfigurationModule::getAutomaticSessionTracking() const { return impl->automaticSessionTracking.load(std::memory_order_acquire); }
+
+int ConfigurationModule::getAutomaticCrashReporting() const { return impl->automaticCrashReporting.load(std::memory_order_acquire); }
 
 unsigned int ConfigurationModule::getRequestQueueSizeLimit() const { return impl->requestQueueSizeLimit.load(std::memory_order_acquire); }
 
