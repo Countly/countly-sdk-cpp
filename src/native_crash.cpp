@@ -105,6 +105,18 @@ std::string joinPath(const std::string &directory, const std::string &name) {
   return directory + "/" + name;
 }
 
+#ifndef _WIN32
+/**
+ * Whether the path is a regular file itself, not a link or a special file.
+ */
+bool isRegularFile(const std::string &path) {
+  // cppcheck-suppress y2038-unsafe-call ; only the file type is read, no time field
+  struct stat status = {};
+  // cppcheck-suppress y2038-unsafe-call ; only the file type is read, no time field
+  return lstat(path.c_str(), &status) == 0 && S_ISREG(status.st_mode);
+}
+#endif
+
 #ifdef COUNTLY_USE_BREAKPAD
 /**
  * The absolute form of an existing directory, so that a later change of the working directory does not move the dumps.
@@ -170,8 +182,7 @@ std::vector<std::string> listDumpFiles(const std::string &directory) {
     const bool regular = false;
 #endif
     // links and special files are never read as dumps; lstat gives the type the file system does not report
-    struct stat status = {};
-    if (typeKnown ? regular : (lstat(joinPath(directory, name).c_str(), &status) == 0 && S_ISREG(status.st_mode))) {
+    if (typeKnown ? regular : isRegularFile(joinPath(directory, name))) {
       names.push_back(name);
     }
   }

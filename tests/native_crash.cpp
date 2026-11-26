@@ -82,7 +82,9 @@ bool linkExists(const std::string &path) {
 #ifdef _WIN32
   return GetFileAttributesW(native_crash::widen(path).c_str()) != INVALID_FILE_ATTRIBUTES;
 #else
-  struct stat status;
+  // cppcheck-suppress y2038-unsafe-call ; only the existence is read, no time field
+  struct stat status = {};
+  // cppcheck-suppress y2038-unsafe-call ; only the existence is read, no time field
   return lstat(path.c_str(), &status) == 0;
 #endif
 }
