@@ -259,10 +259,14 @@ public:
    * "_native_cpp", and deletes the file; without the "crashes" consent it deletes the file without sending, and while
    * the server's "Allow crash tracking" setting is off it leaves the files for a later start. A dump larger than 10 MB is
    * deleted without being sent, because the server does not accept it. The dumps can come from the SDK's own handler
-   * (enableCrashReporting()) or from another tool, for example the LocalDumps of Windows Error Reporting. Native crashes
-   * belong to the whole process, so only the default instance (getInstance()) handles them. Call it before start().
+   * (enableCrashReporting()) or from another tool, for example the LocalDumps of Windows Error Reporting. Use a directory
+   * that only this app writes, because the SDK sends and deletes every dump in it. For LocalDumps, set DumpFolder in the
+   * LocalDumps key of this app's executable: the default folder, %LOCALAPPDATA%\CrashDumps, holds the dumps of every
+   * program. Links in the directory are never read. Native crashes belong to the whole process, so only the default
+   * instance (getInstance()) handles them. Build with COUNTLY_USE_SQLITE and call setDatabasePath(): with requests in
+   * memory only, a crash whose request is not sent before the app ends is lost. Call it before start().
    *
-   * @param path: an existing directory that holds only crash dumps, best as an absolute path
+   * @param path: an existing directory that holds only this app's crash dumps, best as an absolute path
    */
   void setCrashDumpDirectory(const std::string &path);
 
@@ -272,7 +276,9 @@ public:
    * moment, and the next start() sends it. Then the handler that was installed before runs, so the process ends the way
    * it would without the SDK. The handler needs a build with COUNTLY_USE_BREAKPAD (Windows, Linux) and the
    * "crashes" consent; the server's "Automatic crash reporting" and "Allow crash tracking" settings turn it off and on.
-   * stop() removes it. Only the default instance (getInstance()) can install it. Call it before start().
+   * stop() turns it off. Once installed, the handler stays in the process: while it is off, it writes no dump and hands
+   * every crash on, so that a crash handler that other code installs later is never replaced. Its directory stays the
+   * one of its first start. Only the default instance (getInstance()) can install it. Call it before start().
    */
   void enableCrashReporting();
 
@@ -1039,9 +1045,9 @@ private:
   void sendNativeCrashDumps();
 
   /**
-   * Installs the native crash handler when the app or the server's "acr" setting turned automatic capture on, the
+   * Turns the native crash handler on when the app or the server's "acr" setting turned automatic capture on, the
    * crash dump directory is set, crash tracking is allowed, the "crashes" consent is given and the SDK runs; otherwise
-   * removes it.
+   * turns it off.
    */
   void updateNativeCrashHandler();
   // Whether this instance installed the process-wide native crash handler. Guarded by native_crash_mutex.

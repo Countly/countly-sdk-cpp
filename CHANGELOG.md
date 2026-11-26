@@ -42,9 +42,12 @@
 - Added `crash().clearBreadcrumbs()`, `views().stopAllViews()`, and segmentation for `closeViewWithName` and `closeViewWithID`.
 - Added `disableLocation()`. A location given with `setLocation` before `start()` is now used from `start()` on.
 - Added `setCrashDumpDirectory()` for native crashes. At `start()` the SDK sends every minidump (`*.dmp`) in that directory as an unhandled crash with `_native_cpp`, then deletes the file. Only the default instance handles native crashes.
+- Use a crash dump directory that only the app writes: the SDK sends and deletes every dump in it, and never reads a link in it.
+- With requests kept in memory (no `COUNTLY_USE_SQLITE` database), `start()` logs a warning while a crash dump directory is set: a crash whose request is not sent before the app ends is lost.
 - A native crash dump is sent Base64-encoded in `_error` and is never cut by the internal limits. Without the "crashes" consent it is deleted unsent; while the server's "Allow crash tracking" is off, it stays for a later start.
 - A native crash dump larger than 10 MB is deleted without being sent and logged as an error, because the server does not accept a request that large.
 - Added `enableCrashReporting()` and the CMake option `COUNTLY_USE_BREAKPAD` (off by default; Windows and Linux). The SDK's Breakpad handler writes a minidump on a crash, then calls the handler that was installed before it.
+- Once installed, the SDK's crash handler stays in the process. `stop()`, a removed "crashes" consent and the server's settings only turn it off, so that crash handlers that other code installs later are never replaced. Its dump directory stays the one of its first start.
 - The minidumps of the SDK's crash handler hold the breadcrumbs and the app version of the crash moment. The server's "Automatic crash reporting" setting (`acr`) turns the handler on and off.
 - The vendored Breakpad client (`vendor/breakpad`, updated with `scripts/update_breakpad.py`) needs a C++17 compiler; the SDK itself still builds with C++14.
 

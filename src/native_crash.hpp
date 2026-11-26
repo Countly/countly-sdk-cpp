@@ -75,24 +75,31 @@ bool findContextPayload(const std::string &dump, std::string &payload);
 bool setContextPayload(const std::string &payload);
 
 /**
+ * A copy of the bytes of the context block, as every dump of the crash handler holds them.
+ */
+std::string contextBlock();
+
+/**
  * Whether this build has a crash handler, which needs COUNTLY_USE_BREAKPAD.
  */
 bool isHandlerAvailable();
 
 /**
- * Installs the process-wide crash handler, which writes a minidump into the directory when the process crashes and then
- * hands the crash to the handler that was installed before it. Returns false, with the reason in 'error', when the
- * build has no crash handler, the directory does not exist or a handler is already installed.
+ * Turns on the process-wide crash handler, which writes a minidump into the directory when the process crashes and then
+ * hands the crash to the handler that was installed before it. The first call fixes the directory for the life of the
+ * process. Returns false, with the reason in 'error', when the build has no crash handler, the directory does not exist
+ * or is not the one of the first call, or the handler is already on.
  */
 bool installHandler(const std::string &directory, std::string &error);
 
 /**
- * Removes the crash handler and puts back the handlers that were installed before it.
+ * Turns off the crash handler. It stays installed and hands every crash on without a dump, so that a handler that other
+ * code installed later is never replaced.
  */
 void uninstallHandler();
 
 /**
- * Whether the crash handler is installed.
+ * Whether the crash handler is on.
  */
 bool isHandlerInstalled();
 

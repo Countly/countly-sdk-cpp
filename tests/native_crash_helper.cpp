@@ -2,15 +2,19 @@
  * Crash helper for tests/native_crash.cpp. It installs a crash handler of its own first, as another crash tool would,
  * then starts the SDK with native crash capture, adds two breadcrumbs and crashes.
  *
- * Usage: countly-native-crash-helper <dump directory> <segv|abort|throw|purecall|invalid-parameter|tolerated-parameter>
- *        <marker file>
+ * Usage: countly-native-crash-helper <dump directory>
+ *        <segv|abort|throw|purecall|invalid-parameter|tolerated-parameter|segv-after-stop|off-on-other-thread> <marker file>
  * The helper's own handler writes the marker file, which proves that it still runs after the SDK's handler.
+ * "off-on-other-thread" (POSIX) does not crash: it calls stop() on a second thread and exits with 0 while the memory of
+ * the main thread's signal stack is still its own, or with 3 when that memory was handed out again.
  */
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
+#include <thread>
+#include <vector>
 
 #ifdef _WIN32
 #include <crtdbg.h>
@@ -82,6 +86,32 @@ void installOwnHandlers() {
   signal(SIGSEGV, markerSignalHandler);
   signal(SIGABRT, markerSignalHandler);
 }
+
+/**
+ * Whether the memory of this thread's alternate signal stack is still its own: none of 64 new blocks of the stack's
+ * size lies on it. The allocator hands out the memory of a freed stack again.
+ */
+bool signalStackIsIntact() {
+  stack_t current = {};
+  if (sigaltstack(nullptr, &current) != 0 || (current.ss_flags & SS_DISABLE) != 0 || current.ss_sp == nullptr) {
+    return true;
+  }
+  const char *stackStart = static_cast<const char *>(current.ss_sp);
+  const char *stackEnd = stackStart + current.ss_size;
+  std::vector<char *> blocks;
+  bool intact = true;
+  for (int index = 0; index < 64; index++) {
+    char *block = static_cast<char *>(std::calloc(1, current.ss_size));
+    blocks.push_back(block);
+    if (block != nullptr && block < stackEnd && block + current.ss_size > stackStart) {
+      intact = false;
+    }
+  }
+  for (char *block : blocks) {
+    std::free(block);
+  }
+  return intact;
+}
 #endif
 
 /**
@@ -128,6 +158,14 @@ int main(int argc, char **argv) {
 
   if (mode == "segv") {
     *null_pointer = 42;
+  } else if (mode == "segv-after-stop") {
+    countly.stop();
+    *null_pointer = 42;
+#ifndef _WIN32
+  } else if (mode == "off-on-other-thread") {
+    std::thread([&countly] { countly.stop(); }).join();
+    return signalStackIsIntact() ? 0 : 3;
+#endif
   } else if (mode == "abort") {
     std::abort();
   } else if (mode == "throw") {

@@ -15,6 +15,7 @@
 #else
 #include <dirent.h>
 #include <fstream>
+#include <sys/stat.h>
 #endif
 
 #ifdef COUNTLY_USE_BREAKPAD
@@ -144,7 +145,8 @@ std::vector<std::string> listDumpFiles(const std::string &directory) {
   }
   do {
     const std::string name = narrow(entry.cFileName);
-    if ((entry.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0 && hasDumpExtension(name)) {
+    // a link is never read as a dump, so that the SDK sends no file outside the directory
+    if ((entry.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) == 0 && hasDumpExtension(name)) {
       names.push_back(name);
     }
   } while (FindNextFileW(search, &entry));
@@ -156,14 +158,20 @@ std::vector<std::string> listDumpFiles(const std::string &directory) {
   }
   // NOLINTNEXTLINE(concurrency-mt-unsafe): the directory stream belongs to this call alone
   for (struct dirent *entry = readdir(opened); entry != nullptr; entry = readdir(opened)) {
-#if defined(_DIRENT_HAVE_D_TYPE) || defined(__APPLE__)
-    // links and special files are never read as dumps; an entry whose type the file system does not report counts
-    if (entry->d_type != DT_REG && entry->d_type != DT_UNKNOWN) {
+    const std::string name = entry->d_name;
+    if (!hasDumpExtension(name)) {
       continue;
     }
+#if defined(_DIRENT_HAVE_D_TYPE) || defined(__APPLE__)
+    const bool typeKnown = entry->d_type != DT_UNKNOWN;
+    const bool regular = entry->d_type == DT_REG;
+#else
+    const bool typeKnown = false;
+    const bool regular = false;
 #endif
-    const std::string name = entry->d_name;
-    if (hasDumpExtension(name)) {
+    // links and special files are never read as dumps; lstat gives the type the file system does not report
+    struct stat status = {};
+    if (typeKnown ? regular : (lstat(joinPath(directory, name).c_str(), &status) == 0 && S_ISREG(status.st_mode))) {
       names.push_back(name);
     }
   }
@@ -323,6 +331,11 @@ bool setContextPayload(const std::string &payload) {
   return true;
 }
 
+std::string contextBlock() {
+  std::lock_guard<std::mutex> lock(context_mutex);
+  return std::string(reinterpret_cast<const char *>(context_block), sizeof(context_block));
+}
+
 bool isHandlerAvailable() {
 #ifdef COUNTLY_USE_BREAKPAD
   return true;
@@ -337,11 +350,7 @@ bool installHandler(const std::string &directory, std::string &error) {
     error = "the crash dump directory [" + directory + "] does not exist";
     return false;
   }
-  if (!breakpad::install(absoluteDirectory(directory), context_block, sizeof(context_block))) {
-    error = "a crash handler is already installed";
-    return false;
-  }
-  return true;
+  return breakpad::install(absoluteDirectory(directory), context_block, sizeof(context_block), error);
 #else
   (void)directory;
   error = "this build has no crash handler, build the SDK with COUNTLY_USE_BREAKPAD";

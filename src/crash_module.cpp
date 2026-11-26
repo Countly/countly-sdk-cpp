@@ -11,6 +11,11 @@
 
 // define namespace
 namespace cly {
+namespace {
+// The device metrics a crash report carries
+const char *const CRASH_METRIC_KEYS[] = {"_os", "_os_version", "_app_version", "_device", "_resolution"};
+} // namespace
+
 // define CrashModuleImpl class
 class CrashModule::CrashModuleImpl {
 public:
@@ -74,7 +79,7 @@ public:
    */
   void addCrashMetrics(CrashData &crash) {
     const nlohmann::json deviceMetrics = _cly != nullptr ? _cly->DeviceMetrics() : nlohmann::json::object();
-    for (const char *key : {"_os", "_os_version", "_app_version", "_device", "_resolution"}) {
+    for (const char *key : CRASH_METRIC_KEYS) {
       nlohmann::json::const_iterator metric = deviceMetrics.find(key);
       if (metric != deviceMetrics.end() && metric->is_string() && !metric->get<std::string>().empty()) {
         crash.crashMetrics[key] = metric->get<std::string>();
@@ -137,14 +142,20 @@ public:
     addCrashMetrics(metrics);
     nlohmann::json context;
     context["m"] = nlohmann::json(metrics.crashMetrics);
-    std::deque<std::string> breadcrumbs = _breadCrumbs;
-    while (true) {
-      context["l"] = nlohmann::json(std::vector<std::string>(breadcrumbs.begin(), breadcrumbs.end()));
-      if (native_crash::setContextPayload(context.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace)) || breadcrumbs.empty()) {
-        return;
+    context["l"] = nlohmann::json::array();
+    // the size of the payload grows by each breadcrumb's JSON text and a comma, so the newest that fit are found
+    // without a full conversion for each breadcrumb
+    size_t size = context.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace).size();
+    std::deque<std::string>::const_reverse_iterator oldestKept = _breadCrumbs.crbegin();
+    for (; oldestKept != _breadCrumbs.crend(); ++oldestKept) {
+      const size_t added = nlohmann::json(*oldestKept).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace).size() + (oldestKept == _breadCrumbs.crbegin() ? 0 : 1);
+      if (size + added > native_crash::maxContextPayload()) {
+        break;
       }
-      breadcrumbs.pop_front();
+      size += added;
     }
+    context["l"] = nlohmann::json(std::vector<std::string>(oldestKept.base(), _breadCrumbs.cend()));
+    native_crash::setContextPayload(context.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
   }
 };
 
@@ -325,9 +336,10 @@ void CrashModule::recordNativeCrash(const std::string &dump) {
   if (native_crash::findContextPayload(dump, payload)) {
     const nlohmann::json context = nlohmann::json::parse(payload, nullptr, false);
     if (context.is_object() && context.contains("m") && context["m"].is_object()) {
-      for (nlohmann::json::const_iterator metric = context["m"].begin(); metric != context["m"].end(); ++metric) {
-        if (metric->is_string() && !metric->get<std::string>().empty()) {
-          crash.crashMetrics[metric.key()] = metric->get<std::string>();
+      for (const char *key : CRASH_METRIC_KEYS) {
+        nlohmann::json::const_iterator metric = context["m"].find(key);
+        if (metric != context["m"].end() && metric->is_string() && !metric->get<std::string>().empty()) {
+          crash.crashMetrics[key] = metric->get<std::string>();
         }
       }
     }

@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -12,6 +13,7 @@
 #include <spawn.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 extern char **environ;
 #endif
@@ -41,7 +43,7 @@ void resetDumpDirectory() {
   for (const std::string &dump : native_crash::listDumpFiles(DUMP_DIRECTORY)) {
     native_crash::removeFile(dump);
   }
-  for (const char *name : {"notes.txt", "marker.txt"}) {
+  for (const char *name : {"notes.txt", "marker.txt", "link.dmp"}) {
     native_crash::removeFile(std::string(DUMP_DIRECTORY) + "/" + name);
   }
 }
@@ -57,6 +59,33 @@ void writeFile(const std::string &path, const std::string &content) {
 }
 
 bool fileExists(const std::string &path) { return native_crash::fileSize(path) >= 0; }
+
+/**
+ * Creates a file link at 'link' to 'target', a path relative to the directory of the link. Returns false where the
+ * system does not let this process create a link, as Windows without administrator rights or Developer Mode.
+ */
+bool createFileLink(const std::string &link, const std::string &target) {
+#ifdef _WIN32
+  typedef BOOLEAN(WINAPI * CreateLinkFunction)(LPCWSTR, LPCWSTR, DWORD);
+  const CreateLinkFunction createLink = reinterpret_cast<CreateLinkFunction>(reinterpret_cast<void *>(GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "CreateSymbolicLinkW")));
+  // 0x2 is SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE
+  return createLink != nullptr && createLink(native_crash::widen(link).c_str(), native_crash::widen(target).c_str(), 0x2) != 0;
+#else
+  return symlink(target.c_str(), link.c_str()) == 0;
+#endif
+}
+
+/**
+ * Whether a file or a link exists at the path, without following a link.
+ */
+bool linkExists(const std::string &path) {
+#ifdef _WIN32
+  return GetFileAttributesW(native_crash::widen(path).c_str()) != INVALID_FILE_ATTRIBUTES;
+#else
+  struct stat status;
+  return lstat(path.c_str(), &status) == 0;
+#endif
+}
 
 /**
  * Bytes that look like a minidump: the signature, then binary data with line breaks and zero bytes.
@@ -301,6 +330,55 @@ TEST_CASE("A damaged context block in the dump is ignored, and the current value
   CHECK(crashes[0]["_logs"] == "");
 }
 
+TEST_CASE("Only the device metrics of the dump's context block go into the report") {
+  Countly &countly = prepareDefaultInstance();
+  writeFile(pathInDumpDirectory("fields.dmp"), dumpWithContext({{"m", {{"_app_version", "1.0"}, {"_name", "from the dump"}, {"_run", "5"}}}, {"l", json::array()}}));
+  startNativeCrashes(countly);
+  std::vector<json> crashes = sentCrashes(countly);
+  REQUIRE(crashes.size() == 1);
+  CHECK(crashes[0]["_app_version"] == "1.0");
+  CHECK_FALSE(crashes[0].contains("_name"));
+  CHECK_FALSE(crashes[0].contains("_run"));
+}
+
+TEST_CASE("A link that has the name of a dump is neither sent nor deleted") {
+  Countly &countly = prepareDefaultInstance();
+  const std::string target = "native-crash-link-target.txt";
+  writeFile(target, "the content of another file");
+  const std::string link = pathInDumpDirectory("link.dmp");
+#ifdef _WIN32
+  const bool created = createFileLink(link, "..\\" + target);
+#else
+  const bool created = createFileLink(link, "../" + target);
+#endif
+  if (created) {
+    startNativeCrashes(countly);
+    CHECK(sentCrashes(countly).empty());
+    CHECK(linkExists(link));
+  } else {
+    MESSAGE("this system does not let the test create a file link, so the case is not checked");
+  }
+  native_crash::removeFile(link);
+  native_crash::removeFile(target);
+}
+
+TEST_CASE("With the request queue in memory, start() warns that a native crash can be lost") {
+  Countly &countly = prepareDefaultInstance();
+  startNativeCrashes(countly);
+  CHECK(capturedLogContains("lost when the app ends before its request is sent"));
+}
+
+#ifdef COUNTLY_USE_SQLITE
+TEST_CASE("With the request queue in a database, start() gives no warning about lost native crashes") {
+  Countly &countly = prepareDefaultInstance();
+  countly.setDatabasePath("native-crash-storage.db");
+  startNativeCrashes(countly);
+  CHECK_FALSE(capturedLogContains("lost when the app ends before its request is sent"));
+  clearSDK();
+  std::remove("native-crash-storage.db");
+}
+#endif
+
 TEST_CASE("A context block holds a payload up to its size and refuses a larger one") {
   CHECK_FALSE(native_crash::encodeContextBlock(std::string(native_crash::maxContextPayload(), 'a')).empty());
   CHECK(native_crash::encodeContextBlock(std::string(native_crash::maxContextPayload() + 1, 'a')).empty());
@@ -389,12 +467,105 @@ TEST_CASE("The crash handler follows enableCrashReporting, the crashes consent a
   CHECK_FALSE(native_crash::isHandlerInstalled());
 }
 
+TEST_CASE("The crash handler keeps the directory of its first start, and another directory is refused with an error") {
+  Countly &first = prepareDefaultInstance();
+  first.enableCrashReporting();
+  startNativeCrashes(first);
+  REQUIRE(native_crash::isHandlerInstalled());
+  clearSDK();
+  clearCapturedLogs();
+
+  const char *const otherDirectory = "native-crash-dumps-other";
+#ifdef _WIN32
+  _mkdir(otherDirectory);
+#else
+  mkdir(otherDirectory, S_IRWXU);
+#endif
+  Countly &countly = prepareNativeCrashes(Countly::getInstance());
+  countly.setCrashDumpDirectory(otherDirectory);
+  countly.enableCrashReporting();
+  startNativeCrashes(countly);
+  CHECK_FALSE(native_crash::isHandlerInstalled());
+  CHECK(capturedLogContains("can't move to another directory"));
+  clearSDK();
+#ifdef _WIN32
+  _rmdir(otherDirectory);
+#else
+  rmdir(otherDirectory);
+#endif
+}
+
+namespace {
+#ifdef _WIN32
+LONG WINAPI laterFilter(EXCEPTION_POINTERS *) { return EXCEPTION_CONTINUE_SEARCH; }
+#else
+void laterSignalHandler(int, siginfo_t *, void *) {}
+#endif
+} // namespace
+
+TEST_CASE("A crash handler that other code installs after start() stays when the SDK's handler is turned off") {
+  Countly &countly = prepareDefaultInstance();
+  countly.enableCrashReporting();
+  startNativeCrashes(countly);
+  REQUIRE(native_crash::isHandlerInstalled());
+#ifdef _WIN32
+  const LPTOP_LEVEL_EXCEPTION_FILTER before = SetUnhandledExceptionFilter(laterFilter);
+  countly.stop();
+  const LPTOP_LEVEL_EXCEPTION_FILTER after = SetUnhandledExceptionFilter(before);
+  CHECK(after == laterFilter);
+#else
+  struct sigaction later = {};
+  later.sa_sigaction = laterSignalHandler;
+  later.sa_flags = SA_SIGINFO;
+  struct sigaction before = {};
+  REQUIRE(sigaction(SIGSEGV, &later, &before) == 0);
+  countly.stop();
+  struct sigaction after = {};
+  REQUIRE(sigaction(SIGSEGV, &before, &after) == 0);
+  CHECK(after.sa_sigaction == laterSignalHandler);
+#endif
+  CHECK_FALSE(native_crash::isHandlerInstalled());
+  clearSDK();
+}
+
+TEST_CASE("With high breadcrumb limits, breadcrumbs stay fast and the context block keeps the newest that fit") {
+  Countly &countly = prepareDefaultInstance();
+  countly.setMaxBreadcrumbCount(1000);
+  countly.setMaxValueSize(1000);
+  countly.enableCrashReporting();
+  startNativeCrashes(countly);
+  REQUIRE(native_crash::isHandlerInstalled());
+
+  const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+  int added = 0;
+  for (; added < 1000 && std::chrono::steady_clock::now() < deadline; added++) {
+    std::string breadcrumb = "crumb-" + std::to_string(added) + "-";
+    breadcrumb.resize(1000, 'x');
+    countly.crash().addBreadcrumb(breadcrumb);
+  }
+  CHECK(added == 1000);
+
+  std::string payload;
+  REQUIRE(native_crash::findContextPayload(native_crash::contextBlock(), payload));
+  const json context = json::parse(payload);
+  REQUIRE(context["l"].is_array());
+  const size_t kept = context["l"].size();
+  REQUIRE(kept > 0);
+  for (size_t index = 0; index < kept; index++) {
+    const std::string expectedStart = "crumb-" + std::to_string(added - static_cast<int>(kept) + static_cast<int>(index)) + "-";
+    CHECK(context["l"][index].get<std::string>().compare(0, expectedStart.size(), expectedStart) == 0);
+  }
+  // one more breadcrumb, 1,002 bytes as a JSON string plus a comma, would not fit
+  CHECK(payload.size() + 1003 > native_crash::maxContextPayload());
+  clearSDK();
+}
+
 namespace {
 /**
- * Runs the crash helper, which starts the SDK with the crash handler, adds breadcrumbs and crashes in the given way.
- * Returns how the helper ended: the signal on POSIX systems, the exit code on Windows.
+ * Starts the crash helper with the given mode and waits until it ends. Returns the exit code on Windows and the wait
+ * status on POSIX systems.
  */
-long long runCrashHelper(const std::string &mode) {
+long long spawnCrashHelper(const std::string &mode) {
   const std::string marker = pathInDumpDirectory("marker.txt");
 #ifdef _WIN32
   const std::string command = std::string("\"") + COUNTLY_CRASH_HELPER_PATH + "\" " + DUMP_DIRECTORY + " " + mode + " " + marker;
@@ -421,6 +592,19 @@ long long runCrashHelper(const std::string &mode) {
   REQUIRE(posix_spawn(&child, COUNTLY_CRASH_HELPER_PATH, nullptr, nullptr, argv.data(), environ) == 0);
   int status = 0;
   REQUIRE(waitpid(child, &status, 0) == child);
+  return status;
+#endif
+}
+
+/**
+ * Runs the crash helper, which starts the SDK with the crash handler, adds breadcrumbs and crashes in the given way.
+ * Returns how the helper ended: the signal on POSIX systems, the exit code on Windows.
+ */
+long long runCrashHelper(const std::string &mode) {
+#ifdef _WIN32
+  return spawnCrashHelper(mode);
+#else
+  const int status = static_cast<int>(spawnCrashHelper(mode));
   REQUIRE(WIFSIGNALED(status));
   return WTERMSIG(status);
 #endif
@@ -466,4 +650,25 @@ TEST_CASE("A crash is captured in a dump, the handler that was there before stil
   SUBCASE("pure virtual call") { checkCapturedCrash("purecall", SIGABRT); }
 #endif
 }
+
+TEST_CASE("After stop() a crash writes no dump, and the handler that was there before still runs") {
+  prepareDefaultInstance();
+#ifdef _WIN32
+  CHECK(runCrashHelper("segv-after-stop") == static_cast<long long>(0xC0000005UL));
+#else
+  CHECK(runCrashHelper("segv-after-stop") == SIGSEGV);
+#endif
+  CHECK(fileExists(pathInDumpDirectory("marker.txt")));
+  CHECK(native_crash::listDumpFiles(DUMP_DIRECTORY).empty());
+}
+
+#ifndef _WIN32
+TEST_CASE("Turning the handler off on another thread keeps the signal stack of the thread that started the SDK") {
+  prepareDefaultInstance();
+  const int status = static_cast<int>(spawnCrashHelper("off-on-other-thread"));
+  REQUIRE(WIFEXITED(status));
+  // 3: the helper found the memory of its signal stack handed out again
+  CHECK(WEXITSTATUS(status) == 0);
+}
+#endif
 #endif

@@ -4,7 +4,6 @@
 #include <atomic>
 #include <csignal>
 #include <cstdlib>
-#include <memory>
 #include <mutex>
 
 #ifdef _WIN32
@@ -21,15 +20,27 @@ namespace breakpad {
 namespace {
 
 std::mutex handler_mutex;
-std::unique_ptr<google_breakpad::ExceptionHandler> handler;
+// Created at the first install and never destroyed: destroying it would put back the handlers of that moment, over the
+// handlers that other code installed later, and on Linux would free the signal stack of the thread that created it
+google_breakpad::ExceptionHandler *handler = nullptr;
+// The directory the handler writes into, the one of its first install
+std::string handler_directory;
 // Read in the crash path, where no lock may be taken
 std::atomic<google_breakpad::ExceptionHandler *> active_handler(nullptr);
+// Whether a crash writes a dump; when off, the crash goes on to the handler that was installed before
+std::atomic<bool> enabled(false);
 // Set when a dump of this crash exists, so that an abort() that follows the first crash report writes no second dump
 std::atomic<bool> dump_written(false);
 
 #ifdef _WIN32
 typedef void (*SignalHandler)(int);
 SignalHandler previous_abort_handler = SIG_DFL;
+
+/**
+ * Called by Breakpad before it writes a dump. Returns false while the handler is off, so that Breakpad writes nothing and
+ * hands the crash to the handler that was installed before it.
+ */
+bool shouldWriteDump(void *, EXCEPTION_POINTERS *, MDRawAssertionInfo *) { return enabled.load(); }
 
 /**
  * Called by Breakpad after it wrote a dump. Returns false, so that Breakpad hands the crash to the handler that was
@@ -48,7 +59,7 @@ bool onDumpWritten(const wchar_t *, const wchar_t *, void *, EXCEPTION_POINTERS 
  */
 void writeDumpForCode(DWORD code) {
   google_breakpad::ExceptionHandler *current = active_handler.load();
-  if (current == nullptr || dump_written.load()) {
+  if (current == nullptr || !enabled.load() || dump_written.load()) {
     return;
   }
   EXCEPTION_RECORD record = {};
@@ -105,6 +116,12 @@ void onInvalidParameter(const wchar_t *expression, const wchar_t *function, cons
 #endif
 #else
 /**
+ * Called by Breakpad before it writes a dump. Returns false while the handler is off, so that Breakpad writes nothing,
+ * puts back the signal handlers that were installed before it and raises the signal again.
+ */
+bool shouldWriteDump(void *) { return enabled.load(); }
+
+/**
  * Called by Breakpad after it wrote a dump. Returns false, so that Breakpad puts back the signal handlers that were
  * installed before it and raises the signal again: the process ends the way it would without the SDK.
  */
@@ -118,56 +135,45 @@ bool onDumpWritten(const google_breakpad::MinidumpDescriptor &, void *, bool suc
 
 } // namespace
 
-bool install(const std::string &absoluteDirectory, void *appMemory, size_t appMemorySize) {
+bool install(const std::string &absoluteDirectory, void *appMemory, size_t appMemorySize, std::string &error) {
   std::lock_guard<std::mutex> lock(handler_mutex);
-  if (handler) {
+  if (enabled.load()) {
+    error = "the crash handler is already on";
+    return false;
+  }
+  if (handler != nullptr && absoluteDirectory != handler_directory) {
+    error = "the crash handler of this process writes its dumps into [" + handler_directory + "], and it can't move to another directory";
     return false;
   }
   dump_written.store(false);
+  if (handler == nullptr) {
 #ifdef _WIN32
-  // Breakpad's own invalid parameter and pure virtual call handlers end the process with exit code 0, so the SDK
-  // installs only its exception filter and handles those two cases itself
-  handler.reset(new google_breakpad::ExceptionHandler(widen(absoluteDirectory), nullptr, onDumpWritten, nullptr, google_breakpad::ExceptionHandler::HANDLER_EXCEPTION));
+    // Breakpad's own invalid parameter and pure virtual call handlers end the process with exit code 0, so the SDK
+    // installs only its exception filter and handles those two cases itself
+    handler = new google_breakpad::ExceptionHandler(widen(absoluteDirectory), shouldWriteDump, onDumpWritten, nullptr, google_breakpad::ExceptionHandler::HANDLER_EXCEPTION);
 #else
-  handler.reset(new google_breakpad::ExceptionHandler(google_breakpad::MinidumpDescriptor(absoluteDirectory), nullptr, onDumpWritten, nullptr, true, -1));
+    handler = new google_breakpad::ExceptionHandler(google_breakpad::MinidumpDescriptor(absoluteDirectory), shouldWriteDump, onDumpWritten, nullptr, true, -1);
 #endif
-  handler->RegisterAppMemory(appMemory, appMemorySize);
-  active_handler.store(handler.get());
+    handler->RegisterAppMemory(appMemory, appMemorySize);
+    handler_directory = absoluteDirectory;
+    active_handler.store(handler);
 #ifdef _WIN32
-  previous_abort_handler = signal(SIGABRT, onAbort);
+    previous_abort_handler = signal(SIGABRT, onAbort);
 #endif
 #ifdef _MSC_VER
-  previous_parameter_handler = _set_invalid_parameter_handler(onInvalidParameter);
+    previous_parameter_handler = _set_invalid_parameter_handler(onInvalidParameter);
 #endif
+  }
+  enabled.store(true);
   return true;
 }
 
 void uninstall() {
   std::lock_guard<std::mutex> lock(handler_mutex);
-  if (!handler) {
-    return;
-  }
-#ifdef _WIN32
-  const SignalHandler current = signal(SIGABRT, previous_abort_handler == SIG_ERR ? SIG_DFL : previous_abort_handler);
-  if (current != onAbort) {
-    // another tool replaced the SDK's SIGABRT handler after it; leave that tool's handler in place
-    signal(SIGABRT, current);
-  }
-#endif
-#ifdef _MSC_VER
-  const _invalid_parameter_handler currentParameterHandler = _set_invalid_parameter_handler(previous_parameter_handler);
-  if (currentParameterHandler != onInvalidParameter) {
-    _set_invalid_parameter_handler(currentParameterHandler);
-  }
-#endif
-  active_handler.store(nullptr);
-  handler.reset();
+  enabled.store(false);
 }
 
-bool isInstalled() {
-  std::lock_guard<std::mutex> lock(handler_mutex);
-  return handler != nullptr;
-}
+bool isInstalled() { return enabled.load(); }
 
 } // namespace breakpad
 } // namespace native_crash

@@ -1343,6 +1343,9 @@ void Countly::sendNativeCrashDumps() {
   if (directory.empty()) {
     return;
   }
+  if (!use_sqlite_storage) {
+    log(LogLevel::WARNING, "[Countly] sendNativeCrashDumps, the crash dump directory is set, but requests are kept in memory only: a native crash whose dump is read at start is lost when the app ends before its request is sent. Build the SDK with COUNTLY_USE_SQLITE and call setDatabasePath() to keep it.");
+  }
   if (!configurationModule->isCrashReportingEnabled()) {
     log(LogLevel::DEBUG, "[Countly] sendNativeCrashDumps, the server's SDK behavior settings turned crash tracking off, so the native crash dumps stay in [" + directory + "] for a later start.");
     return;
@@ -1397,7 +1400,7 @@ void Countly::updateNativeCrashHandler() {
     cly::native_crash::uninstallHandler();
     crash_module->setNativeContextEnabled(false);
     owns_native_crash_handler = false;
-    log(LogLevel::INFO, "[Countly] updateNativeCrashHandler, the native crash handler is removed.");
+    log(LogLevel::INFO, "[Countly] updateNativeCrashHandler, the native crash handler is off: it writes no dump and hands every crash to the handler that was installed before it.");
     return;
   }
   if (!cly::native_crash::isHandlerAvailable()) {
@@ -1405,12 +1408,12 @@ void Countly::updateNativeCrashHandler() {
   }
   std::string error;
   if (!cly::native_crash::installHandler(directory, error)) {
-    log(LogLevel::ERROR, "[Countly] updateNativeCrashHandler, the native crash handler could not be installed: " + error);
+    log(LogLevel::ERROR, "[Countly] updateNativeCrashHandler, the native crash handler could not be turned on: " + error);
     return;
   }
   owns_native_crash_handler = true;
   crash_module->setNativeContextEnabled(true);
-  log(LogLevel::INFO, "[Countly] updateNativeCrashHandler, the native crash handler is installed, dumps go to [" + directory + "].");
+  log(LogLevel::INFO, "[Countly] updateNativeCrashHandler, the native crash handler is on, dumps go to [" + directory + "].");
 }
 
 void Countly::CrashReportingSettingsChanged() {
