@@ -389,6 +389,7 @@ void CrashModule::recordNativeCrash(std::string dump) {
   report["_ob"] = changedFields;
 
   // the encoded dump moves into the report and the report text into the request data, so that no copy stays behind
+  // cppcheck-suppress misra-c2012-12.3 ; the comma separates template arguments, it is no comma operator
   std::map<std::string, std::string> data;
   data["crash"] = report.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
   report = nullptr;
