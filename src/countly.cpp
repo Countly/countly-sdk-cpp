@@ -1344,7 +1344,8 @@ void Countly::sendNativeCrashDumps() {
     return;
   }
   if (!use_sqlite_storage) {
-    log(LogLevel::WARNING, "[Countly] sendNativeCrashDumps, the crash dump directory is set, but requests are kept in memory only: a native crash whose dump is read at start is lost when the app ends before its request is sent. Build the SDK with COUNTLY_USE_SQLITE and call setDatabasePath() to keep it.");
+    log(LogLevel::WARNING,
+        "[Countly] sendNativeCrashDumps, the crash dump directory is set, but requests are kept in memory only: a native crash whose dump is read at start is lost when the app ends before its request is sent. Build the SDK with COUNTLY_USE_SQLITE and call setDatabasePath() to keep it.");
   }
   if (!configurationModule->isCrashReportingEnabled()) {
     log(LogLevel::DEBUG, "[Countly] sendNativeCrashDumps, the server's SDK behavior settings turned crash tracking off, so the native crash dumps stay in [" + directory + "] for a later start.");
@@ -1370,7 +1371,7 @@ void Countly::sendNativeCrashDumps() {
       log(LogLevel::ERROR, "[Countly] sendNativeCrashDumps, the native crash dump [" + path + "] can't be read, so it stays.");
       continue;
     } else {
-      crash_module->recordNativeCrash(dump);
+      crash_module->recordNativeCrash(std::move(dump));
     }
     if (!cly::native_crash::removeFile(path)) {
       log(LogLevel::ERROR, "[Countly] sendNativeCrashDumps, the native crash dump [" + path + "] can't be deleted, so the next start handles it again.");

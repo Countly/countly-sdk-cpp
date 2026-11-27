@@ -249,7 +249,9 @@ public:
   /**
    * Sets a callback that sees every crash report before it is queued. It may change the report, for example to
    * remove personal data, and returns true to drop it. Which fields it changed is reported to the server as "_ob".
-   * A callback that throws drops the crash. Call it before start().
+   * A callback that throws drops the crash. For a native crash dump, CrashData::nativeCrash is true and the stack trace
+   * holds the Base64-encoded minidump: leave it unchanged, because the server reads only the whole dump. Call it before
+   * start().
    */
   void setCrashFilterCallback(CrashFilterCallback callback);
 
@@ -278,7 +280,9 @@ public:
    * "crashes" consent; the server's "Automatic crash reporting" and "Allow crash tracking" settings turn it off and on.
    * stop() turns it off. Once installed, the handler stays in the process: while it is off, it writes no dump and hands
    * every crash on, so that a crash handler that other code installs later is never replaced. Its directory stays the
-   * one of its first start. Only the default instance (getInstance()) can install it. Call it before start().
+   * one of its first start. On Linux, the handler needs a separate signal stack to write a dump of a stack overflow:
+   * the thread that turns the handler on gets one, and a thread of the app that should be covered too sets its own with
+   * sigaltstack. Only the default instance (getInstance()) can install it. Call it before start().
    */
   void enableCrashReporting();
 

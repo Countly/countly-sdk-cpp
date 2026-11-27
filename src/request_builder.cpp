@@ -1,26 +1,49 @@
 #include "countly/request_builder.hpp"
+#include <cctype>
 #include <chrono>
 #include <ctime>
-#include <iomanip>
-#include <iostream>
-#include <sstream>
+#include <numeric>
 namespace cly {
+namespace {
+/**
+ * Whether URL encoding keeps the character as it is.
+ */
+bool keptInURL(unsigned char character) { return std::isalnum(character) || character == '.' || character == '_' || character == '~'; }
+
+/**
+ * The length of the URL-encoded form of the text.
+ */
+size_t encodedLength(const std::string &data) {
+  return std::accumulate(data.begin(), data.end(), size_t{0}, [](size_t length, char character) { return length + (keptInURL(static_cast<unsigned char>(character)) ? 1 : 3); });
+}
+
+/**
+ * Appends the URL-encoded form of the text to 'target': every character that URL encoding does not keep becomes "%"
+ * and two uppercase hexadecimal digits.
+ */
+void appendEncoded(std::string &target, const std::string &data) {
+  static const char hexDigits[] = "0123456789ABCDEF";
+  for (unsigned char character : data) {
+    if (keptInURL(character)) {
+      target.push_back(static_cast<char>(character));
+    } else {
+      target.push_back('%');
+      target.push_back(hexDigits[character >> 4]);
+      target.push_back(hexDigits[character & 0x0F]);
+    }
+  }
+}
+} // namespace
+
 RequestBuilder::RequestBuilder(std::shared_ptr<CountlyConfiguration> config, std::shared_ptr<LoggerModule> logger) : _configuration(config), _logger(logger) {}
 
 RequestBuilder::~RequestBuilder() {}
 
 std::string RequestBuilder::encodeURL(const std::string &data) {
-  std::ostringstream encoded;
-
-  for (unsigned char character : data) {
-    if (std::isalnum(character) || character == '.' || character == '_' || character == '~') {
-      encoded << character;
-    } else {
-      encoded << '%' << std::setw(2) << std::hex << std::setfill('0') << std::uppercase << (unsigned int)((unsigned char)character);
-    }
-  }
-
-  return encoded.str();
+  std::string encoded;
+  encoded.reserve(encodedLength(data));
+  appendEncoded(encoded, data);
+  return encoded;
 }
 
 std::string RequestBuilder::buildRequest(const std::map<std::string, std::string> &data) {
@@ -58,7 +81,10 @@ std::string RequestBuilder::buildRequest(const std::map<std::string, std::string
   }
 
   request.insert(data.begin(), data.end());
-  return buildFetchRequest(request);
+  // the SDK keys win over every other key, as in buildFetchRequest, without a second copy of the data
+  request["sdk_name"] = COUNTLY_SDK_NAME;
+  request["sdk_version"] = COUNTLY_SDK_VERSION;
+  return serializeData(request);
 }
 
 std::string RequestBuilder::buildFetchRequest(const std::map<std::string, std::string> &data) {
@@ -69,17 +95,18 @@ std::string RequestBuilder::buildFetchRequest(const std::map<std::string, std::s
 }
 
 std::string RequestBuilder::serializeData(const std::map<std::string, std::string> &data) {
-  std::ostringstream serialized;
+  const size_t length = std::accumulate(data.begin(), data.end(), size_t{0}, [](size_t total, const std::pair<const std::string, std::string> &key_value) { return total + key_value.first.size() + encodedLength(key_value.second) + 2; });
 
+  std::string serialized;
+  serialized.reserve(length);
   for (const auto &key_value : data) {
-    serialized << key_value.first << "=" << encodeURL(key_value.second) << '&';
+    if (!serialized.empty()) {
+      serialized.push_back('&');
+    }
+    serialized.append(key_value.first);
+    serialized.push_back('=');
+    appendEncoded(serialized, key_value.second);
   }
-
-  std::string serialized_string = serialized.str();
-  if (serialized_string.size() > 0 ) {
-    serialized_string.resize(serialized_string.size() - 1);
-  }
-  
-  return serialized_string;
+  return serialized;
 }
 } // namespace cly

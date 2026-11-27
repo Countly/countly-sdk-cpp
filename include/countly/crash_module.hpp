@@ -76,9 +76,10 @@ private:
   /**
    * Queues a native crash dump as an unhandled crash: the dump goes Base64-encoded into "_error" with "_native_cpp",
    * and is never cut by the internal limits. The metrics and breadcrumbs saved in the dump at crash time win over the
-   * current ones. The crash filter sees the report. The caller checks the "crashes" consent.
+   * current ones. The crash filter sees the report, with nativeCrash set. The dump is taken over and freed once it is
+   * encoded. The caller checks the "crashes" consent.
    */
-  void recordNativeCrash(const std::string &dump);
+  void recordNativeCrash(std::string dump);
 };
 } // namespace cly
 #endif

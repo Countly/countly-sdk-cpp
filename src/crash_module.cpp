@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <deque>
+#include <functional>
 #include <iostream>
 #include <iterator>
 
@@ -96,7 +97,16 @@ public:
     if (!_configuration->crashFilter) {
       return true;
     }
-    const CrashData original = crash;
+    // the stack trace is compared by size and hash, not kept as a copy, because a native crash dump makes it 13 MB large
+    CrashData original;
+    original.description = crash.description;
+    original.crashSegmentation = crash.crashSegmentation;
+    original.breadcrumbs = crash.breadcrumbs;
+    original.crashMetrics = crash.crashMetrics;
+    original.fatal = crash.fatal;
+    original.nativeCrash = crash.nativeCrash;
+    const size_t stackTraceSize = crash.stackTrace.size();
+    const size_t stackTraceHash = std::hash<std::string>()(crash.stackTrace);
     bool drop = false;
     try {
       drop = _configuration->crashFilter(crash);
@@ -108,8 +118,9 @@ public:
       _logger->log(LogLevel::DEBUG, std::string("[Countly] [CrashModule] ") + caller + ", The crash filter dropped the crash.");
       return false;
     }
+    crash.nativeCrash = original.nativeCrash;
     changedFields |= crash.description != original.description ? 64 : 0;
-    changedFields |= crash.stackTrace != original.stackTrace ? 16 : 0;
+    changedFields |= crash.stackTrace.size() != stackTraceSize || std::hash<std::string>()(crash.stackTrace) != stackTraceHash ? 16 : 0;
     changedFields |= crash.crashSegmentation != original.crashSegmentation ? 8 : 0;
     changedFields |= crash.breadcrumbs != original.breadcrumbs ? 4 : 0;
     changedFields |= crash.crashMetrics != original.crashMetrics ? 2 : 0;
@@ -321,7 +332,7 @@ void CrashModule::setNativeContextEnabled(bool enabled) {
   }
 }
 
-void CrashModule::recordNativeCrash(const std::string &dump) {
+void CrashModule::recordNativeCrash(std::string dump) {
   impl->_logger->log(LogLevel::INFO, "[Countly] [CrashModule] recordNativeCrash, size = [" + std::to_string(dump.size()) + "] bytes");
   if (!impl->isInitialized("recordNativeCrash")) {
     return;
@@ -329,11 +340,14 @@ void CrashModule::recordNativeCrash(const std::string &dump) {
   const SDKLimits lim = impl->limits();
 
   CrashData crash;
-  crash.stackTrace = native_crash::base64Encode(dump);
   crash.fatal = true;
+  crash.nativeCrash = true;
   impl->addCrashMetrics(crash);
   std::string payload;
-  if (native_crash::findContextPayload(dump, payload)) {
+  const bool hasContext = native_crash::findContextPayload(dump, payload);
+  crash.stackTrace = native_crash::base64Encode(dump);
+  std::string().swap(dump);
+  if (hasContext) {
     const nlohmann::json context = nlohmann::json::parse(payload, nullptr, false);
     if (context.is_object() && context.contains("m") && context["m"].is_object()) {
       for (const char *key : CRASH_METRIC_KEYS) {
@@ -367,15 +381,19 @@ void CrashModule::recordNativeCrash(const std::string &dump) {
   if (!crash.description.empty()) {
     report["_name"] = crash.description;
   }
-  report["_error"] = crash.stackTrace;
+  report["_error"] = std::move(crash.stackTrace);
   report["_logs"] = outstream.str();
   report["_custom"] = nlohmann::json(crash.crashSegmentation);
   report["_nonfatal"] = !crash.fatal;
   report["_native_cpp"] = true;
   report["_ob"] = changedFields;
 
+  // the encoded dump moves into the report and the report text into the request data, so that no copy stays behind
+  std::map<std::string, std::string> data;
+  data["crash"] = report.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+  report = nullptr;
   std::lock_guard<std::mutex> lk(*impl->_mutex);
-  impl->_requestModule->addRequestToQueue({{"crash", report.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace)}});
+  impl->_requestModule->addRequestToQueue(data);
 }
 
 } // namespace cly

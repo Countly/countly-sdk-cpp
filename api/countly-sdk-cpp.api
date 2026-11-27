@@ -251,6 +251,7 @@ cly::CrashData::crashMetrics field std::map<std::string, std::string> public
 cly::CrashData::crashSegmentation field std::map<std::string, std::string> public
 cly::CrashData::description field std::string public
 cly::CrashData::fatal field bool public
+cly::CrashData::nativeCrash field bool public
 cly::CrashData::stackTrace field std::string public
 cly::CrashFilterCallback alias std::function<bool (CrashData &)> public
 cly::CrashModule class public
@@ -320,6 +321,7 @@ cly::LoggerModule::LoggerModule constructor void () public
 cly::LoggerModule::getLogger method const LoggerFunction () public
 cly::LoggerModule::healthCheck method std::shared_ptr<HealthCheckModule> () const public
 cly::LoggerModule::isInsideCallback method bool () static public
+cly::LoggerModule::isListening method bool () const public
 cly::LoggerModule::log method void (LogLevel, const std::string &) public
 cly::LoggerModule::recordLogCode method void (const std::string &, int) public
 cly::LoggerModule::recordUsage method void (const std::string &, const std::string &) public

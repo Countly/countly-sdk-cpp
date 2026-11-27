@@ -7,7 +7,9 @@
  * The helper's own handler writes the marker file, which proves that it still runs after the SDK's handler.
  * "off-on-other-thread" (POSIX) does not crash: it calls stop() on a second thread and exits with 0 while the memory of
  * the main thread's signal stack is still its own, or with 3 when that memory was handed out again.
+ * "send-dump" does not crash: it exits with the growth of its peak memory during start(), in MB (at most 255).
  */
+#include <algorithm>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -21,8 +23,11 @@
 #include <fstream>
 #include <io.h>
 #include <windows.h>
+
+#include <psapi.h>
 #else
 #include <fcntl.h>
+#include <fstream>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
@@ -127,6 +132,33 @@ void callPureVirtualHandler() {
 
 cly::HTTPResponse refuseEverything(bool, const std::string &, const std::string &) { return cly::HTTPResponse{false, nlohmann::json::object()}; }
 
+/**
+ * The largest memory the process has held so far, in bytes: the peak working set on Windows, the peak resident set
+ * ("VmHWM") on Linux. -1 when it can't be read.
+ */
+long long peakMemoryBytes() {
+#ifdef _WIN32
+  typedef BOOL(WINAPI * MemoryInfoFunction)(HANDLE, PPROCESS_MEMORY_COUNTERS, DWORD);
+  const MemoryInfoFunction memoryInfo = reinterpret_cast<MemoryInfoFunction>(reinterpret_cast<void *>(GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "K32GetProcessMemoryInfo")));
+  PROCESS_MEMORY_COUNTERS counters = {};
+  counters.cb = sizeof(counters);
+  if (memoryInfo == nullptr || !memoryInfo(GetCurrentProcess(), &counters, sizeof(counters))) {
+    return -1;
+  }
+  return static_cast<long long>(counters.PeakWorkingSetSize);
+#else
+  // getrusage keeps the parent's peak across posix_spawn, the peak of /proc/self/status starts with this program
+  std::ifstream status("/proc/self/status");
+  std::string line;
+  while (std::getline(status, line)) {
+    if (line.compare(0, 6, "VmHWM:") == 0) {
+      return std::atoll(line.c_str() + 6) * 1024;
+    }
+  }
+  return -1;
+#endif
+}
+
 volatile int *null_pointer = nullptr;
 } // namespace
 
@@ -152,7 +184,12 @@ int main(int argc, char **argv) {
   countly.setMetrics("", "", "", "", "", "7.7");
   countly.setCrashDumpDirectory(argv[1]);
   countly.enableCrashReporting();
+  const long long peakBeforeStart = peakMemoryBytes();
   countly.start("native-crash-helper-app-key", "http://localhost.invalid", 0);
+  if (mode == "send-dump") {
+    const long long growth = peakMemoryBytes() - peakBeforeStart;
+    return static_cast<int>(std::min<long long>(255, std::max<long long>(0, growth / (1024 * 1024))));
+  }
   countly.crash().addBreadcrumb("helper started");
   countly.crash().addBreadcrumb("about to crash");
 

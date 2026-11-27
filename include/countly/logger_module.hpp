@@ -36,6 +36,11 @@ public:
   void log(LogLevel level, const std::string &message);
 
   /**
+   * Whether a log listener is set. A caller checks it before it builds a long message that no listener would receive.
+   */
+  bool isListening() const;
+
+  /**
    * @return true when the calling thread is currently inside the integrator's log
    * callback.
    *

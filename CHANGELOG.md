@@ -46,8 +46,12 @@
 - With requests kept in memory (no `COUNTLY_USE_SQLITE` database), `start()` logs a warning while a crash dump directory is set: a crash whose request is not sent before the app ends is lost.
 - A native crash dump is sent Base64-encoded in `_error` and is never cut by the internal limits. Without the "crashes" consent it is deleted unsent; while the server's "Allow crash tracking" is off, it stays for a later start.
 - A native crash dump larger than 10 MB is deleted without being sent and logged as an error, because the server does not accept a request that large.
+- Added `CrashData::nativeCrash`, true when the crash filter sees a native crash dump: its stack trace is the Base64-encoded minidump and must stay unchanged.
 - Added `enableCrashReporting()` and the CMake option `COUNTLY_USE_BREAKPAD` (off by default; Windows and Linux). The SDK's Breakpad handler writes a minidump on a crash, then calls the handler that was installed before it.
 - Once installed, the SDK's crash handler stays in the process. `stop()`, a removed "crashes" consent and the server's settings only turn it off, so that crash handlers that other code installs later are never replaced. Its dump directory stays the one of its first start.
+- The vendored Breakpad client is compiled under names of its own and is not exported from the SDK's library, so an app can link its own Breakpad next to it.
+- On Linux, a stack overflow gives a dump only on a thread with a separate signal stack: the thread that turns the handler on gets one, other threads of the app set their own with `sigaltstack`.
+- Requests are built with fewer copies of their data, so a large request, such as one with a native crash dump, needs less memory.
 - The minidumps of the SDK's crash handler hold the breadcrumbs and the app version of the crash moment. The server's "Automatic crash reporting" setting (`acr`) turns the handler on and off.
 - The vendored Breakpad client (`vendor/breakpad`, updated with `scripts/update_breakpad.py`) needs a C++17 compiler; the SDK itself still builds with C++14.
 

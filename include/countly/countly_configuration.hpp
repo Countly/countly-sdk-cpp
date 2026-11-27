@@ -28,6 +28,11 @@ struct CrashData {
   std::map<std::string, std::string> crashMetrics;
   /** Whether the crash ended the app; sent as the opposite, "_nonfatal". */
   bool fatal = false;
+  /**
+   * Whether the report is a native crash dump: then stackTrace holds the Base64-encoded minidump, which the server can
+   * read only unchanged. Not sent.
+   */
+  bool nativeCrash = false;
 };
 
 /**

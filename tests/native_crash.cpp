@@ -9,6 +9,7 @@
 #include <direct.h>
 #include <windows.h>
 #else
+#include <dlfcn.h>
 #include <signal.h>
 #include <spawn.h>
 #include <sys/stat.h>
@@ -231,6 +232,19 @@ TEST_CASE("The crash filter sees the native crash and can drop it; a dropped dum
   CHECK(sawNativeCrash);
   CHECK(sentCrashes(countly).empty());
   CHECK_FALSE(fileExists(pathInDumpDirectory("dropped.dmp")));
+}
+
+TEST_CASE("The crash filter can tell a native crash dump from a crash that the app records") {
+  Countly &countly = prepareDefaultInstance();
+  std::vector<bool> nativeFlags;
+  countly.setCrashFilterCallback([&nativeFlags](CrashData &crash) {
+    nativeFlags.push_back(crash.nativeCrash);
+    return true;
+  });
+  writeFile(pathInDumpDirectory("native.dmp"), fakeDump(100));
+  startNativeCrashes(countly);
+  countly.crash().recordException("a crash of the app", "at main()", true, {});
+  CHECK(nativeFlags == std::vector<bool>({true, false}));
 }
 
 TEST_CASE("Without the crashes consent, a dump is deleted without being sent") {
@@ -469,6 +483,32 @@ TEST_CASE("The crash handler follows enableCrashReporting, the crashes consent a
   CHECK_FALSE(native_crash::isHandlerInstalled());
 }
 
+namespace {
+/**
+ * Whether the SDK's library makes the name available to other code. Always false for a static build.
+ */
+bool countlyLibraryExports(const char *name) {
+#ifdef _WIN32
+  const HMODULE library = GetModuleHandleA(COUNTLY_LIBRARY_FILE_NAME);
+  return library != nullptr && GetProcAddress(library, name) != nullptr;
+#else
+  return dlsym(RTLD_DEFAULT, name) != nullptr;
+#endif
+}
+} // namespace
+
+TEST_CASE("The SDK's library makes none of Breakpad's names available, so an app's own Breakpad stays apart") {
+#if defined(_MSC_VER)
+  CHECK_FALSE(countlyLibraryExports("??1ExceptionHandler@google_breakpad@@QEAA@XZ"));
+#else
+  CHECK_FALSE(countlyLibraryExports("_ZN15google_breakpad16ExceptionHandlerD1Ev"));
+#endif
+#ifndef _WIN32
+  CHECK_FALSE(countlyLibraryExports("my_strlen"));
+  CHECK_FALSE(countlyLibraryExports("_Z10CreateGUIDP6MDGUID"));
+#endif
+}
+
 TEST_CASE("The crash handler keeps the directory of its first start, and another directory is refused with an error") {
   Countly &first = prepareDefaultInstance();
   first.enableCrashReporting();
@@ -612,6 +652,19 @@ long long runCrashHelper(const std::string &mode) {
 #endif
 }
 
+/**
+ * Runs the crash helper in a mode that ends without a crash and returns its exit code.
+ */
+long long runHelperToExit(const std::string &mode) {
+#ifdef _WIN32
+  return spawnCrashHelper(mode);
+#else
+  const int status = static_cast<int>(spawnCrashHelper(mode));
+  REQUIRE(WIFEXITED(status));
+  return WEXITSTATUS(status);
+#endif
+}
+
 void checkCapturedCrash(const std::string &mode, long long expectedEnd, bool previousHandlerRuns = true) {
   Countly &countly = prepareDefaultInstance();
   CHECK(runCrashHelper(mode) == expectedEnd);
@@ -667,10 +720,18 @@ TEST_CASE("After stop() a crash writes no dump, and the handler that was there b
 #ifndef _WIN32
 TEST_CASE("Turning the handler off on another thread keeps the signal stack of the thread that started the SDK") {
   prepareDefaultInstance();
-  const int status = static_cast<int>(spawnCrashHelper("off-on-other-thread"));
-  REQUIRE(WIFEXITED(status));
   // 3: the helper found the memory of its signal stack handed out again
-  CHECK(WEXITSTATUS(status) == 0);
+  CHECK(runHelperToExit("off-on-other-thread") == 0);
 }
 #endif
+
+TEST_CASE("Sending a 10 MB dump at start needs less than 80 MB of extra memory") {
+  prepareDefaultInstance();
+  writeFile(pathInDumpDirectory("big.dmp"), fakeDump(static_cast<size_t>(native_crash::MAX_DUMP_BYTES)));
+  const long long growthInMegabytes = runHelperToExit("send-dump");
+  MESSAGE("the peak memory of the helper grew by " << growthInMegabytes << " MB at start()");
+  CHECK_FALSE(fileExists(pathInDumpDirectory("big.dmp")));
+  // 42 to 58 MB were measured on Windows and Linux; one more copy of the dump in each step goes above 100 MB
+  CHECK(growthInMegabytes < 80);
+}
 #endif

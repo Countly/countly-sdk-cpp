@@ -99,6 +99,8 @@ void LoggerModule::log(LogLevel level, const std::string &message) {
 
 bool LoggerModule::isInsideCallback() { return inside_log_callback; }
 
+bool LoggerModule::isListening() const { return impl->has_logger.load(std::memory_order_acquire); }
+
 void LoggerModule::setHealthCheck(std::shared_ptr<HealthCheckModule> healthCheck) {
   if (!healthCheck || impl->has_health_check.load(std::memory_order_acquire)) {
     return;
