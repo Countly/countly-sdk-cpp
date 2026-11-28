@@ -1354,10 +1354,21 @@ void Countly::sendNativeCrashDumps() {
 
   const bool consentGiven = hasConsent(consent::CRASHES);
   for (const std::string &path : cly::native_crash::listDumpFiles(directory)) {
-    const long long size = cly::native_crash::fileSize(path);
+    // the claim keeps another process that reads the same directory from sending this dump too
+    cly::native_crash::DumpClaim claim;
+    const cly::native_crash::DumpClaim::Result claimed = claim.claim(path);
+    if (claimed == cly::native_crash::DumpClaim::Result::TAKEN) {
+      log(LogLevel::DEBUG, "[Countly] sendNativeCrashDumps, another process holds the native crash dump [" + path + "] or has sent it, so this one leaves it.");
+      continue;
+    }
+    if (claimed != cly::native_crash::DumpClaim::Result::CLAIMED) {
+      log(LogLevel::ERROR, "[Countly] sendNativeCrashDumps, the native crash dump [" + path + "] can't be opened, so it stays.");
+      continue;
+    }
+    const long long size = claim.size();
     std::string dump;
     if (size < 0) {
-      log(LogLevel::ERROR, "[Countly] sendNativeCrashDumps, the native crash dump [" + path + "] can't be opened, so it stays.");
+      log(LogLevel::ERROR, "[Countly] sendNativeCrashDumps, the size of the native crash dump [" + path + "] can't be read, so it stays.");
       continue;
     }
     if (!consentGiven) {
@@ -1367,13 +1378,13 @@ void Countly::sendNativeCrashDumps() {
     } else if (static_cast<unsigned long long>(size) > cly::native_crash::MAX_DUMP_BYTES) {
       log(LogLevel::ERROR, "[Countly] sendNativeCrashDumps, the native crash dump [" + path + "] has " + std::to_string(size) + " bytes, larger than the " + std::to_string(cly::native_crash::MAX_DUMP_BYTES) +
                                " bytes the server accepts, so it is deleted without being sent. Let the crash tool write minidumps, not full dumps.");
-    } else if (!cly::native_crash::readFile(path, dump)) {
+    } else if (!claim.read(dump)) {
       log(LogLevel::ERROR, "[Countly] sendNativeCrashDumps, the native crash dump [" + path + "] can't be read, so it stays.");
       continue;
     } else {
       crash_module->recordNativeCrash(std::move(dump));
     }
-    if (!cly::native_crash::removeFile(path)) {
+    if (!claim.remove()) {
       log(LogLevel::ERROR, "[Countly] sendNativeCrashDumps, the native crash dump [" + path + "] can't be deleted, so the next start handles it again.");
     }
   }
@@ -2021,6 +2032,9 @@ void Countly::stop() {
     if (isAutomaticSessionTracking()) {
       endSessionInternal(true);
     }
+  }
+  if (requestModule) {
+    requestModule->limitSendTime();
   }
   _deleteThread();
   health_check->saveState();

@@ -22,6 +22,14 @@ public:
   HTTPResponse sendHTTP(std::string path, std::string data);
 
   /**
+   * Takes back the extra time of requests with a large body, one second for every
+   * COUNTLY_HTTP_MIN_UPLOAD_BYTES_PER_SECOND bytes: a request in progress ends once it took
+   * COUNTLY_HTTP_REQUEST_TIMEOUT_SECONDS, and later requests get no extra time. With WinHTTP, it waits for that moment
+   * and ends the request itself. stop() calls it, so that it waits no longer for a request than without the extra time.
+   */
+  void limitSendTime();
+
+  /**
    * Sends a request that does not go through the request queue, such as a remote config download or the health
    * check, with the number of queued requests as "rr".
    *
@@ -83,6 +91,13 @@ public:
   static void initGlobalNetworking();
 
 #ifdef COUNTLY_BUILD_TESTS
+  /**
+   * Replaces the time limits of the built-in HTTP clients for every instance: the connect, send and receive timeout,
+   * and the request timeout. Tests shorten them and put back COUNTLY_HTTP_CONNECT_TIMEOUT_SECONDS and
+   * COUNTLY_HTTP_REQUEST_TIMEOUT_SECONDS after.
+   */
+  static void setTimeLimitsForTests(unsigned int socketSeconds, unsigned int requestSeconds);
+
   /** Times curl_global_init actually ran. Structurally at most one. */
   static int globalNetworkingInitCount();
   /** Times initGlobalNetworking() was called, i.e. how much was deduplicated. */

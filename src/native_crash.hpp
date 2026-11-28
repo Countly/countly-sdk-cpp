@@ -48,6 +48,57 @@ bool readFile(const std::string &path, std::string &content);
 bool removeFile(const std::string &path);
 
 /**
+ * A dump file that this process holds alone while it reads and deletes it, so that another process that reads the same
+ * directory neither sends it a second time nor deletes it meanwhile. Closing the claim releases it.
+ */
+class DumpClaim {
+public:
+  DumpClaim() = default;
+  ~DumpClaim();
+  DumpClaim(const DumpClaim &) = delete;
+  DumpClaim &operator=(const DumpClaim &) = delete;
+
+  /**
+   * What claim() found: CLAIMED when this process holds the dump now, TAKEN when another process holds it or has
+   * deleted it since the directory was listed, NOT_OPENED when the path is a link or no regular file, or the dump can't
+   * be opened.
+   */
+  enum class Result { CLAIMED, TAKEN, NOT_OPENED };
+
+  /**
+   * Opens the dump and claims it.
+   */
+  Result claim(const std::string &path);
+
+  /**
+   * The size of the claimed dump in bytes, -1 when it can't be read.
+   */
+  long long size();
+
+  /**
+   * Reads the whole claimed dump into 'content'. Returns false when it can't be read.
+   */
+  bool read(std::string &content);
+
+  /**
+   * Deletes the claimed dump and releases the claim. Returns false when the dump can't be deleted.
+   */
+  bool remove();
+
+private:
+  /**
+   * Releases the claim, if any.
+   */
+  void release();
+#ifdef _WIN32
+  void *handle = nullptr;
+#else
+  int descriptor = -1;
+#endif
+  std::string claimedPath;
+};
+
+/**
  * Encodes bytes as Base64 with the standard alphabet and padding.
  */
 std::string base64Encode(const std::string &bytes);

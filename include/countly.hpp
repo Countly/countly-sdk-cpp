@@ -280,9 +280,11 @@ public:
    * "crashes" consent; the server's "Automatic crash reporting" and "Allow crash tracking" settings turn it off and on.
    * stop() turns it off. Once installed, the handler stays in the process: while it is off, it writes no dump and hands
    * every crash on, so that a crash handler that other code installs later is never replaced. Its directory stays the
-   * one of its first start. On Linux, the handler needs a separate signal stack to write a dump of a stack overflow:
-   * the thread that turns the handler on gets one, and a thread of the app that should be covered too sets its own with
-   * sigaltstack. Only the default instance (getInstance()) can install it. Call it before start().
+   * one of its first start. Keep the SDK's library loaded while the process runs: after FreeLibrary() or dlclose(), the
+   * process's crash handlers would point into the unloaded library. On Linux, the handler needs a separate signal stack
+   * to write a dump of a stack overflow: the thread that turns the handler on gets one, and a thread of the app that
+   * should be covered too sets its own with sigaltstack. Only the default instance (getInstance()) can install it. Call
+   * it before start().
    */
   void enableCrashReporting();
 

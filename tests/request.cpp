@@ -5,6 +5,7 @@
 #include "test_utils.hpp"
 
 #include "doctest.h"
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <ctime>
@@ -16,12 +17,21 @@
 #include <thread>
 #include <vector>
 
-#if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
+#ifndef COUNTLY_USE_CUSTOM_HTTP
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
+#else
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#endif
 #endif
 using namespace cly;
 using namespace std;
@@ -398,22 +408,61 @@ TEST_CASE("A request the server failed is sent again with the SDK name and versi
   CHECK(countly.checkRQSize() == 0);
 }
 
-#if !defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
+#ifndef COUNTLY_USE_CUSTOM_HTTP
 namespace {
+#ifdef _WIN32
+typedef SOCKET Socket;
+typedef int SocketLength;
+const Socket NO_SOCKET = INVALID_SOCKET;
+
+void closeSocket(Socket socket) { ::closesocket(socket); }
+
 /**
- * HTTP server on 127.0.0.1 for exercising the SDK's built-in libcurl client.
+ * Waits for events on the sockets, as poll() does.
+ */
+int pollSockets(pollfd *sockets, size_t count, int milliseconds) { return ::WSAPoll(sockets, static_cast<ULONG>(count), milliseconds); }
+
+/**
+ * Reads what the peer sent, as recv() does.
+ */
+long receiveFrom(Socket socket, char *buffer, size_t size) { return ::recv(socket, buffer, static_cast<int>(size), 0); }
+#else
+typedef int Socket;
+typedef socklen_t SocketLength;
+const Socket NO_SOCKET = -1;
+
+void closeSocket(Socket socket) { ::close(socket); }
+
+/**
+ * Waits for events on the sockets, as poll() does.
+ */
+int pollSockets(pollfd *sockets, size_t count, int milliseconds) { return ::poll(sockets, static_cast<nfds_t>(count), milliseconds); }
+
+/**
+ * Reads what the peer sent, as recv() does.
+ */
+long receiveFrom(Socket socket, char *buffer, size_t size) { return static_cast<long>(::recv(socket, buffer, size, 0)); }
+#endif
+
+/**
+ * HTTP server on 127.0.0.1 for exercising the SDK's built-in HTTP client: libcurl, or WinHTTP on Windows.
  *
- * An answering server replies to every request with 200 and {"result":"Success"}
- * and records its request line and body. A silent server accepts connections and never replies; it records
+ * An answering server replies to every complete request with 200 and {"result":"Success"}
+ * and records its request line and body; with a body rate, it reads each body at that many bytes per second, like a
+ * slow connection. A silent server accepts connections and never replies; it records
  * how long each connection stayed open until the client closed it.
  */
 class LocalHTTPServer {
 public:
-  explicit LocalHTTPServer(bool answering) : _answering(answering) {
+  explicit LocalHTTPServer(bool answering, size_t body_bytes_per_second = 0) : _answering(answering), _body_bytes_per_second(body_bytes_per_second) {
+#ifdef _WIN32
+    WSADATA winsock = {};
+    REQUIRE(::WSAStartup(MAKEWORD(2, 2), &winsock) == 0);
+#endif
     _listener = ::socket(AF_INET, SOCK_STREAM, 0);
-    REQUIRE(_listener >= 0);
+    REQUIRE(_listener != NO_SOCKET);
     int reuse = 1;
-    ::setsockopt(_listener, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+    ::setsockopt(_listener, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char *>(&reuse), sizeof(reuse));
 
     sockaddr_in address = {};
     address.sin_family = AF_INET;
@@ -422,13 +471,18 @@ public:
     REQUIRE(::bind(_listener, reinterpret_cast<sockaddr *>(&address), sizeof(address)) == 0);
     REQUIRE(::listen(_listener, 16) == 0);
 
-    socklen_t length = sizeof(address);
+    SocketLength length = sizeof(address);
     REQUIRE(::getsockname(_listener, reinterpret_cast<sockaddr *>(&address), &length) == 0);
     _port = ntohs(address.sin_port);
     _thread = std::thread(&LocalHTTPServer::serve, this);
   }
 
-  ~LocalHTTPServer() { stop(); }
+  ~LocalHTTPServer() {
+    stop();
+#ifdef _WIN32
+    ::WSACleanup();
+#endif
+  }
 
   LocalHTTPServer(const LocalHTTPServer &) = delete;
   LocalHTTPServer &operator=(const LocalHTTPServer &) = delete;
@@ -441,7 +495,7 @@ public:
       return;
     }
     _thread.join();
-    ::close(_listener);
+    closeSocket(_listener);
   }
 
   int port() const { return _port; }
@@ -470,9 +524,14 @@ public:
     return _closed_durations;
   }
 
+  /**
+   * The bytes of the request body that the server is reading now, 0 between requests.
+   */
+  size_t bodyBytesInProgress() const { return _body_bytes_in_progress.load(); }
+
 private:
   struct HeldConnection {
-    int descriptor;
+    Socket descriptor;
     std::chrono::steady_clock::time_point accepted;
   };
 
@@ -484,57 +543,57 @@ private:
       for (const HeldConnection &connection : held) {
         watched.push_back({connection.descriptor, POLLIN, 0});
       }
-      if (::poll(watched.data(), watched.size(), 50) <= 0) {
+      if (pollSockets(watched.data(), watched.size(), 50) <= 0) {
         continue;
       }
 
       std::vector<HeldConnection> still_open;
       for (size_t index = 0; index < held.size(); index++) {
         char buffer[4096];
-        if (watched[index + 1].revents == 0 || ::recv(held[index].descriptor, buffer, sizeof(buffer), 0) > 0) {
+        if (watched[index + 1].revents == 0 || receiveFrom(held[index].descriptor, buffer, sizeof(buffer)) > 0) {
           still_open.push_back(held[index]);
           continue;
         }
-        ::close(held[index].descriptor);
+        closeSocket(held[index].descriptor);
         std::lock_guard<std::mutex> lock(_mutex);
         _closed_durations.push_back(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - held[index].accepted));
       }
       held.swap(still_open);
 
       if (watched[0].revents & POLLIN) {
-        int client = ::accept(_listener, nullptr, nullptr);
-        if (client >= 0 && _answering) {
+        const Socket client = ::accept(_listener, nullptr, nullptr);
+        if (client != NO_SOCKET && _answering) {
           answer(client);
-        } else if (client >= 0) {
+        } else if (client != NO_SOCKET) {
           held.push_back({client, std::chrono::steady_clock::now()});
         }
       }
     }
 
     for (const HeldConnection &connection : held) {
-      ::close(connection.descriptor);
+      closeSocket(connection.descriptor);
     }
   }
 
   /**
    * Reads what the client sent, waiting at most five seconds for it. Returns what recv() returns, or -1 on a timeout.
    */
-  static ssize_t receiveWithin5Seconds(int client, char *buffer, size_t size) {
+  static long receiveWithin5Seconds(Socket client, char *buffer, size_t size) {
     pollfd readable = {client, POLLIN, 0};
-    if (::poll(&readable, 1, 5000) <= 0) {
+    if (pollSockets(&readable, 1, 5000) <= 0) {
       return -1;
     }
-    return ::recv(client, buffer, size, 0);
+    return receiveFrom(client, buffer, size);
   }
 
-  void answer(int client) {
+  void answer(Socket client) {
     std::string request;
     char buffer[4096];
     std::string::size_type header_end;
     while ((header_end = request.find("\r\n\r\n")) == std::string::npos) {
-      ssize_t received = receiveWithin5Seconds(client, buffer, sizeof(buffer));
+      const long received = receiveWithin5Seconds(client, buffer, sizeof(buffer));
       if (received <= 0) {
-        ::close(client);
+        closeSocket(client);
         return;
       }
       request.append(buffer, static_cast<size_t>(received));
@@ -545,12 +604,26 @@ private:
     if (length_header != std::string::npos && length_header < header_end) {
       content_length = std::stoul(request.substr(length_header + 16));
     }
-    while (request.size() < header_end + 4 + content_length) {
-      ssize_t received = receiveWithin5Seconds(client, buffer, sizeof(buffer));
+    // with a body rate, small reads paced against the clock give the client a steady slow connection
+    const size_t read_size = _body_bytes_per_second > 0 ? std::max<size_t>(1, std::min(sizeof(buffer), _body_bytes_per_second / 20)) : sizeof(buffer);
+    const std::chrono::steady_clock::time_point body_start = std::chrono::steady_clock::now();
+    while (request.size() < header_end + 4 + content_length && !_stopping.load()) {
+      const long received = receiveWithin5Seconds(client, buffer, read_size);
       if (received <= 0) {
         break;
       }
       request.append(buffer, static_cast<size_t>(received));
+      const size_t body_bytes = request.size() - (header_end + 4);
+      _body_bytes_in_progress.store(body_bytes);
+      if (_body_bytes_per_second > 0) {
+        std::this_thread::sleep_until(body_start + std::chrono::microseconds(body_bytes * 1000000 / _body_bytes_per_second));
+      }
+    }
+    _body_bytes_in_progress.store(0);
+    if (request.size() < header_end + 4 + content_length) {
+      // the client gave up, or the server stopped, before the whole body arrived
+      closeSocket(client);
+      return;
     }
 
     {
@@ -567,13 +640,15 @@ private:
 #ifdef MSG_NOSIGNAL
     ::send(client, response.data(), response.size(), MSG_NOSIGNAL);
 #else
-    ::send(client, response.data(), response.size(), 0);
+    ::send(client, response.data(), static_cast<int>(response.size()), 0);
 #endif
-    ::close(client);
+    closeSocket(client);
   }
 
   const bool _answering;
-  int _listener = -1;
+  const size_t _body_bytes_per_second;
+  std::atomic<size_t> _body_bytes_in_progress{0};
+  Socket _listener = NO_SOCKET;
   int _port = 0;
   std::thread _thread;
   std::atomic<bool> _stopping{false};
@@ -675,7 +750,12 @@ TEST_CASE("Built-in HTTP client") {
     countly->SetPath(database_path);
     countly->start(COUNTLY_TEST_APP_KEY, "http://127.0.0.1", server.port(), false);
 
+#ifdef _WIN32
+    // WinHTTP waits for an answer as long as its receive timeout
+    const std::chrono::seconds request_timeout(COUNTLY_HTTP_CONNECT_TIMEOUT_SECONDS);
+#else
     const std::chrono::seconds request_timeout(COUNTLY_HTTP_REQUEST_TIMEOUT_SECONDS);
+#endif
     std::vector<std::chrono::milliseconds> open_durations;
     const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + request_timeout + std::chrono::seconds(15);
     while (open_durations.empty() && std::chrono::steady_clock::now() < deadline) {
@@ -832,6 +912,94 @@ TEST_CASE("Built-in HTTP client with a port or a path in the server URL") {
     for (const std::string &request_line : second_server.requestLines()) {
       CHECK((request_line.rfind("POST /analytics/i ", 0) == 0 || request_line.rfind("POST /analytics/o/sdk ", 0) == 0));
     }
+  }
+}
+
+namespace {
+/**
+ * Shortens the time limits of the built-in HTTP client while it lives, and puts the defaults back after.
+ */
+class ShortHTTPTimeLimits {
+public:
+  ShortHTTPTimeLimits(unsigned int socket_seconds, unsigned int request_seconds) { cly::RequestModule::setTimeLimitsForTests(socket_seconds, request_seconds); }
+  ~ShortHTTPTimeLimits() { cly::RequestModule::setTimeLimitsForTests(COUNTLY_HTTP_CONNECT_TIMEOUT_SECONDS, COUNTLY_HTTP_REQUEST_TIMEOUT_SECONDS); }
+  ShortHTTPTimeLimits(const ShortHTTPTimeLimits &) = delete;
+  ShortHTTPTimeLimits &operator=(const ShortHTTPTimeLimits &) = delete;
+};
+
+/**
+ * Crash segmentation of 20 values of 10,000 characters, so that the crash request is about 200 KB and takes several
+ * seconds on a slow connection. A stack trace can't make it that large: the SDK keeps 20,000 characters of it.
+ */
+std::map<std::string, std::string> largeCrashSegmentation() {
+  std::map<std::string, std::string> segmentation;
+  for (int part = 10; part < 30; part++) {
+    segmentation["part_" + std::to_string(part)] = std::string(10000, 'x');
+  }
+  return segmentation;
+}
+
+/**
+ * An instance that keeps crash segmentation values of up to 10,000 characters.
+ */
+std::shared_ptr<cly::Countly> instanceWithLargeValues(const std::string &database_path) {
+  std::shared_ptr<cly::Countly> countly = std::make_shared<cly::Countly>();
+  countly->setDeviceID(COUNTLY_TEST_DEVICE_ID);
+  countly->SetPath(database_path);
+  countly->setMaxValueSize(10000);
+  return countly;
+}
+} // namespace
+
+TEST_CASE("Built-in HTTP client on a slow connection") {
+  const std::string database_path = "test-countly-slow-http.db";
+  remove(database_path.c_str());
+  // a request may take 1 second (libcurl), or 2 seconds to send and 2 to wait for the answer (WinHTTP), plus 1 second
+  // for every 16 KB of its body
+  ShortHTTPTimeLimits limits(2, 1);
+
+  SUBCASE("a large request arrives when it takes longer than the request timeout, while the connection keeps moving") {
+    LocalHTTPServer server(true, 32 * 1024);
+    std::shared_ptr<cly::Countly> countly = instanceWithLargeValues(database_path);
+    countly->start(COUNTLY_TEST_APP_KEY, "http://127.0.0.1", server.port(), false);
+    countly->crash().recordException("large crash", "stack trace", true, {}, largeCrashSegmentation());
+
+    // at 32 KB per second, the crash request takes about 6 seconds
+    const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    while (!receivedRequestWith(server, "crash=") && std::chrono::steady_clock::now() < deadline) {
+      countly->processRQDebug();
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    const bool crash_arrived = receivedRequestWith(server, "crash=");
+    countly.reset();
+    server.stop();
+    remove(database_path.c_str());
+
+    CHECK(crash_arrived);
+  }
+
+  SUBCASE("stop() waits no longer than the request timeout for a large request in progress") {
+    LocalHTTPServer server(true, 8 * 1024);
+    std::shared_ptr<cly::Countly> countly = instanceWithLargeValues(database_path);
+    countly->setUpdateInterval(100);
+    countly->start(COUNTLY_TEST_APP_KEY, "http://127.0.0.1", server.port(), true);
+    countly->crash().recordException("large crash", "stack trace", true, {}, largeCrashSegmentation());
+
+    // the update loop sends the crash request, whose body the server reads in about 25 seconds
+    const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+    while (server.bodyBytesInProgress() < 16 * 1024 && std::chrono::steady_clock::now() < deadline) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    const bool sending = server.bodyBytesInProgress() >= 16 * 1024;
+    const std::chrono::steady_clock::time_point stop_start = std::chrono::steady_clock::now();
+    countly->stop();
+    const std::chrono::steady_clock::duration stop_duration = std::chrono::steady_clock::now() - stop_start;
+    countly.reset();
+    server.stop();
+    remove(database_path.c_str());
+
+    REQUIRE(sending);
+    CHECK(stop_duration < std::chrono::seconds(4));
   }
 }
 

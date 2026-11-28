@@ -350,6 +350,7 @@ cly::RequestModule::RequestModule constructor void (std::shared_ptr<CountlyConfi
 cly::RequestModule::addRequestToQueue method void (const std::map<std::string, std::string> &) public
 cly::RequestModule::clearRequestQueue method void () public
 cly::RequestModule::initGlobalNetworking method void () static public
+cly::RequestModule::limitSendTime method void () public
 cly::RequestModule::processQueue method void (std::shared_ptr<std::mutex>, bool) public
 cly::RequestModule::removeOtherAppKeysFromQueue method long long (const std::string &) public
 cly::RequestModule::replaceAppKeysInQueue method void (const std::string &) public

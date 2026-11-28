@@ -13,9 +13,13 @@
 #ifdef _WIN32
 #include <windows.h>
 #else
+#include <cerrno>
 #include <dirent.h>
+#include <fcntl.h>
 #include <fstream>
+#include <sys/file.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 #ifdef COUNTLY_USE_BREAKPAD
@@ -157,8 +161,10 @@ std::vector<std::string> listDumpFiles(const std::string &directory) {
   }
   do {
     const std::string name = narrow(entry.cFileName);
-    // a link is never read as a dump, so that the SDK sends no file outside the directory
-    if ((entry.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) == 0 && hasDumpExtension(name)) {
+    // a link is never read as a dump, so that the SDK sends no file outside the directory; other reparse points, such as
+    // the files of a cloud-synced or a compressed folder, are the files themselves
+    const bool link = (entry.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 && IsReparseTagNameSurrogate(entry.dwReserved0);
+    if ((entry.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0 && !link && hasDumpExtension(name)) {
       names.push_back(name);
     }
   } while (FindNextFileW(search, &entry));
@@ -262,6 +268,159 @@ bool removeFile(const std::string &path) {
   return std::remove(path.c_str()) == 0;
 #endif
 }
+
+DumpClaim::~DumpClaim() { release(); }
+
+#ifdef _WIN32
+void DumpClaim::release() {
+  if (handle != nullptr) {
+    CloseHandle(handle);
+    handle = nullptr;
+  }
+}
+
+DumpClaim::Result DumpClaim::claim(const std::string &path) {
+  release();
+  // without sharing, no other process opens the dump while this one holds it, and this one no dump that its writer holds
+  HANDLE opened = CreateFileW(widen(path).c_str(), GENERIC_READ | DELETE, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (opened == INVALID_HANDLE_VALUE) {
+    const DWORD error = GetLastError();
+    return (error == ERROR_SHARING_VIOLATION || error == ERROR_FILE_NOT_FOUND) ? Result::TAKEN : Result::NOT_OPENED;
+  }
+  BY_HANDLE_FILE_INFORMATION information = {};
+  if (!GetFileInformationByHandle(opened, &information) || (information.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
+    CloseHandle(opened);
+    return Result::NOT_OPENED;
+  }
+  handle = opened;
+  claimedPath = path;
+  return Result::CLAIMED;
+}
+
+long long DumpClaim::size() {
+  LARGE_INTEGER byteCount = {};
+  if (handle == nullptr || !GetFileSizeEx(handle, &byteCount)) {
+    return -1;
+  }
+  return static_cast<long long>(byteCount.QuadPart);
+}
+
+bool DumpClaim::read(std::string &content) {
+  content.clear();
+  LARGE_INTEGER start = {};
+  if (handle == nullptr || !SetFilePointerEx(handle, start, nullptr, FILE_BEGIN)) {
+    return false;
+  }
+  std::vector<char> buffer(65536);
+  DWORD received = 0;
+  while (ReadFile(handle, buffer.data(), static_cast<DWORD>(buffer.size()), &received, nullptr)) {
+    if (received == 0) {
+      return true;
+    }
+    content.append(buffer.data(), received);
+  }
+  return false;
+}
+
+bool DumpClaim::remove() {
+  if (handle == nullptr) {
+    return false;
+  }
+  // marked while the handle is open, the dump is deleted when the handle closes, so that no other process opens it in
+  // between; SetFileInformationByHandle is looked up, because older MinGW headers lack it
+  typedef BOOL(WINAPI * SetInformationFunction)(HANDLE, int, LPVOID, DWORD);
+  // cppcheck-suppress misra-c2012-12.3 ; the comma separates function arguments, it is no comma operator
+  const SetInformationFunction setInformation = reinterpret_cast<SetInformationFunction>(reinterpret_cast<void *>(GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "SetFileInformationByHandle")));
+  struct {
+    BOOLEAN deleteFile;
+  } disposition = {TRUE};
+  // 4 is FileDispositionInfo
+  const bool marked = setInformation != nullptr && setInformation(handle, 4, &disposition, sizeof(disposition)) != 0;
+  release();
+  return marked;
+}
+#else
+void DumpClaim::release() {
+  if (descriptor >= 0) {
+    close(descriptor);
+    descriptor = -1;
+  }
+}
+
+DumpClaim::Result DumpClaim::claim(const std::string &path) {
+  release();
+  // O_NOFOLLOW refuses a link, and O_NONBLOCK keeps a special file such as a FIFO from blocking the open
+  const int opened = open(path.c_str(), O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC); // Flawfinder: ignore
+  if (opened < 0) {
+    return errno == ENOENT ? Result::TAKEN : Result::NOT_OPENED;
+  }
+  // the lock is advisory, so every SDK process takes it before it reads
+  if (flock(opened, LOCK_EX | LOCK_NB) != 0) {
+    const bool held = errno == EWOULDBLOCK;
+    close(opened);
+    return held ? Result::TAKEN : Result::NOT_OPENED;
+  }
+  // cppcheck-suppress y2038-unsafe-call ; only the file type, the links and the identity are read, no time field
+  struct stat byDescriptor = {};
+  // cppcheck-suppress y2038-unsafe-call ; only the file type, the links and the identity are read, no time field
+  if (fstat(opened, &byDescriptor) != 0 || !S_ISREG(byDescriptor.st_mode)) {
+    close(opened);
+    return Result::NOT_OPENED;
+  }
+  // the locked file must still be the one at the path: another process may have deleted it between the open and the lock
+  // cppcheck-suppress y2038-unsafe-call ; only the file type, the links and the identity are read, no time field
+  struct stat byPath = {};
+  // cppcheck-suppress y2038-unsafe-call ; only the file type, the links and the identity are read, no time field
+  if (byDescriptor.st_nlink == 0 || lstat(path.c_str(), &byPath) != 0 || byPath.st_dev != byDescriptor.st_dev || byPath.st_ino != byDescriptor.st_ino) {
+    close(opened);
+    return Result::TAKEN;
+  }
+  descriptor = opened;
+  claimedPath = path;
+  return Result::CLAIMED;
+}
+
+long long DumpClaim::size() {
+  // cppcheck-suppress y2038-unsafe-call ; only the size is read, no time field
+  struct stat status = {};
+  // cppcheck-suppress y2038-unsafe-call ; only the size is read, no time field
+  if (descriptor < 0 || fstat(descriptor, &status) != 0) {
+    return -1;
+  }
+  return static_cast<long long>(status.st_size);
+}
+
+bool DumpClaim::read(std::string &content) {
+  content.clear();
+  if (descriptor < 0 || lseek(descriptor, 0, SEEK_SET) != 0) {
+    return false;
+  }
+  std::vector<char> buffer(65536);
+  while (true) {
+    const ssize_t received = ::read(descriptor, buffer.data(), buffer.size()); // Flawfinder: ignore
+    if (received == 0) {
+      return true;
+    }
+    if (received < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      return false;
+    }
+    content.append(buffer.data(), static_cast<size_t>(received));
+  }
+}
+
+bool DumpClaim::remove() {
+  if (descriptor < 0) {
+    return false;
+  }
+  // deleted while the lock is held, so that another process that opened it meanwhile finds no link left and skips it
+  const bool removed = unlink(claimedPath.c_str()) == 0;
+  release();
+  return removed;
+}
+#endif
 
 std::string base64Encode(const std::string &bytes) {
   static const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

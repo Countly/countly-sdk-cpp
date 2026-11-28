@@ -378,6 +378,58 @@ TEST_CASE("A link that has the name of a dump is neither sent nor deleted") {
   native_crash::removeFile(target);
 }
 
+TEST_CASE("A dump that another process holds is neither sent nor deleted, so that processes that share the directory send it once") {
+  Countly &countly = prepareDefaultInstance();
+  const std::string busy = pathInDumpDirectory("busy.dmp");
+  writeFile(busy, fakeDump(100));
+  {
+    native_crash::DumpClaim otherProcess;
+    REQUIRE(otherProcess.claim(busy) == native_crash::DumpClaim::Result::CLAIMED);
+    startNativeCrashes(countly);
+    CHECK(sentCrashes(countly).empty());
+    CHECK(linkExists(busy));
+    CHECK(capturedLogContains("another process holds the native crash dump"));
+    CHECK_FALSE(capturedLogContains("can't be opened"));
+  }
+  native_crash::removeFile(busy);
+}
+
+TEST_CASE("A dump claim is refused while another claim holds the dump, and deleting through the claim removes the file") {
+  resetDumpDirectory();
+  const std::string path = pathInDumpDirectory("claimed.dmp");
+  writeFile(path, fakeDump(300));
+  native_crash::DumpClaim first;
+  REQUIRE(first.claim(path) == native_crash::DumpClaim::Result::CLAIMED);
+  native_crash::DumpClaim second;
+  CHECK(second.claim(path) == native_crash::DumpClaim::Result::TAKEN);
+  CHECK(first.size() == 300);
+  std::string content;
+  CHECK(first.read(content));
+  CHECK(content == fakeDump(300));
+  CHECK(first.remove());
+  CHECK_FALSE(linkExists(path));
+  // for a process that listed the directory before the delete, the dump is taken, not broken
+  CHECK(second.claim(path) == native_crash::DumpClaim::Result::TAKEN);
+}
+
+TEST_CASE("A dump claim refuses a directory with the name of a dump as a file that can't be opened") {
+  resetDumpDirectory();
+  const std::string path = pathInDumpDirectory("folder.dmp");
+#ifdef _WIN32
+  _mkdir(path.c_str());
+#else
+  mkdir(path.c_str(), S_IRWXU);
+#endif
+  native_crash::DumpClaim claim;
+  CHECK(claim.claim(path) == native_crash::DumpClaim::Result::NOT_OPENED);
+  CHECK(claim.size() == -1);
+#ifdef _WIN32
+  _rmdir(path.c_str());
+#else
+  rmdir(path.c_str());
+#endif
+}
+
 TEST_CASE("With the request queue in memory, start() warns that a native crash can be lost") {
   Countly &countly = prepareDefaultInstance();
   startNativeCrashes(countly);
