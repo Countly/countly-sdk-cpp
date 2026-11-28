@@ -41,6 +41,21 @@
 - Added `setCrashFilterCallback` for changing or dropping crash reports before they are queued, and `setCustomCrashSegmentation` for segmentation added to every crash report.
 - Added `crash().clearBreadcrumbs()`, `views().stopAllViews()`, and segmentation for `closeViewWithName` and `closeViewWithID`.
 - Added `disableLocation()`. A location given with `setLocation` before `start()` is now used from `start()` on.
+- Added `setCrashDumpDirectory()` for native crashes. At `start()` the SDK sends every minidump (`*.dmp`) in that directory as an unhandled crash with `_native_cpp`, then deletes the file. Only the default instance handles native crashes.
+- Use a crash dump directory that only the app writes: the SDK sends and deletes every dump in it, and never reads a link in it.
+- Processes of an app that share a crash dump directory send each dump once.
+- With requests kept in memory (no `COUNTLY_USE_SQLITE` database), `start()` logs a warning while a crash dump directory is set: a crash whose request is not sent before the app ends is lost.
+- A native crash dump is sent Base64-encoded in `_error` and is never cut by the internal limits. Without the "crashes" consent it is deleted unsent; while the server's "Allow crash tracking" is off, it stays for a later start.
+- A native crash dump larger than 10 MB is deleted without being sent and logged as an error, because the server does not accept a request that large.
+- Added `CrashData::nativeCrash`, true when the crash filter sees a native crash dump: its stack trace is the Base64-encoded minidump and must stay unchanged.
+- Added `enableCrashReporting()` and the CMake option `COUNTLY_USE_BREAKPAD` (off by default; Windows and Linux). The SDK's Breakpad handler writes a minidump on a crash, then calls the handler that was installed before it.
+- Once installed, the SDK's crash handler stays in the process. `stop()`, a removed "crashes" consent and the server's settings only turn it off, so that crash handlers that other code installs later are never replaced. Its dump directory stays the one of its first start.
+- Keep the SDK's library loaded once its crash handler is installed: after `FreeLibrary()` or `dlclose()`, a crash would call into the unloaded library.
+- The vendored Breakpad client is compiled under names of its own and is not exported from the SDK's library, so an app can link its own Breakpad next to it.
+- On Linux, a stack overflow gives a dump only on a thread with a separate signal stack: the thread that turns the handler on gets one, other threads of the app set their own with `sigaltstack`.
+- Requests are built with fewer copies of their data, so a large request, such as one with a native crash dump, needs less memory.
+- The minidumps of the SDK's crash handler hold the breadcrumbs and the app version of the crash moment. The server's "Automatic crash reporting" setting (`acr`) turns the handler on and off.
+- The vendored Breakpad client (`vendor/breakpad`, updated with `scripts/update_breakpad.py`) needs a C++17 compiler; the SDK itself still builds with C++14.
 
 - Mitigated an issue where reaching the event queue threshold logged a warning that events were dropped, although they were sent.
 - Mitigated an issue where a view that was open during a device ID change without merge was ended under the new device ID.
@@ -72,6 +87,7 @@
 - Mitigated an issue where a server URL with a port or a path, such as `https://example.com:8443` or `https://example.com/countly`, was accepted but no request reached the server. A port in the URL now wins over the port argument, with a warning when they differ.
 - Mitigated an issue where user details given before `start()` replaced each other, so that for example custom properties set with `setCustomUserDetails` were lost after a `setUserDetails` call.
 - Mitigated an issue where events that an earlier start left in the SQLite database were sent under the device ID of the next start.
+- Mitigated an issue where a large request failed on a slow connection at every attempt and held back the requests behind it.
 
 ## 26.8.1
 - ! Minor breaking change ! Builds now stop with a clear error when the SDK headers find a nlohmann/json older than 3.11 first on the include path, instead of mixing two versions of the library.

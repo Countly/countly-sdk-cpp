@@ -22,6 +22,7 @@
 #endif
 
 #include "countly.hpp"
+#include "native_crash.hpp"
 #include "platform_info.hpp"
 
 #ifdef COUNTLY_USE_SQLITE
@@ -1298,6 +1299,143 @@ void Countly::setCrashFilterCallback(CrashFilterCallback callback) {
   configuration->crashFilter = callback;
 }
 
+void Countly::setCrashDumpDirectory(const std::string &path) {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] setCrashDumpDirectory, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+  if (!isDefaultInstance()) {
+    log(LogLevel::WARNING, "[Countly] setCrashDumpDirectory, native crashes belong to the whole process, so only the default instance (getInstance()) handles them. The call is ignored.");
+    return;
+  }
+  if (path.empty()) {
+    log(LogLevel::WARNING, "[Countly] setCrashDumpDirectory, The crash dump directory can't be empty. The call is ignored.");
+    logger->recordLogCode("w121");
+    return;
+  }
+
+  std::lock_guard<std::mutex> lk(*mutex);
+  configuration->crashDumpDirectory = path;
+}
+
+void Countly::enableCrashReporting() {
+  if (is_sdk_initialized) {
+    log(LogLevel::WARNING, "[Countly] enableCrashReporting, This method can't be called after SDK initialization. Returning.");
+    return;
+  }
+  if (!isDefaultInstance()) {
+    log(LogLevel::WARNING, "[Countly] enableCrashReporting, native crashes belong to the whole process, so only the default instance (getInstance()) handles them. The call is ignored.");
+    return;
+  }
+
+  std::lock_guard<std::mutex> lk(*mutex);
+  configuration->automaticCrashReporting = true;
+}
+
+bool Countly::isDefaultInstance() { return registry().find(DEFAULT_INSTANCE_NAME) == this; }
+
+void Countly::sendNativeCrashDumps() {
+  std::string directory;
+  {
+    std::lock_guard<std::mutex> lk(*mutex);
+    directory = configuration->crashDumpDirectory;
+  }
+  if (directory.empty()) {
+    return;
+  }
+  if (!use_sqlite_storage) {
+    log(LogLevel::WARNING,
+        "[Countly] sendNativeCrashDumps, the crash dump directory is set, but requests are kept in memory only: a native crash whose dump is read at start is lost when the app ends before its request is sent. Build the SDK with COUNTLY_USE_SQLITE and call setDatabasePath() to keep it.");
+  }
+  if (!configurationModule->isCrashReportingEnabled()) {
+    log(LogLevel::DEBUG, "[Countly] sendNativeCrashDumps, the server's SDK behavior settings turned crash tracking off, so the native crash dumps stay in [" + directory + "] for a later start.");
+    return;
+  }
+
+  const bool consentGiven = hasConsent(consent::CRASHES);
+  for (const std::string &path : cly::native_crash::listDumpFiles(directory)) {
+    // the claim keeps another process that reads the same directory from sending this dump too
+    cly::native_crash::DumpClaim claim;
+    const cly::native_crash::DumpClaim::Result claimed = claim.claim(path);
+    if (claimed == cly::native_crash::DumpClaim::Result::TAKEN) {
+      log(LogLevel::DEBUG, "[Countly] sendNativeCrashDumps, another process holds the native crash dump [" + path + "] or has sent it, so this one leaves it.");
+      continue;
+    }
+    if (claimed != cly::native_crash::DumpClaim::Result::CLAIMED) {
+      log(LogLevel::ERROR, "[Countly] sendNativeCrashDumps, the native crash dump [" + path + "] can't be opened, so it stays.");
+      continue;
+    }
+    const long long size = claim.size();
+    std::string dump;
+    if (size < 0) {
+      log(LogLevel::ERROR, "[Countly] sendNativeCrashDumps, the size of the native crash dump [" + path + "] can't be read, so it stays.");
+      continue;
+    }
+    if (!consentGiven) {
+      log(LogLevel::DEBUG, "[Countly] sendNativeCrashDumps, the 'crashes' consent is not given, so the native crash dump [" + path + "] is deleted without being sent.");
+    } else if (size == 0) {
+      log(LogLevel::WARNING, "[Countly] sendNativeCrashDumps, the native crash dump [" + path + "] is empty, so it is deleted.");
+    } else if (static_cast<unsigned long long>(size) > cly::native_crash::MAX_DUMP_BYTES) {
+      log(LogLevel::ERROR, "[Countly] sendNativeCrashDumps, the native crash dump [" + path + "] has " + std::to_string(size) + " bytes, larger than the " + std::to_string(cly::native_crash::MAX_DUMP_BYTES) +
+                               " bytes the server accepts, so it is deleted without being sent. Let the crash tool write minidumps, not full dumps.");
+    } else if (!claim.readAll(dump)) {
+      log(LogLevel::ERROR, "[Countly] sendNativeCrashDumps, the native crash dump [" + path + "] can't be read, so it stays.");
+      continue;
+    } else {
+      crash_module->recordNativeCrash(std::move(dump));
+    }
+    if (!claim.remove()) {
+      log(LogLevel::ERROR, "[Countly] sendNativeCrashDumps, the native crash dump [" + path + "] can't be deleted, so the next start handles it again.");
+    }
+  }
+}
+
+void Countly::updateNativeCrashHandler() {
+  std::lock_guard<std::mutex> handler_lock(native_crash_mutex);
+  bool automatic = false;
+  std::string directory;
+  {
+    std::lock_guard<std::mutex> lk(*mutex);
+    automatic = configuration->automaticCrashReporting;
+    directory = configuration->crashDumpDirectory;
+  }
+  const int server = configurationModule ? configurationModule->getAutomaticCrashReporting() : -1;
+  if (server >= 0) {
+    automatic = server == 1;
+  }
+  const bool wanted = automatic && start_finished && !stopping && !is_being_disposed && !directory.empty() && configurationModule && configurationModule->isCrashReportingEnabled() && hasConsent(consent::CRASHES);
+  if (wanted == owns_native_crash_handler) {
+    return;
+  }
+
+  if (!wanted) {
+    cly::native_crash::uninstallHandler();
+    crash_module->setNativeContextEnabled(false);
+    owns_native_crash_handler = false;
+    log(LogLevel::INFO, "[Countly] updateNativeCrashHandler, the native crash handler is off: it writes no dump and hands every crash to the handler that was installed before it.");
+    return;
+  }
+  if (!cly::native_crash::isHandlerAvailable()) {
+    return;
+  }
+  std::string error;
+  if (!cly::native_crash::installHandler(directory, error)) {
+    log(LogLevel::ERROR, "[Countly] updateNativeCrashHandler, the native crash handler could not be turned on: " + error);
+    return;
+  }
+  owns_native_crash_handler = true;
+  crash_module->setNativeContextEnabled(true);
+  log(LogLevel::INFO, "[Countly] updateNativeCrashHandler, the native crash handler is on, dumps go to [" + directory + "].");
+}
+
+void Countly::CrashReportingSettingsChanged() {
+  std::lock_guard<std::mutex> change(consent_change_mutex);
+  if (!start_finished || is_being_disposed || stopping) {
+    return;
+  }
+  updateNativeCrashHandler();
+}
+
 void Countly::disableLocation() {
   log(LogLevel::INFO, "[Countly] disableLocation, turning location tracking off");
   location_disabled_by_app = true;
@@ -1778,6 +1916,14 @@ void Countly::start(const std::string &app_key, const std::string &host, int por
     // the server's automatic session tracking setting arrived while start() ran
     AutomaticSessionTrackingChanged();
   }
+  sendNativeCrashDumps();
+  if (configuration->automaticCrashReporting && !cly::native_crash::isHandlerAvailable()) {
+    log(LogLevel::WARNING, "[Countly] start, enableCrashReporting was called, but this build has no native crash handler: build the SDK with COUNTLY_USE_BREAKPAD (Windows, Linux) to capture native crashes. Dumps that another tool writes into the crash dump directory are still sent.");
+  }
+  {
+    std::lock_guard<std::mutex> change(consent_change_mutex);
+    updateNativeCrashHandler();
+  }
   downloadRemoteConfigAutomatically();
 }
 
@@ -1879,12 +2025,16 @@ void Countly::stop() {
   // joins belong in ~Countly, which is where the lifetime problem they solve
   // actually arises.
   stopping = true;
+  updateNativeCrashHandler();
   if (is_sdk_initialized && !is_being_disposed) {
     // queued while the update loop still runs, so that its last pass can send them
     packEvents();
     if (isAutomaticSessionTracking()) {
       endSessionInternal(true);
     }
+  }
+  if (requestModule) {
+    requestModule->limitSendTime();
   }
   _deleteThread();
   health_check->saveState();
@@ -3438,6 +3588,9 @@ void Countly::consentWillBeRemoved(const std::vector<std::string> &features) {
 }
 
 void Countly::consentChanged(const std::vector<std::string> &features, bool given, ConsentChangeSource source) {
+  if (containsFeature(features, consent::CRASHES)) {
+    updateNativeCrashHandler();
+  }
   if (!given) {
     if (containsFeature(features, consent::CRASHES)) {
       crash_module->forgetBreadcrumbs();

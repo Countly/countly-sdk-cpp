@@ -81,7 +81,9 @@ void StorageModuleMemory::RQInsertAtEnd(const std::string &request) {
     return;
   }
 
-  _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleMemory] RQInsertAtEnd, request = [" + request + "]");
+  if (_logger->isListening()) {
+    _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleMemory] RQInsertAtEnd, request = [" + request + "]");
+  }
   if (request != "") {
     std::lock_guard<std::mutex> lk(_mutex);
     if (request_queue.empty()) {
@@ -104,7 +106,9 @@ void StorageModuleMemory::RQUpdate(long long id, const std::string &request) {
     return;
   }
 
-  _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleMemory] RQUpdate, id = [" + std::to_string(id) + "], request = [" + request + "]");
+  if (_logger->isListening()) {
+    _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleMemory] RQUpdate, id = [" + std::to_string(id) + "], request = [" + request + "]");
+  }
   std::lock_guard<std::mutex> lk(_mutex);
   for (std::shared_ptr<DataEntry> &entry : request_queue) {
     if (entry->getId() == id) {

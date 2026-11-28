@@ -20,6 +20,7 @@ option(COUNTLY_USE_CUSTOM_SHA256 "Use a custom SHA 256 library" OFF)
 option(COUNTLY_USE_SQLITE "Use SQLite" OFF)
 option(COUNTLY_USE_SYSTEM_SQLITE "Link the system SQLite instead of compiling the vendored amalgamation" OFF)
 option(COUNTLY_USE_SYSTEM_JSON "Compile against the system nlohmann_json instead of the vendored copy" OFF)
+option(COUNTLY_USE_BREAKPAD "Capture native crashes with the vendored Breakpad client (Windows, Linux)" OFF)
 option(COUNTLY_BUILD_TESTS "Build test programs" OFF)
 option(COUNTLY_BUILD_SAMPLE "Build Sample programs" OFF)
 
@@ -30,6 +31,7 @@ message("Use a custom SHA 256 library:" ${COUNTLY_USE_CUSTOM_SHA256})
 message("Use SQLite:" ${COUNTLY_USE_SQLITE})
 message("Use system SQLite:" ${COUNTLY_USE_SYSTEM_SQLITE})
 message("Use system nlohmann_json:" ${COUNTLY_USE_SYSTEM_JSON})
+message("Use Breakpad:" ${COUNTLY_USE_BREAKPAD})
 message("Build test programs:" ${COUNTLY_BUILD_TESTS})
 message("Build Sample programs:" ${COUNTLY_BUILD_SAMPLE})
 
@@ -65,6 +67,7 @@ add_library(countly
   ${CMAKE_CURRENT_SOURCE_DIR}/src/configuration_module.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/consent_module.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/health_check_module.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/native_crash.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/platform_info.cpp)
 add_library(countly::countly ALIAS countly)
 
@@ -144,6 +147,47 @@ if(COUNTLY_USE_SQLITE)
   endif()
 endif()
 
+if(COUNTLY_USE_BREAKPAD)
+  if(NOT WIN32 AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(FATAL_ERROR "COUNTLY_USE_BREAKPAD supports Windows and Linux only.")
+  endif()
+  message("Compiling the vendored Breakpad client")
+  include(${CMAKE_CURRENT_SOURCE_DIR}/vendor/breakpad/sources.cmake)
+  if(WIN32)
+    set(COUNTLY_BREAKPAD_SOURCES ${COUNTLY_BREAKPAD_WINDOWS_SOURCES})
+  else()
+    set(COUNTLY_BREAKPAD_SOURCES ${COUNTLY_BREAKPAD_LINUX_SOURCES})
+    include(CheckFunctionExists)
+    check_function_exists(getcontext COUNTLY_HAVE_GETCONTEXT)
+    if(NOT COUNTLY_HAVE_GETCONTEXT)
+      enable_language(ASM)
+      list(APPEND COUNTLY_BREAKPAD_SOURCES ${COUNTLY_BREAKPAD_LINUX_GETCONTEXT_SOURCE})
+    endif()
+  endif()
+  # An object library inside the countly library: Breakpad needs C++17 and its own definitions, the SDK stays on C++14
+  add_library(countly_breakpad OBJECT ${COUNTLY_BREAKPAD_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/src/native_crash_breakpad.cpp)
+  target_include_directories(countly_breakpad PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/breakpad/src)
+  set_target_properties(countly_breakpad PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_EXTENSIONS NO CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
+  target_compile_features(countly_breakpad PRIVATE cxx_std_17)
+  # The SDK's copy of Breakpad gets names of its own, so that it never mixes with a Breakpad that the app links
+  set(COUNTLY_BREAKPAD_NAMES google_breakpad)
+  if(NOT WIN32)
+    list(APPEND COUNTLY_BREAKPAD_NAMES CreateGUID GUIDToString GUIDGenerator logger breakpad_getcontext
+      my_isspace my_memchr my_memset my_read_decimal_ptr my_read_hex_ptr my_strchr my_strcmp my_strlcat my_strlcpy
+      my_strlen my_strncmp my_strrchr my_strtoi_nonneg my_uint_len my_uitos)
+  endif()
+  foreach(COUNTLY_BREAKPAD_NAME ${COUNTLY_BREAKPAD_NAMES})
+    target_compile_definitions(countly_breakpad PRIVATE ${COUNTLY_BREAKPAD_NAME}=countly_${COUNTLY_BREAKPAD_NAME})
+  endforeach()
+  if(WIN32)
+    target_compile_definitions(countly_breakpad PRIVATE UNICODE _UNICODE)
+  elseif(COUNTLY_HAVE_GETCONTEXT)
+    target_compile_definitions(countly_breakpad PRIVATE HAVE_GETCONTEXT=1)
+  endif()
+  target_sources(countly PRIVATE $<TARGET_OBJECTS:countly_breakpad>)
+  target_compile_definitions(countly PRIVATE COUNTLY_USE_BREAKPAD)
+endif()
+
 if(COUNTLY_BUILD_TESTS)
   message("Building test directories")
   add_executable(countly-tests
@@ -175,11 +219,23 @@ if(COUNTLY_BUILD_TESTS)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/crash_reporting.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/location.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/server_url_app_key.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/request_scenarios.cpp)
-    
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/request_scenarios.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/native_crash.cpp)
+
     target_compile_options(countly-tests PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-g>)
     # the request scenarios read and write their records under api/requests/
     target_compile_definitions(countly-tests PRIVATE COUNTLY_BUILD_TESTS COUNTLY_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+    # the native crash tests use the SDK's internal dump helpers
+    target_include_directories(countly-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  if(COUNTLY_USE_BREAKPAD)
+    add_executable(countly-native-crash-helper ${CMAKE_CURRENT_SOURCE_DIR}/tests/native_crash_helper.cpp)
+    target_link_libraries(countly-native-crash-helper countly)
+    target_compile_features(countly-native-crash-helper PRIVATE cxx_std_14)
+    add_dependencies(countly-tests countly-native-crash-helper)
+    target_compile_definitions(countly-tests PRIVATE COUNTLY_USE_BREAKPAD COUNTLY_CRASH_HELPER_PATH="$<TARGET_FILE:countly-native-crash-helper>" COUNTLY_LIBRARY_FILE_NAME="$<TARGET_FILE_NAME:countly>")
+    # dlsym checks which names the SDK's library makes available
+    target_link_libraries(countly-tests ${CMAKE_DL_LIBS})
+  endif()
   if(COUNTLY_USE_SQLITE)
     if(COUNTLY_USE_SYSTEM_SQLITE)
       target_link_libraries(countly-tests SQLite::SQLite3)

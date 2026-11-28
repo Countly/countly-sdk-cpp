@@ -57,6 +57,18 @@ def sqlite_version() -> str:
     return match.group(1)
 
 
+def breakpad_pins() -> dict:
+    """Return the Breakpad and linux-syscall-support commits that vendor/breakpad/README.md records."""
+    contents = (REPO_ROOT / "vendor/breakpad/README.md").read_text()
+    pins = {}
+    for key, label in (("breakpad", "Breakpad"), ("lss", "linux-syscall-support")):
+        match = re.search(rf"\*\*{re.escape(label)}:\*\* \S+, commit `([0-9a-f]{{40}})`", contents)
+        if not match:
+            sys.exit(f"error: the {label} commit was not found in vendor/breakpad/README.md")
+        pins[key] = match.group(1)
+    return pins
+
+
 def prop(name: str, value: str) -> dict:
     return {"name": name, "value": value}
 
@@ -66,6 +78,7 @@ def build_sbom() -> dict:
     json_pin = submodule_pin("json")
     sqlite_ver = sqlite_version()
     doctest_pin = submodule_pin("doctest")
+    breakpad_pin = breakpad_pins()
 
     components = [
         {
@@ -145,6 +158,38 @@ def build_sbom() -> dict:
                 prop("countly:origin", "Windows operating-system component"),
                 prop("countly:cmake-option", "COUNTLY_USE_CUSTOM_HTTP=OFF (default)"),
                 prop("countly:condition", "used on Windows unless the consumer supplies a custom HTTP function"),
+            ],
+        },
+        {
+            "bom-ref": "breakpad",
+            "type": "library",
+            "name": "breakpad",
+            "group": "google",
+            "version": breakpad_pin["breakpad"][:12],
+            "purl": f"pkg:generic/breakpad@{breakpad_pin['breakpad']}?vcs_url=git%2Bhttps://chromium.googlesource.com/breakpad/breakpad",
+            "scope": "optional",
+            "licenses": [{"license": {"id": "BSD-3-Clause"}}],
+            "properties": [
+                prop("countly:origin", "crash handler client sources vendored in vendor/breakpad (scripts/update_breakpad.py), compiled into the library"),
+                prop("countly:cmake-option", "COUNTLY_USE_BREAKPAD=ON"),
+                prop("countly:condition", "compiled in only when COUNTLY_USE_BREAKPAD=ON, on Windows and Linux"),
+                prop("countly:pinned-commit", breakpad_pin["breakpad"]),
+            ],
+        },
+        {
+            "bom-ref": "linux-syscall-support",
+            "type": "library",
+            "name": "linux-syscall-support",
+            "group": "chromium",
+            "version": breakpad_pin["lss"][:12],
+            "purl": f"pkg:generic/linux-syscall-support@{breakpad_pin['lss']}?vcs_url=git%2Bhttps://chromium.googlesource.com/linux-syscall-support",
+            "scope": "optional",
+            "licenses": [{"license": {"id": "BSD-3-Clause"}}],
+            "properties": [
+                prop("countly:origin", "header vendored in vendor/breakpad/src/third_party/lss, used by the Breakpad Linux client"),
+                prop("countly:cmake-option", "COUNTLY_USE_BREAKPAD=ON"),
+                prop("countly:condition", "compiled in only when COUNTLY_USE_BREAKPAD=ON on Linux"),
+                prop("countly:pinned-commit", breakpad_pin["lss"]),
             ],
         },
         {

@@ -5,8 +5,12 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <deque>
 #include <iomanip>
+#include <limits>
+#include <list>
+#include <mutex>
 
 #ifndef COUNTLY_USE_CUSTOM_SHA256
 #include "openssl/sha.h"
@@ -33,10 +37,73 @@
 #endif
 
 namespace cly {
+namespace {
+// The connect, send and receive timeout and the request timeout of the built-in HTTP clients; tests shorten them
+std::atomic<unsigned int> socket_timeout_seconds{COUNTLY_HTTP_CONNECT_TIMEOUT_SECONDS};
+std::atomic<unsigned int> request_timeout_seconds{COUNTLY_HTTP_REQUEST_TIMEOUT_SECONDS};
+
+#ifndef COUNTLY_USE_CUSTOM_HTTP
+/**
+ * The seconds that a request gets for its body on top of its timeouts: one for every
+ * COUNTLY_HTTP_MIN_UPLOAD_BYTES_PER_SECOND bytes, so that a large request on a slow connection still arrives.
+ */
+long bodySeconds(size_t bodySize) { return static_cast<long>(bodySize / COUNTLY_HTTP_MIN_UPLOAD_BYTES_PER_SECOND); }
+#endif
+} // namespace
+
 class RequestModule::RequestModuleImpl {
 private:
 public:
   bool is_queue_being_processed = false;
+  // Set once the SDK stops: from then on, every request ends after the request timeout, so that stop() waits no longer
+  std::atomic<bool> send_time_limited{false};
+#if defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
+  /**
+   * A WinHTTP request whose waits got the time of its large body. limitSendTime() ends it by closing its handle and
+   * sets the handle to null, so that sendHTTP() leaves the handle alone.
+   */
+  struct LongRequest {
+    HINTERNET handle;
+    std::chrono::steady_clock::time_point started;
+  };
+  // Guards long_requests, and send_time_limited while it changes, so that no long request starts unseen by limitSendTime()
+  std::mutex long_requests_mutex;
+  std::condition_variable long_request_ended;
+  std::list<LongRequest> long_requests;
+
+  /**
+   * Gives a WinHTTP request with a large body the body's time for sending and for the answer, unless the SDK stops,
+   * and keeps it for limitSendTime() in 'entry'. Returns whether it did.
+   */
+  bool startLongRequest(HINTERNET request, long extraSeconds, std::list<LongRequest>::iterator &entry) {
+    std::lock_guard<std::mutex> lock(long_requests_mutex);
+    if (extraSeconds <= 0 || send_time_limited.load()) {
+      return false;
+    }
+    // WinHTTP takes the body at once and sends it while it waits for the answer, so both waits get the body's time
+    const long long socket_timeout = static_cast<long long>(socket_timeout_seconds.load()) * 1000;
+    const long long body_timeout = socket_timeout + static_cast<long long>(extraSeconds) * 1000;
+    const int timeout = static_cast<int>(std::min<long long>(body_timeout, (std::numeric_limits<int>::max)()));
+    WinHttpSetTimeouts(request, static_cast<int>(socket_timeout), static_cast<int>(socket_timeout), timeout, timeout);
+    entry = long_requests.insert(long_requests.end(), LongRequest{request, std::chrono::steady_clock::now()});
+    return true;
+  }
+
+  /**
+   * Ends what startLongRequest() began. Returns false when limitSendTime() closed the request meanwhile, so that its
+   * handle is gone.
+   */
+  bool endLongRequest(std::list<LongRequest>::iterator entry) {
+    bool open;
+    {
+      std::lock_guard<std::mutex> lock(long_requests_mutex);
+      open = entry->handle != nullptr;
+      long_requests.erase(entry);
+    }
+    long_request_ended.notify_all();
+    return open;
+  }
+#endif
   // Guards the server URL and the port in the configuration, which a server URL change replaces while requests are sent.
   std::mutex server_mutex;
   // The id of the request processQueue() is sending, -1 while it sends none, and whether a queue operation removed
@@ -230,6 +297,11 @@ void RequestModule::initGlobalNetworking() {
 void RequestModule::releaseGlobalNetworking() { curlGlobal().release(); }
 
 #ifdef COUNTLY_BUILD_TESTS
+void RequestModule::setTimeLimitsForTests(unsigned int socketSeconds, unsigned int requestSeconds) {
+  socket_timeout_seconds.store(socketSeconds);
+  request_timeout_seconds.store(requestSeconds);
+}
+
 int RequestModule::globalNetworkingInitCount() { return curlGlobal().initCount(); }
 
 int RequestModule::globalNetworkingInitRequests() { return networking_init_requests.load(); }
@@ -251,6 +323,50 @@ static size_t countly_curl_write_callback(void *data, size_t byte_size, size_t n
   size_t data_size = byte_size * n_bytes;
   body->append((const char *)data, data_size);
   return data_size;
+}
+
+#if COUNTLY_HAS_CURL && LIBCURL_VERSION_NUM >= 0x072000
+/**
+ * A request of the built-in libcurl client: when it started, and whether the SDK stops.
+ */
+struct CurlTransfer {
+  std::chrono::steady_clock::time_point started;
+  const std::atomic<bool> *stopping;
+};
+
+/**
+ * Called by libcurl about once a second while a request runs. Returns non-zero, which ends the request, once the SDK
+ * stops and the request took the request timeout.
+ */
+static int countly_curl_progress_callback(void *data, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
+  const CurlTransfer *transfer = static_cast<const CurlTransfer *>(data);
+  const bool over = transfer->stopping->load() && std::chrono::steady_clock::now() - transfer->started >= std::chrono::seconds(request_timeout_seconds.load());
+  return over ? 1 : 0;
+}
+#endif
+
+void RequestModule::limitSendTime() {
+#if defined(_WIN32) && !defined(COUNTLY_USE_CUSTOM_HTTP)
+  std::unique_lock<std::mutex> lock(impl->long_requests_mutex);
+  impl->send_time_limited.store(true);
+  const std::chrono::seconds limit(request_timeout_seconds.load());
+  while (true) {
+    // the requests are in the order they started, so the first open one reaches the limit first
+    const std::list<RequestModuleImpl::LongRequest>::iterator open = std::find_if(impl->long_requests.begin(), impl->long_requests.end(), [](const RequestModuleImpl::LongRequest &request) { return request.handle != nullptr; });
+    if (open == impl->long_requests.end()) {
+      break;
+    }
+    if (std::chrono::steady_clock::now() >= open->started + limit) {
+      // closing the handle ends the wait of sendHTTP() for the request at once
+      WinHttpCloseHandle(open->handle);
+      open->handle = nullptr;
+    } else {
+      impl->long_request_ended.wait_until(lock, open->started + limit);
+    }
+  }
+#else
+  impl->send_time_limited.store(true);
+#endif
 }
 
 void RequestModule::addRequestToQueue(const std::map<std::string, std::string> &data) {
@@ -475,7 +591,10 @@ HTTPResponse RequestModule::sendImmediate(const std::string &path, const std::st
 
 HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
   const bool use_post = true;
-  impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] sendHTTP, data: [" + data + "]");
+  // a request can hold a native crash dump of several MB, so its text is copied into a log line only for a listener
+  if (impl->_logger->isListening()) {
+    impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] sendHTTP, data: [" + data + "]");
+  }
   if (!impl->_configuration->salt.empty()) {
     std::string checksum = impl->calculateChecksum(impl->_configuration->salt, data);
     if (!data.empty()) {
@@ -483,7 +602,9 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
     }
 
     data += "checksum256=" + checksum;
-    impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] sendHTTP, with checksum, data: [" + data + "]");
+    if (impl->_logger->isListening()) {
+      impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] sendHTTP, with checksum, data: [" + data + "]");
+    }
   }
 
   HTTPResponse response;
@@ -517,14 +638,11 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
   HINTERNET hConnect = nullptr;
   HINTERNET hRequest = nullptr;
 
+  // Set way Shorter timeouts: 10 seconds each for resolving, connecting, sending and receiving (defaults: infinite, 60, 30 and 30 seconds)
+  const int socket_timeout = static_cast<int>(socket_timeout_seconds.load() * 1000);
   hSession = WinHttpOpen(NULL, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
   if (hSession) {
-    // Set way Shorter timeouts:
-    WinHttpSetTimeouts(hSession,
-                       10000,  // nResolveTimeout: 10sec (default 'infinite').
-                       10000,  // nConnectTimeout: 10sec (default 60sec).
-                       10000,  // nSendTimeout: 10sec (default 30sec).
-                       10000); // nReceiveTimeout: 10sec (default 30sec).
+    WinHttpSetTimeouts(hSession, socket_timeout, socket_timeout, socket_timeout, socket_timeout);
 
     size_t scheme_offset = use_https ? (sizeof("https://") - 1) : (sizeof("http://") - 1);
     size_t buffer_size = MultiByteToWideChar(CP_ACP, 0, server_url.c_str() + scheme_offset, -1, nullptr, 0);
@@ -547,58 +665,68 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
 
   if (hRequest) {
     LPCWSTR headers = L"content-type:application/x-www-form-urlencoded";
+    std::list<RequestModuleImpl::LongRequest>::iterator long_request;
+    const bool is_long = impl->startLongRequest(hRequest, bodySeconds(data.size()), long_request);
     bool ok = WinHttpSendRequest(hRequest, headers, 0, (LPVOID)data.data(), static_cast<DWORD>(data.size()), static_cast<DWORD>(data.size()), 0) != 0;
     if (ok) {
       ok = WinHttpReceiveResponse(hRequest, NULL);
-      if (ok) {
-        DWORD dwStatusCode = 0;
-        DWORD dwSize = static_cast<DWORD>(sizeof(dwStatusCode));
-        WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &dwStatusCode, &dwSize, WINHTTP_NO_HEADER_INDEX);
-        response.success = (dwStatusCode >= 200 && dwStatusCode < 300);
-        response.status_code = static_cast<long>(dwStatusCode);
-        {
-          DWORD n_bytes_available;
-          bool error_reading_body = false;
-          std::string body;
-          do {
-            n_bytes_available = 0;
-            if (!WinHttpQueryDataAvailable(hRequest, &n_bytes_available)) {
-              error_reading_body = true;
-              break;
-            }
+    }
+    // limitSendTime() ends a long request by closing its handle, which is then gone
+    const bool open = !is_long || impl->endLongRequest(long_request);
+    if (is_long && open) {
+      // the rest of the answer comes within the plain timeouts
+      WinHttpSetTimeouts(hRequest, socket_timeout, socket_timeout, socket_timeout, socket_timeout);
+    }
+    if (ok && open) {
+      DWORD dwStatusCode = 0;
+      DWORD dwSize = static_cast<DWORD>(sizeof(dwStatusCode));
+      WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &dwStatusCode, &dwSize, WINHTTP_NO_HEADER_INDEX);
+      response.success = (dwStatusCode >= 200 && dwStatusCode < 300);
+      response.status_code = static_cast<long>(dwStatusCode);
+      {
+        DWORD n_bytes_available;
+        bool error_reading_body = false;
+        std::string body;
+        do {
+          n_bytes_available = 0;
+          if (!WinHttpQueryDataAvailable(hRequest, &n_bytes_available)) {
+            error_reading_body = true;
+            break;
+          }
 
-            if (n_bytes_available == 0) {
-              break;
-            }
+          if (n_bytes_available == 0) {
+            break;
+          }
 
-            char *body_part = new char[n_bytes_available + 1];
-            memset(body_part, 0, n_bytes_available + 1);
-            DWORD n_bytes_read = 0;
+          char *body_part = new char[n_bytes_available + 1];
+          memset(body_part, 0, n_bytes_available + 1);
+          DWORD n_bytes_read = 0;
 
-            if (!WinHttpReadData(hRequest, body_part, n_bytes_available, &n_bytes_read)) {
-              error_reading_body = true;
-              delete[] body_part;
-              break;
-            }
-
-            body += body_part;
+          if (!WinHttpReadData(hRequest, body_part, n_bytes_available, &n_bytes_read)) {
+            error_reading_body = true;
             delete[] body_part;
-          } while (n_bytes_available > 0);
+            break;
+          }
 
-          response.body = body;
-          if (response.success && !body.empty()) {
-            const nlohmann::json &parseResult = nlohmann::json::parse(body, nullptr, false);
-            if (parseResult.is_discarded()) {
-              impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] sendHTTP, Returned response from the server was not a valid JSON.");
-            } else {
-              response.data = parseResult;
-            }
+          body += body_part;
+          delete[] body_part;
+        } while (n_bytes_available > 0);
+
+        response.body = body;
+        if (response.success && !body.empty()) {
+          const nlohmann::json &parseResult = nlohmann::json::parse(body, nullptr, false);
+          if (parseResult.is_discarded()) {
+            impl->_logger->log(LogLevel::DEBUG, "[Countly] [RequestModule] sendHTTP, Returned response from the server was not a valid JSON.");
+          } else {
+            response.data = parseResult;
           }
         }
       }
     }
 
-    WinHttpCloseHandle(hRequest);
+    if (open) {
+      WinHttpCloseHandle(hRequest);
+    }
   }
 
   if (hConnect) {
@@ -623,8 +751,14 @@ HTTPResponse RequestModule::sendHTTP(std::string path, std::string data) {
     std::string full_url = full_url_stream.str();
     curl_easy_setopt(curl, CURLOPT_URL, full_url.c_str());
     // Without these, a server that stops answering holds this request, and every request queued behind it, forever
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, static_cast<long>(COUNTLY_HTTP_CONNECT_TIMEOUT_SECONDS));
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(COUNTLY_HTTP_REQUEST_TIMEOUT_SECONDS));
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, static_cast<long>(socket_timeout_seconds.load()));
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(request_timeout_seconds.load()) + bodySeconds(data.size()));
+#if LIBCURL_VERSION_NUM >= 0x072000
+    CurlTransfer transfer{std::chrono::steady_clock::now(), &impl->send_time_limited};
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, countly_curl_progress_callback);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &transfer);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+#endif
 
     std::string body;
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, countly_curl_write_callback);

@@ -33,6 +33,7 @@ static_assert(NLOHMANN_JSON_VERSION_MAJOR == 3 && NLOHMANN_JSON_VERSION_MINOR >=
 #define COUNTLY_MAX_VALUE_SIZE_PICTURE 4096
 #define COUNTLY_HTTP_CONNECT_TIMEOUT_SECONDS 10
 #define COUNTLY_HTTP_REQUEST_TIMEOUT_SECONDS 30
+#define COUNTLY_HTTP_MIN_UPLOAD_BYTES_PER_SECOND 16384
 
 namespace cly {
 struct HTTPResponse {
@@ -221,6 +222,12 @@ public:
    * Called by the SDK behavior settings when the server's "Allow Location Tracking" setting changes.
    */
   virtual void LocationSettingChanged() {}
+
+  /**
+   * Called by the SDK behavior settings when the server's "Automatic crash reporting" or "Allow crash tracking" setting
+   * changes.
+   */
+  virtual void CrashReportingSettingsChanged() {}
 
   virtual void RecordEvent(const std::string &key, int count) = 0;
 

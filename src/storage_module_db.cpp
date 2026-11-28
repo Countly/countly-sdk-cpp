@@ -340,7 +340,9 @@ void StorageModuleDB::RQInsertAtEnd(const std::string &request) {
     }
 
     // Logs the request being inserted
-    _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] RQInsertAtEnd, request = [" + request + "]");
+    if (_logger->isListening()) {
+      _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] RQInsertAtEnd, request = [" + request + "]");
+    }
 
     if (request == "") {
       _logger->log(LogLevel::WARNING, "[Countly] [StorageModuleDB] RQInsertAtEnd, request is empty");
@@ -388,7 +390,9 @@ void StorageModuleDB::RQUpdate(long long id, const std::string &request) {
       return;
     }
 
-    _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] RQUpdate, RequestID = " + std::to_string(id) + ", request = [" + request + "]");
+    if (_logger->isListening()) {
+      _logger->log(LogLevel::DEBUG, "[Countly] [StorageModuleDB] RQUpdate, RequestID = " + std::to_string(id) + ", request = [" + request + "]");
+    }
 
 #ifdef COUNTLY_USE_SQLITE
     sqlite3 *database;

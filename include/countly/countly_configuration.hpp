@@ -28,6 +28,11 @@ struct CrashData {
   std::map<std::string, std::string> crashMetrics;
   /** Whether the crash ended the app; sent as the opposite, "_nonfatal". */
   bool fatal = false;
+  /**
+   * Whether the report is a native crash dump: then stackTrace holds the Base64-encoded minidump, which the server can
+   * read only unchanged. Not sent.
+   */
+  bool nativeCrash = false;
 };
 
 /**
@@ -134,6 +139,17 @@ struct CountlyConfiguration {
    * Sees every crash report before it is queued, null when the app set none.
    */
   CrashFilterCallback crashFilter = nullptr;
+
+  /**
+   * The directory of native crash dumps ("*.dmp"), empty when the app set none.
+   */
+  // cppcheck-suppress unusedStructMember ; read and written by Countly in countly.cpp
+  std::string crashDumpDirectory;
+
+  /**
+   * Whether the app turned on the automatic capture of native crashes with enableCrashReporting().
+   */
+  bool automaticCrashReporting = false;
 
   /**
    * Set the maximum amount of breadcrumbs.
