@@ -404,7 +404,7 @@ TEST_CASE("A dump claim is refused while another claim holds the dump, and delet
   CHECK(second.claim(path) == native_crash::DumpClaim::Result::TAKEN);
   CHECK(first.size() == 300);
   std::string content;
-  CHECK(first.read(content));
+  CHECK(first.readAll(content));
   CHECK(content == fakeDump(300));
   CHECK(first.remove());
   CHECK_FALSE(linkExists(path));

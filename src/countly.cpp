@@ -1378,7 +1378,7 @@ void Countly::sendNativeCrashDumps() {
     } else if (static_cast<unsigned long long>(size) > cly::native_crash::MAX_DUMP_BYTES) {
       log(LogLevel::ERROR, "[Countly] sendNativeCrashDumps, the native crash dump [" + path + "] has " + std::to_string(size) + " bytes, larger than the " + std::to_string(cly::native_crash::MAX_DUMP_BYTES) +
                                " bytes the server accepts, so it is deleted without being sent. Let the crash tool write minidumps, not full dumps.");
-    } else if (!claim.read(dump)) {
+    } else if (!claim.readAll(dump)) {
       log(LogLevel::ERROR, "[Countly] sendNativeCrashDumps, the native crash dump [" + path + "] can't be read, so it stays.");
       continue;
     } else {

@@ -931,7 +931,9 @@ public:
  * Crash segmentation of 20 values of 10,000 characters, so that the crash request is about 200 KB and takes several
  * seconds on a slow connection. A stack trace can't make it that large: the SDK keeps 20,000 characters of it.
  */
+// cppcheck-suppress misra-c2012-12.3 ; the comma separates template arguments, it is no comma operator
 std::map<std::string, std::string> largeCrashSegmentation() {
+  // cppcheck-suppress misra-c2012-12.3 ; the comma separates template arguments, it is no comma operator
   std::map<std::string, std::string> segmentation;
   for (int part = 10; part < 30; part++) {
     segmentation["part_" + std::to_string(part)] = std::string(10000, 'x');

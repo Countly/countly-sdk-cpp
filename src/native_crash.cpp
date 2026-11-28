@@ -293,7 +293,6 @@ DumpClaim::Result DumpClaim::claim(const std::string &path) {
     return Result::NOT_OPENED;
   }
   handle = opened;
-  claimedPath = path;
   return Result::CLAIMED;
 }
 
@@ -305,7 +304,7 @@ long long DumpClaim::size() {
   return static_cast<long long>(byteCount.QuadPart);
 }
 
-bool DumpClaim::read(std::string &content) {
+bool DumpClaim::readAll(std::string &content) {
   content.clear();
   LARGE_INTEGER start = {};
   if (handle == nullptr || !SetFilePointerEx(handle, start, nullptr, FILE_BEGIN)) {
@@ -390,7 +389,7 @@ long long DumpClaim::size() {
   return static_cast<long long>(status.st_size);
 }
 
-bool DumpClaim::read(std::string &content) {
+bool DumpClaim::readAll(std::string &content) {
   content.clear();
   if (descriptor < 0 || lseek(descriptor, 0, SEEK_SET) != 0) {
     return false;

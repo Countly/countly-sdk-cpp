@@ -2,6 +2,7 @@
 #define COUNTLY_NATIVE_CRASH_HPP_
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -63,7 +64,7 @@ public:
    * deleted it since the directory was listed, NOT_OPENED when the path is a link or no regular file, or the dump can't
    * be opened.
    */
-  enum class Result { CLAIMED, TAKEN, NOT_OPENED };
+  enum class Result : std::uint8_t { CLAIMED, TAKEN, NOT_OPENED };
 
   /**
    * Opens the dump and claims it.
@@ -78,7 +79,7 @@ public:
   /**
    * Reads the whole claimed dump into 'content'. Returns false when it can't be read.
    */
-  bool read(std::string &content);
+  bool readAll(std::string &content);
 
   /**
    * Deletes the claimed dump and releases the claim. Returns false when the dump can't be deleted.
@@ -94,8 +95,8 @@ private:
   void *handle = nullptr;
 #else
   int descriptor = -1;
-#endif
   std::string claimedPath;
+#endif
 };
 
 /**
